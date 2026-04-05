@@ -32,8 +32,6 @@ android.add_src = fileprovider_src/
 # presplash.filename = %(source.dir)s/assets/presplash.png
 # icon.filename = %(source.dir)s/assets/icon.png
 
-# Android features
-android.features = android.hardware.camera,android.hardware.camera.autofocus
 
 [buildozer]
 log_level = 2
