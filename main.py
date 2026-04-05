@@ -4,6 +4,7 @@ Manage Nokia phones inventory and spare parts with images,
 Excel import/export, search, and backup/restore.
 """
 
+import json
 import os
 import shutil
 import zipfile
@@ -338,8 +339,8 @@ ScreenManager:
         name: 'add_phone'
     AddSpareScreen:
         name: 'add_spare'
-    ImportExcelScreen:
-        name: 'import_excel'
+    ExportScreen:
+        name: 'export_data'
     BulkImageScreen:
         name: 'bulk_images'
     BackupScreen:
@@ -1093,7 +1094,7 @@ ScreenManager:
                     size_hint_y: None
                     height: dp(30)
 
-<ImportExcelScreen>:
+<ExportScreen>:
     BoxLayout:
         orientation: 'vertical'
 
@@ -1117,7 +1118,7 @@ ScreenManager:
                 color: 1, 1, 1, 1
                 on_release: root.go_back()
             Label:
-                text: 'Import from Excel'
+                text: 'Export Data'
                 font_size: sp(18)
                 bold: True
                 color: 1, 1, 1, 1
@@ -1131,7 +1132,7 @@ ScreenManager:
             spacing: dp(16)
 
             Label:
-                text: 'Select an Excel file (.xlsx).\\n\\nColumns: ID, Name, Release Date,\\nAppearance, Working, Remarks'
+                text: 'Export all data as CSV files.\\n\\nTwo files will be created:\\n1. nokia_phones.csv\\n2. nokia_spare_parts.csv'
                 font_size: sp(14)
                 color: 0.3, 0.3, 0.3, 1
                 text_size: self.width - dp(20), None
@@ -1140,12 +1141,14 @@ ScreenManager:
                 halign: 'left'
 
             Label:
-                id: import_status
+                id: export_status
                 text: ''
                 font_size: sp(14)
                 color: 0.26, 0.63, 0.28, 1
                 size_hint_y: None
-                height: dp(30)
+                height: dp(50)
+                text_size: self.width, None
+                halign: 'left'
 
             ClickableBox:
                 size_hint_y: None
@@ -1158,9 +1161,27 @@ ScreenManager:
                         pos: self.pos
                         size: self.size
                         radius: [dp(10)]
-                on_release: root.select_file()
+                on_release: root.do_export()
                 Label:
-                    text: 'Select Excel File'
+                    text: 'Export to CSV'
+                    color: 1, 1, 1, 1
+                    font_size: sp(16)
+                    bold: True
+
+            ClickableBox:
+                size_hint_y: None
+                height: dp(50)
+                padding: dp(16), dp(12)
+                canvas.before:
+                    Color:
+                        rgba: 0.26, 0.63, 0.28, 1
+                    RoundedRectangle:
+                        pos: self.pos
+                        size: self.size
+                        radius: [dp(10)]
+                on_release: root.share_export()
+                Label:
+                    text: 'Share via Email'
                     color: 1, 1, 1, 1
                     font_size: sp(16)
                     bold: True
@@ -1550,8 +1571,7 @@ class MainScreen(Screen):
         popup = ModalView(size_hint=(0.7, None), height=dp(220))
 
         items = [
-            ("Import from Excel", "import_excel"),
-            ("Export to Excel", "_export"),
+            ("Export Data", "export_data"),
             ("Bulk Image Import", "bulk_images"),
             ("Backup & Restore", "backup"),
         ]
@@ -1561,11 +1581,8 @@ class MainScreen(Screen):
                 text=label_text, font_size=sp(14), color=(0.1, 0.1, 0.18, 1),
                 text_size=(dp(200), None), halign="left",
             ))
-            if target == "_export":
-                btn.bind(on_release=lambda *a: (popup.dismiss(), app.export_to_excel()))
-            else:
-                btn.bind(on_release=lambda *a, t=target: (
-                    popup.dismiss(), self._goto(t)))
+            btn.bind(on_release=lambda *a, t=target: (
+                popup.dismiss(), self._goto(t)))
             content.add_widget(btn)
 
         popup.add_widget(content)
@@ -1838,55 +1855,72 @@ class AddSpareScreen(Screen):
         app.root.current = "main"
 
 
-class ImportExcelScreen(Screen):
-    def select_file(self):
-        app = App.get_running_app()
-        app.pick_image_for = ("import_excel", None)
-        app.open_file_chooser(filters=["*.xlsx", "*.xls"])
+class ExportScreen(Screen):
+    _last_export_path = StringProperty("")
 
-    def on_file_selected(self, path):
+    def do_export(self):
         app = App.get_running_app()
         try:
-            from openpyxl import load_workbook
-            wb = load_workbook(path, read_only=True)
-            ws = wb.active
-            rows = []
-            headers = []
-            for i, row in enumerate(ws.iter_rows(values_only=True)):
-                if i == 0:
-                    headers = [str(h).strip().lower() if h else "" for h in row]
-                    continue
-                if not any(row):
-                    continue
-                data = {}
-                for j, val in enumerate(row):
-                    if j >= len(headers):
-                        break
-                    key = headers[j]
-                    sv = str(val) if val else ""
-                    if key in ("id", "phone_id", "phone id"):
-                        data["id"] = sv
-                    elif key in ("name", "phone_name", "phone name", "model"):
-                        data["name"] = sv
-                    elif key in ("release_date", "release date", "date", "year"):
-                        data["release_date"] = sv
-                    elif key in ("appearance_condition", "appearance condition", "appearance", "look"):
-                        data["appearance_condition"] = sv
-                    elif key in ("working_condition", "working condition", "working", "status"):
-                        data["working_condition"] = sv
-                    elif key in ("remarks", "notes", "comment", "comments"):
-                        data["remarks"] = sv
-                if data.get("id") or data.get("name"):
-                    if not data.get("id"):
-                        data["id"] = f"AUTO-{i}"
-                    rows.append(data)
-            wb.close()
-            count = app.db.import_phones_from_rows(rows)
-            self.ids.import_status.text = f"Imported {count} phones!"
-            self.ids.import_status.color = (0.26, 0.63, 0.28, 1)
+            import csv
+            out_dir = get_backup_path()
+            os.makedirs(out_dir, exist_ok=True)
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+            # Phones CSV
+            phones_path = os.path.join(out_dir, f"nokia_phones_{ts}.csv")
+            phones = app.db.export_phones()
+            with open(phones_path, "w", newline="", encoding="utf-8") as f:
+                w = csv.writer(f)
+                w.writerow(["ID", "Name", "Release Date", "Appearance", "Working", "Remarks"])
+                for p in phones:
+                    w.writerow([p["id"], p["name"], p.get("release_date", ""),
+                                p.get("appearance_condition", ""),
+                                p.get("working_condition", ""),
+                                p.get("remarks", "")])
+
+            # Spare Parts CSV
+            spares_path = os.path.join(out_dir, f"nokia_spares_{ts}.csv")
+            spares = app.db.export_spare_parts()
+            with open(spares_path, "w", newline="", encoding="utf-8") as f:
+                w = csv.writer(f)
+                w.writerow(["ID", "Name", "Phone ID", "Description"])
+                for s in spares:
+                    w.writerow([s["id"], s["name"], s.get("phone_id", ""),
+                                s.get("description", "")])
+
+            self._last_export_path = phones_path
+            self.ids.export_status.text = f"Exported {len(phones)} phones, {len(spares)} parts\n{out_dir}"
+            self.ids.export_status.color = (0.26, 0.63, 0.28, 1)
+            app.show_toast("Exported!")
         except Exception as e:
-            self.ids.import_status.text = f"Error: {str(e)[:80]}"
-            self.ids.import_status.color = (0.9, 0.22, 0.21, 1)
+            self.ids.export_status.text = f"Error: {str(e)[:80]}"
+            self.ids.export_status.color = (0.9, 0.22, 0.21, 1)
+
+    def share_export(self):
+        if not self._last_export_path:
+            self.do_export()
+        app = App.get_running_app()
+        if platform == "android" and self._last_export_path:
+            try:
+                from jnius import autoclass, cast
+                PythonActivity = autoclass("org.kivy.android.PythonActivity")
+                Intent = autoclass("android.content.Intent")
+                FileProvider = autoclass("androidx.core.content.FileProvider")
+                ctx = PythonActivity.mActivity.getApplicationContext()
+                pkg = ctx.getPackageName()
+                jf = autoclass("java.io.File")(self._last_export_path)
+                uri = FileProvider.getUriForFile(ctx, f"{pkg}.fileprovider", jf)
+                intent = Intent(Intent.ACTION_SEND)
+                intent.setType("text/csv")
+                intent.putExtra(Intent.EXTRA_STREAM, cast("android.os.Parcelable", uri))
+                intent.putExtra(Intent.EXTRA_SUBJECT, "Nokia Storage Export")
+                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                chooser = Intent.createChooser(intent, "Share Export")
+                PythonActivity.mActivity.startActivity(chooser)
+            except Exception as e:
+                self.ids.export_status.text = f"Share error: {str(e)[:60]}"
+        else:
+            app.show_toast(f"File: {self._last_export_path}")
 
     def go_back(self):
         app = App.get_running_app()
@@ -2151,6 +2185,7 @@ class NokiaStorageApp(App):
             pass
         if platform == "android":
             Clock.schedule_once(lambda dt: self._request_perms(), 1)
+        self._load_initial_data()
         return Builder.load_string(KV)
 
     def _request_perms(self):
@@ -2252,9 +2287,6 @@ class NokiaStorageApp(App):
                 d = self.root.get_screen("phone_detail")
                 d.image_source = img
                 self.show_toast("Image updated!")
-        elif target_type == "import_excel":
-            s = self.root.get_screen("import_excel")
-            s.on_file_selected(selection[0])
         elif target_type == "restore_backup":
             s = self.root.get_screen("backup")
             s.on_backup_selected(selection[0])
@@ -2276,69 +2308,41 @@ class NokiaStorageApp(App):
         else:
             self.show_toast("Camera on Android only")
 
-    def export_to_excel(self):
+    def _load_initial_data(self):
+        """Load initial phone data from bundled JSON on first run."""
+        if not self.db:
+            return
+        if self.db.get_phone_count() > 0:
+            return  # Data already exists
         try:
-            from openpyxl import Workbook
-            from openpyxl.styles import Font, PatternFill, Alignment
-            wb = Workbook()
-            ws = wb.active
-            ws.title = "Nokia Phones"
-            hdr_fill = PatternFill(start_color="0050C8", end_color="0050C8", fill_type="solid")
-            hdr_font = Font(bold=True, color="FFFFFF")
-            for c, h in enumerate(["ID", "Name", "Release Date",
-                                    "Appearance", "Working", "Remarks"], 1):
-                cell = ws.cell(row=1, column=c, value=h)
-                cell.fill = hdr_fill
-                cell.font = hdr_font
-                cell.alignment = Alignment(horizontal="center")
-            for i, p in enumerate(self.db.export_phones(), 2):
-                ws.cell(row=i, column=1, value=p["id"])
-                ws.cell(row=i, column=2, value=p["name"])
-                ws.cell(row=i, column=3, value=p.get("release_date", ""))
-                ws.cell(row=i, column=4, value=p.get("appearance_condition", ""))
-                ws.cell(row=i, column=5, value=p.get("working_condition", ""))
-                ws.cell(row=i, column=6, value=p.get("remarks", ""))
-            for c in range(1, 7):
-                ws.column_dimensions[chr(64 + c)].width = 18
-
-            ws2 = wb.create_sheet("Spare Parts")
-            for c, h in enumerate(["ID", "Name", "Phone ID", "Description"], 1):
-                cell = ws2.cell(row=1, column=c, value=h)
-                cell.fill = hdr_fill
-                cell.font = hdr_font
-            for i, s in enumerate(self.db.export_spare_parts(), 2):
-                ws2.cell(row=i, column=1, value=s["id"])
-                ws2.cell(row=i, column=2, value=s["name"])
-                ws2.cell(row=i, column=3, value=s.get("phone_id", ""))
-                ws2.cell(row=i, column=4, value=s.get("description", ""))
-
-            out_dir = get_backup_path()
-            os.makedirs(out_dir, exist_ok=True)
-            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-            fp = os.path.join(out_dir, f"nokia_export_{ts}.xlsx")
-            wb.save(fp)
-            self.show_toast(f"Exported!")
-
-            if platform == "android":
-                try:
-                    from jnius import autoclass, cast
-                    PythonActivity = autoclass("org.kivy.android.PythonActivity")
-                    Intent = autoclass("android.content.Intent")
-                    FileProvider = autoclass("androidx.core.content.FileProvider")
-                    ctx = PythonActivity.mActivity.getApplicationContext()
-                    pkg = ctx.getPackageName()
-                    jf = autoclass("java.io.File")(fp)
-                    uri = FileProvider.getUriForFile(ctx, f"{pkg}.fileprovider", jf)
-                    intent = Intent(Intent.ACTION_SEND)
-                    intent.setType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-                    intent.putExtra(Intent.EXTRA_STREAM, cast("android.os.Parcelable", uri))
-                    intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    chooser = Intent.createChooser(intent, "Share Export")
-                    PythonActivity.mActivity.startActivity(chooser)
-                except Exception:
-                    pass
+            # Try multiple locations for the JSON file
+            json_paths = [
+                os.path.join(os.path.dirname(os.path.abspath(__file__)), "initial_data.json"),
+                os.path.join(get_app_path(), "initial_data.json"),
+            ]
+            data = None
+            for jp in json_paths:
+                if os.path.exists(jp):
+                    with open(jp, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                    break
+            if not data:
+                return
+            rows = []
+            for item in data:
+                code, model, year, appear, cond, comment = item
+                rows.append({
+                    "id": str(code),
+                    "name": str(model),
+                    "release_date": str(year),
+                    "appearance_condition": str(appear),
+                    "working_condition": str(cond),
+                    "remarks": str(comment) if comment else "",
+                })
+            count = self.db.import_phones_from_rows(rows)
+            print(f"Loaded {count} phones from initial data")
         except Exception as e:
-            self.show_toast(f"Export error: {str(e)[:50]}")
+            print(f"Initial data load error: {e}")
 
     def on_stop(self):
         if self.db:
