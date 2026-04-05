@@ -177,7 +177,8 @@ class SpareCard(ButtonBehavior, BoxLayout):
 
 
 class SearchBar(BoxLayout):
-    def on_search(self, text):
+    def on_search_enter(self, text):
+        """Called only when user presses Enter."""
         app = App.get_running_app()
         if app.root:
             screen = app.root.current_screen
@@ -327,7 +328,7 @@ KV = """
             cursor_color: 0, 0.314, 0.784, 1
             font_size: sp(14)
             padding: 0, dp(8)
-            on_text: root.on_search(self.text)
+            on_text_validate: root.on_search_enter(self.text)
 
 ScreenManager:
     id: sm
@@ -1456,14 +1457,23 @@ ScreenManager:
 
 # ── Screen Classes ──────────────────────────────────────────────
 
+PAGE_SIZE = 50
+
+
 class MainScreen(Screen):
     current_tab = StringProperty("phones")
+    _all_items = []
+    _current_page = 0
+    _total_items = 0
+    _is_search = False
 
     def on_enter(self):
         Clock.schedule_once(lambda dt: self.refresh_list(), 0.2)
 
     def switch_tab(self, tab):
         self.current_tab = tab
+        self._current_page = 0
+        self._is_search = False
         try:
             self.ids.search_bar.ids.search_input.text = ""
         except Exception:
@@ -1474,46 +1484,44 @@ class MainScreen(Screen):
         app = App.get_running_app()
         if not app.db:
             return
-        grid = self.ids.content_list
-        grid.clear_widgets()
-        default_img = get_default_image()
-
+        self._current_page = 0
         if self.current_tab == "phones":
-            items = app.db.get_all_phones()
-            self.ids.count_label.text = f"{len(items)} phones"
-            for p in items:
-                img = safe_image(p.get("image_path", ""))
-                card = PhoneCard(
-                    phone_id=p["id"], phone_name=p["name"],
-                    phone_date=p.get("release_date", "") or "",
-                    phone_image=img,
-                )
-                card.bind(on_release=partial(self._open_phone, p["id"]))
-                grid.add_widget(card)
+            self._all_items = app.db.get_all_phones()
         else:
-            items = app.db.get_all_spare_parts()
-            self.ids.count_label.text = f"{len(items)} spare parts"
-            for s in items:
-                img = safe_image(s.get("image_path", ""))
-                card = SpareCard(
-                    spare_id=s["id"], spare_name=s["name"],
-                    spare_desc=s.get("description", "") or "",
-                    spare_image=img,
-                )
-                grid.add_widget(card)
+            self._all_items = app.db.get_all_spare_parts()
+        self._total_items = len(self._all_items)
+        self._is_search = False
+        self._render_page()
 
     def do_search(self, text):
         app = App.get_running_app()
         if not text.strip():
             self.refresh_list()
             return
+        self._current_page = 0
+        if self.current_tab == "phones":
+            self._all_items = app.db.search_phones(text)
+        else:
+            self._all_items = app.db.search_spare_parts(text)
+        self._total_items = len(self._all_items)
+        self._is_search = True
+        self._render_page()
+
+    def _render_page(self):
         grid = self.ids.content_list
         grid.clear_widgets()
+        start = self._current_page * PAGE_SIZE
+        end = min(start + PAGE_SIZE, self._total_items)
+        page_items = self._all_items[start:end]
+        total_pages = max(1, (self._total_items + PAGE_SIZE - 1) // PAGE_SIZE)
+        cur_pg = self._current_page + 1
+
+        label_type = "found" if self._is_search else (
+            "phones" if self.current_tab == "phones" else "spare parts")
+        self.ids.count_label.text = f"{self._total_items} {label_type} | Page {cur_pg}/{total_pages}"
 
         if self.current_tab == "phones":
-            results = app.db.search_phones(text)
-            self.ids.count_label.text = f"{len(results)} found"
-            for p in results:
+            for p in page_items:
                 img = safe_image(p.get("image_path", ""))
                 card = PhoneCard(
                     phone_id=p["id"], phone_name=p["name"],
@@ -1523,9 +1531,7 @@ class MainScreen(Screen):
                 card.bind(on_release=partial(self._open_phone, p["id"]))
                 grid.add_widget(card)
         else:
-            results = app.db.search_spare_parts(text)
-            self.ids.count_label.text = f"{len(results)} found"
-            for s in results:
+            for s in page_items:
                 img = safe_image(s.get("image_path", ""))
                 card = SpareCard(
                     spare_id=s["id"], spare_name=s["name"],
@@ -1533,6 +1539,64 @@ class MainScreen(Screen):
                     spare_image=img,
                 )
                 grid.add_widget(card)
+
+        # Pagination buttons
+        if self._total_items > PAGE_SIZE:
+            pager = BoxLayout(
+                size_hint_y=None, height=dp(44),
+                spacing=dp(8), padding=(dp(4), dp(6)),
+            )
+            if self._current_page > 0:
+                prev_btn = ClickableBox(
+                    padding=(dp(12), dp(6)),
+                )
+                with prev_btn.canvas.before:
+                    Color(0, 0.314, 0.784, 1)
+                    prev_btn._bg = RoundedRectangle(
+                        pos=prev_btn.pos, size=prev_btn.size, radius=[dp(8)])
+                prev_btn.bind(pos=lambda w, v: setattr(w._bg, "pos", v))
+                prev_btn.bind(size=lambda w, v: setattr(w._bg, "size", v))
+                prev_btn.add_widget(Label(
+                    text="< Prev 50", color=(1, 1, 1, 1), font_size=sp(13), bold=True))
+                prev_btn.bind(on_release=lambda *a: self._go_page(-1))
+                pager.add_widget(prev_btn)
+            else:
+                pager.add_widget(Widget())
+
+            pager.add_widget(Label(
+                text=f"{cur_pg}/{total_pages}",
+                font_size=sp(13), color=(0.4, 0.4, 0.4, 1),
+                size_hint_x=None, width=dp(60),
+            ))
+
+            if end < self._total_items:
+                next_btn = ClickableBox(
+                    padding=(dp(12), dp(6)),
+                )
+                with next_btn.canvas.before:
+                    Color(0, 0.314, 0.784, 1)
+                    next_btn._bg = RoundedRectangle(
+                        pos=next_btn.pos, size=next_btn.size, radius=[dp(8)])
+                next_btn.bind(pos=lambda w, v: setattr(w._bg, "pos", v))
+                next_btn.bind(size=lambda w, v: setattr(w._bg, "size", v))
+                next_btn.add_widget(Label(
+                    text="Next 50 >", color=(1, 1, 1, 1), font_size=sp(13), bold=True))
+                next_btn.bind(on_release=lambda *a: self._go_page(1))
+                pager.add_widget(next_btn)
+            else:
+                pager.add_widget(Widget())
+
+            grid.add_widget(pager)
+
+        # Scroll to top
+        try:
+            self.ids.scroll_view.scroll_y = 1
+        except Exception:
+            pass
+
+    def _go_page(self, direction):
+        self._current_page += direction
+        self._render_page()
 
     def _open_phone(self, phone_id, *args):
         app = App.get_running_app()
@@ -2114,19 +2178,22 @@ class SearchAllScreen(Screen):
         grid.clear_widgets()
         if not text.strip():
             grid.add_widget(Label(
-                text="Type to search phones and spare parts",
+                text="Type and press Enter to search",
                 font_size=sp(14), color=(0.5, 0.5, 0.5, 1),
                 size_hint_y=None, height=dp(40),
             ))
             return
         phones, spares = app.db.search_all(text)
+        # Show first 50 of each
         if phones:
+            shown = phones[:PAGE_SIZE]
             grid.add_widget(Label(
-                text=f"Phones ({len(phones)})", font_size=sp(15), bold=True,
+                text=f"Phones ({len(phones)} total, showing {len(shown)})",
+                font_size=sp(15), bold=True,
                 color=(0, 0.314, 0.784, 1), size_hint_y=None, height=dp(30),
                 text_size=(dp(300), None), halign="left",
             ))
-            for p in phones:
+            for p in shown:
                 card = PhoneCard(
                     phone_id=p["id"], phone_name=p["name"],
                     phone_date=p.get("release_date", "") or "",
@@ -2135,12 +2202,14 @@ class SearchAllScreen(Screen):
                 card.bind(on_release=partial(self._open_phone, p["id"]))
                 grid.add_widget(card)
         if spares:
+            shown_s = spares[:PAGE_SIZE]
             grid.add_widget(Label(
-                text=f"Spare Parts ({len(spares)})", font_size=sp(15), bold=True,
+                text=f"Spare Parts ({len(spares)} total, showing {len(shown_s)})",
+                font_size=sp(15), bold=True,
                 color=(0, 0.314, 0.784, 1), size_hint_y=None, height=dp(30),
                 text_size=(dp(300), None), halign="left",
             ))
-            for s in spares:
+            for s in shown_s:
                 card = SpareCard(
                     spare_id=s["id"], spare_name=s["name"],
                     spare_desc=s.get("description", "") or "",
@@ -2186,7 +2255,19 @@ class NokiaStorageApp(App):
         if platform == "android":
             Clock.schedule_once(lambda dt: self._request_perms(), 1)
         self._load_initial_data()
+        # Handle Android back button
+        Window.bind(on_keyboard=self._on_keyboard)
         return Builder.load_string(KV)
+
+    def _on_keyboard(self, window, key, *args):
+        """Handle back button (key 27 = ESC/Back on Android)."""
+        if key == 27:
+            if self.root and self.root.current != "main":
+                self.root.transition = SlideTransition(direction="right")
+                self.root.current = "main"
+                return True  # Consume the event, don't exit
+            return False  # On main screen, let system handle (exit)
+        return False
 
     def _request_perms(self):
         if platform == "android":
