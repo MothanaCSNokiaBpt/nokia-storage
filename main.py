@@ -87,35 +87,52 @@ def get_downloads_path():
     return os.path.join(get_app_path(), "exports")
 
 DEFAULT_IMG = ""
+
+def _find_bundled_file(filename):
+    """Find a file bundled with the app - works on both desktop and Android."""
+    # 1. Same directory as this script
+    d = os.path.join(os.path.dirname(os.path.abspath(__file__)), filename)
+    if os.path.exists(d):
+        return d
+    # 2. App storage path
+    d = os.path.join(get_app_path(), filename)
+    if os.path.exists(d):
+        return d
+    # 3. Kivy's resource paths (handles Android correctly)
+    try:
+        from kivy.resources import resource_find
+        r = resource_find(filename)
+        if r and os.path.exists(r):
+            return r
+    except Exception:
+        pass
+    # 4. Current working directory
+    if os.path.exists(filename):
+        return os.path.abspath(filename)
+    return None
+
 def _create_default_png(path):
-    """Create a 120x120 phone silhouette PNG using only struct+zlib (no Pillow needed)."""
+    """Create a 120x120 phone silhouette PNG using only struct+zlib."""
     import struct, zlib
     W, H = 120, 120
-    # Pre-render a simple phone icon: light blue bg, darker phone shape
-    bg = (230, 238, 255)
-    phone_body = (180, 195, 220)
-    phone_screen = (160, 178, 210)
+    bg, body, screen = (230, 238, 255), (180, 195, 220), (160, 178, 210)
     raw = b''
     for y in range(H):
-        raw += b'\x00'  # filter byte
+        raw += b'\x00'
         for x in range(W):
-            # Phone body: rect from (35,10) to (85,100) with rounded feel
             in_body = 38 <= x <= 82 and 12 <= y <= 98
-            # Screen: rect from (43,25) to (77,72)
             in_screen = 43 <= x <= 77 and 25 <= y <= 72
-            # Circle button: center(60,84) r=7
             in_btn = (x - 60)**2 + (y - 84)**2 <= 49
             if in_screen:
-                raw += bytes(phone_screen)
+                raw += bytes(screen)
             elif in_body or in_btn:
-                raw += bytes(phone_body)
+                raw += bytes(body)
             else:
                 raw += bytes(bg)
     compressed = zlib.compress(raw, 6)
-    def chunk(ctype, data):
-        c = ctype + data
-        crc = struct.pack('>I', zlib.crc32(c) & 0xffffffff)
-        return struct.pack('>I', len(data)) + c + crc
+    def chunk(ct, d):
+        c = ct + d
+        return struct.pack('>I', len(d)) + c + struct.pack('>I', zlib.crc32(c) & 0xffffffff)
     with open(path, 'wb') as f:
         f.write(b'\x89PNG\r\n\x1a\n')
         f.write(chunk(b'IHDR', struct.pack('>IIBBBBB', W, H, 8, 2, 0, 0, 0)))
@@ -126,13 +143,16 @@ def get_default_image():
     global DEFAULT_IMG
     if DEFAULT_IMG and os.path.exists(DEFAULT_IMG):
         return DEFAULT_IMG
-    # Check bundled location first (same dir as main.py)
-    src = os.path.join(os.path.dirname(os.path.abspath(__file__)), "default_phone.png")
-    if os.path.exists(src):
-        DEFAULT_IMG = src
-        return src
+    # Try to find the bundled file
+    found = _find_bundled_file("default_phone.png")
+    if found:
+        DEFAULT_IMG = found
+        return found
+    # Generate it in writable storage
     p = os.path.join(get_app_path(), "default_phone.png")
-    if not os.path.exists(p):
+    try:
+        _create_default_png(p)
+    except Exception:
         try:
             from PIL import Image as PILImage, ImageDraw
             img = PILImage.new("RGB", (120, 120), (230, 238, 255))
@@ -143,12 +163,11 @@ def get_default_image():
             draw.ellipse([53, 77, 67, 91], fill=(160, 178, 210))
             img.save(p, optimize=True)
         except Exception:
-            try:
-                _create_default_png(p)
-            except Exception:
-                return ""
-    DEFAULT_IMG = p
-    return p
+            return ""
+    if os.path.exists(p):
+        DEFAULT_IMG = p
+        return p
+    return ""
 
 def safe_image(path):
     if path and os.path.exists(path):
@@ -1505,14 +1524,20 @@ class MainScreen(Screen):
     _current_page = 0
     _total_items = 0
     _is_search = False
+    _data_loaded = False  # Track if data was already loaded
 
     def on_enter(self):
-        Clock.schedule_once(lambda dt: self.refresh_list(), 0.2)
+        if not self._data_loaded:
+            Clock.schedule_once(lambda dt: self.refresh_list(), 0.2)
+        else:
+            # Coming back from detail - just re-render same page, no data reload
+            self._render_page()
 
     def switch_tab(self, tab):
         self.current_tab = tab
         self._current_page = 0
         self._is_search = False
+        self._data_loaded = False
         try:
             self.ids.search_bar.ids.search_input.text = ""
         except Exception:
@@ -1530,11 +1555,13 @@ class MainScreen(Screen):
             self._all_items = app.db.get_all_spare_parts()
         self._total_items = len(self._all_items)
         self._is_search = False
+        self._data_loaded = True
         self._render_page()
 
     def do_search(self, text):
         app = App.get_running_app()
         if not text.strip():
+            self._data_loaded = False
             self.refresh_list()
             return
         self._current_page = 0
@@ -1544,7 +1571,18 @@ class MainScreen(Screen):
             self._all_items = app.db.search_spare_parts(text)
         self._total_items = len(self._all_items)
         self._is_search = True
+        self._data_loaded = True
         self._render_page()
+
+    def _make_pager_btn(self, text, callback):
+        b = ClickableBox(padding=(dp(6), dp(3)), size_hint_x=None, width=dp(52))
+        with b.canvas.before:
+            Color(0, 0.314, 0.784, 1)
+            b._bg = RoundedRectangle(pos=b.pos, size=b.size, radius=[dp(6)])
+        b.bind(pos=lambda w, v: setattr(w._bg, "pos", v), size=lambda w, v: setattr(w._bg, "size", v))
+        b.add_widget(Label(text=text, color=(1,1,1,1), font_size=sp(11), bold=True))
+        b.bind(on_release=callback)
+        return b
 
     def _render_page(self):
         grid = self.ids.content_list
@@ -1555,53 +1593,74 @@ class MainScreen(Screen):
         total_pages = max(1, (self._total_items + PAGE_SIZE - 1) // PAGE_SIZE)
         cur_pg = self._current_page + 1
         lbl_type = "found" if self._is_search else ("phones" if self.current_tab == "phones" else "parts")
-        self.ids.count_label.text = f"{self._total_items} {lbl_type} | {cur_pg}/{total_pages}"
+        self.ids.count_label.text = f"{self._total_items} {lbl_type} | Page {cur_pg}/{total_pages}"
+
+        default_img = get_default_image()
 
         if self.current_tab == "phones":
             for p in page_items:
+                img = p.get("image_path", "") or ""
+                if not img or not os.path.exists(img):
+                    img = default_img
                 card = PhoneCard(
                     phone_id=p["id"], phone_name=p["name"],
                     phone_date=p.get("release_date", "") or "",
-                    phone_image=safe_image(p.get("image_path", "")),
+                    phone_image=img,
                 )
                 card.bind(on_release=partial(self._open_phone, p["id"]))
                 grid.add_widget(card)
         else:
             for s in page_items:
+                img = s.get("image_path", "") or ""
+                if not img or not os.path.exists(img):
+                    img = default_img
                 card = SpareCard(
                     spare_id=s["id"], spare_name=s["name"],
                     spare_desc=s.get("description", "") or "",
-                    spare_image=safe_image(s.get("image_path", "")),
+                    spare_image=img,
                 )
                 card.bind(on_release=partial(self._open_spare, s["id"]))
                 grid.add_widget(card)
 
+        # Pagination controls
         if self._total_items > PAGE_SIZE:
-            pager = BoxLayout(size_hint_y=None, height=dp(40), spacing=dp(6), padding=(dp(4), dp(4)))
+            pager = BoxLayout(size_hint_y=None, height=dp(38), spacing=dp(4), padding=(dp(2), dp(3)))
+
+            # First page
+            if self._current_page > 1:
+                pager.add_widget(self._make_pager_btn("|<", lambda *a: self._go_to_page(0)))
+            # Prev
             if self._current_page > 0:
-                pb = ClickableBox(padding=(dp(10), dp(4)))
-                with pb.canvas.before:
-                    Color(0, 0.314, 0.784, 1)
-                    pb._bg = RoundedRectangle(pos=pb.pos, size=pb.size, radius=[dp(7)])
-                pb.bind(pos=lambda w, v: setattr(w._bg, "pos", v), size=lambda w, v: setattr(w._bg, "size", v))
-                pb.add_widget(Label(text="< Prev", color=(1,1,1,1), font_size=sp(12), bold=True))
-                pb.bind(on_release=lambda *a: self._go_page(-1))
-                pager.add_widget(pb)
-            else:
-                pager.add_widget(Widget())
-            pager.add_widget(Label(text=f"{cur_pg}/{total_pages}", font_size=sp(12), color=(0.4,0.4,0.4,1), size_hint_x=None, width=dp(50)))
+                pager.add_widget(self._make_pager_btn("< Prev", lambda *a: self._go_page(-1)))
+
+            # Page number input
+            pg_box = BoxLayout(spacing=dp(3))
+            pg_input = TextInput(
+                text=str(cur_pg), multiline=False,
+                size_hint_x=None, width=dp(44),
+                font_size=sp(12), halign="center",
+                padding=(dp(4), dp(6)),
+                input_filter="int",
+            )
+            pg_input.bind(on_text_validate=lambda w: self._go_to_page(
+                max(0, min(total_pages - 1, int(w.text) - 1)) if w.text.isdigit() else 0
+            ))
+            pg_box.add_widget(pg_input)
+            pg_box.add_widget(Label(
+                text=f"/ {total_pages}", font_size=sp(12),
+                color=(0.4, 0.4, 0.4, 1), size_hint_x=None, width=dp(36),
+            ))
+            pager.add_widget(pg_box)
+
+            # Next
             if end < self._total_items:
-                nb = ClickableBox(padding=(dp(10), dp(4)))
-                with nb.canvas.before:
-                    Color(0, 0.314, 0.784, 1)
-                    nb._bg = RoundedRectangle(pos=nb.pos, size=nb.size, radius=[dp(7)])
-                nb.bind(pos=lambda w, v: setattr(w._bg, "pos", v), size=lambda w, v: setattr(w._bg, "size", v))
-                nb.add_widget(Label(text="Next >", color=(1,1,1,1), font_size=sp(12), bold=True))
-                nb.bind(on_release=lambda *a: self._go_page(1))
-                pager.add_widget(nb)
-            else:
-                pager.add_widget(Widget())
+                pager.add_widget(self._make_pager_btn("Next >", lambda *a: self._go_page(1)))
+            # Last page
+            if self._current_page < total_pages - 2:
+                pager.add_widget(self._make_pager_btn(">|", lambda *a: self._go_to_page(total_pages - 1)))
+
             grid.add_widget(pager)
+
         try:
             self.ids.scroll_view.scroll_y = 1
         except Exception:
@@ -1609,6 +1668,10 @@ class MainScreen(Screen):
 
     def _go_page(self, d):
         self._current_page += d
+        self._render_page()
+
+    def _go_to_page(self, page_num):
+        self._current_page = page_num
         self._render_page()
 
     def _open_phone(self, pid, *a):
@@ -1771,6 +1834,7 @@ class PhoneDetailScreen(Screen):
     def _do_delete(self, popup):
         app = App.get_running_app()
         app.db.delete_phone(self.p_id)
+        app.root.get_screen("main")._data_loaded = False
         popup.dismiss()
         self.go_back()
 
@@ -1902,6 +1966,7 @@ class SpareDetailScreen(Screen):
     def _do_delete(self, popup):
         app = App.get_running_app()
         app.db.delete_spare_part(self.s_id)
+        app.root.get_screen("main")._data_loaded = False
         popup.dismiss()
         self.go_back()
 
@@ -1990,6 +2055,8 @@ class AddPhoneScreen(Screen):
             image_path=img or "",
         )
         app.show_toast("Phone saved!")
+        # Invalidate list cache so it reloads
+        app.root.get_screen("main")._data_loaded = False
         self.go_back()
 
     def go_back(self):
@@ -2049,6 +2116,7 @@ class AddSpareScreen(Screen):
             description=self.ids.spare_input_desc.text.strip(),
         )
         app.show_toast("Spare part saved!")
+        app.root.get_screen("main")._data_loaded = False
         self.go_back()
 
     def go_back(self):
