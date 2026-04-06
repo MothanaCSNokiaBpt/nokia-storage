@@ -483,6 +483,23 @@ ScreenManager:
                         id: detail_img
                         allow_stretch: True
                         keep_ratio: True
+                ClickableBox:
+                    size_hint_y: None
+                    height: dp(34)
+                    padding: dp(10), dp(5)
+                    canvas.before:
+                        Color:
+                            rgba: 0, 0.314, 0.784, 0.12
+                        RoundedRectangle:
+                            pos: self.pos
+                            size: self.size
+                            radius: [dp(7)]
+                    on_release: root.add_image()
+                    Label:
+                        text: 'Add / Change Image'
+                        color: 0, 0.314, 0.784, 1
+                        font_size: sp(12)
+                        bold: True
                 # Info Card
                 BoxLayout:
                     orientation: 'vertical'
@@ -690,6 +707,23 @@ ScreenManager:
                         id: detail_img
                         allow_stretch: True
                         keep_ratio: True
+                ClickableBox:
+                    size_hint_y: None
+                    height: dp(34)
+                    padding: dp(10), dp(5)
+                    canvas.before:
+                        Color:
+                            rgba: 0, 0.314, 0.784, 0.12
+                        RoundedRectangle:
+                            pos: self.pos
+                            size: self.size
+                            radius: [dp(7)]
+                    on_release: root.add_image()
+                    Label:
+                        text: 'Add / Change Image'
+                        color: 0, 0.314, 0.784, 1
+                        font_size: sp(12)
+                        bold: True
                 BoxLayout:
                     orientation: 'vertical'
                     size_hint_y: None
@@ -1454,6 +1488,32 @@ class PhoneDetailScreen(Screen):
         app.root.get_screen("spare_detail").load_spare(sid)
         app.root.transition = SlideTransition(direction="left"); app.root.current = "spare_detail"
 
+    def add_image(self):
+        """Show popup with Gallery and Camera options."""
+        popup = ModalView(size_hint=(0.72, None), height=dp(120))
+        c = BoxLayout(orientation="vertical", spacing=dp(4), padding=dp(10))
+        with c.canvas.before:
+            Color(1,1,1,1); c._bg = RoundedRectangle(pos=c.pos, size=c.size, radius=[dp(10)])
+        c.bind(pos=lambda w,v: setattr(w._bg,"pos",v), size=lambda w,v: setattr(w._bg,"size",v))
+        gb = ClickableBox(size_hint_y=None, height=dp(42), padding=(dp(10),dp(6)))
+        gb.add_widget(Label(text="Pick from Gallery", font_size=sp(14), color=(0.1,0.1,0.18,1)))
+        gb.bind(on_release=lambda *a: (popup.dismiss(), self._pick_gallery()))
+        cb = ClickableBox(size_hint_y=None, height=dp(42), padding=(dp(10),dp(6)))
+        cb.add_widget(Label(text="Take Photo", font_size=sp(14), color=(0.1,0.1,0.18,1)))
+        cb.bind(on_release=lambda *a: (popup.dismiss(), self._pick_camera()))
+        c.add_widget(gb); c.add_widget(cb)
+        popup.add_widget(c); popup.open()
+
+    def _pick_gallery(self):
+        app = App.get_running_app()
+        app.pick_image_for = ("phone_direct", self.p_id)
+        app.open_file_chooser()
+
+    def _pick_camera(self):
+        app = App.get_running_app()
+        app.pick_image_for = ("phone_direct", self.p_id)
+        app.take_camera_photo()
+
     def go_back(self):
         app = App.get_running_app()
         app.root.transition = SlideTransition(direction="right"); app.root.current = "main"
@@ -1513,6 +1573,31 @@ class SpareDetailScreen(Screen):
         try:
             self.ids.detail_img.source = path or get_default_image_path(get_app_path())
         except: pass
+
+    def add_image(self):
+        popup = ModalView(size_hint=(0.72, None), height=dp(120))
+        c = BoxLayout(orientation="vertical", spacing=dp(4), padding=dp(10))
+        with c.canvas.before:
+            Color(1,1,1,1); c._bg = RoundedRectangle(pos=c.pos, size=c.size, radius=[dp(10)])
+        c.bind(pos=lambda w,v: setattr(w._bg,"pos",v), size=lambda w,v: setattr(w._bg,"size",v))
+        gb = ClickableBox(size_hint_y=None, height=dp(42), padding=(dp(10),dp(6)))
+        gb.add_widget(Label(text="Pick from Gallery", font_size=sp(14), color=(0.1,0.1,0.18,1)))
+        gb.bind(on_release=lambda *a: (popup.dismiss(), self._pick_gallery()))
+        cb = ClickableBox(size_hint_y=None, height=dp(42), padding=(dp(10),dp(6)))
+        cb.add_widget(Label(text="Take Photo", font_size=sp(14), color=(0.1,0.1,0.18,1)))
+        cb.bind(on_release=lambda *a: (popup.dismiss(), self._pick_camera()))
+        c.add_widget(gb); c.add_widget(cb)
+        popup.add_widget(c); popup.open()
+
+    def _pick_gallery(self):
+        app = App.get_running_app()
+        app.pick_image_for = ("spare_direct", self.s_id)
+        app.open_file_chooser()
+
+    def _pick_camera(self):
+        app = App.get_running_app()
+        app.pick_image_for = ("spare_direct", self.s_id)
+        app.take_camera_photo()
 
     def confirm_delete(self):
         popup = ModalView(size_hint=(0.78, None), height=dp(130))
@@ -1916,6 +2001,33 @@ class NokiaStorageApp(App):
             s = self.root.get_screen(screen_name)
             if img_bytes:
                 s.on_image_selected(img_bytes)
+            else:
+                self.show_toast("Could not read image")
+        elif tt == "phone_direct":
+            # Directly update phone image from detail page
+            img_bytes = read_image_from_path(sel[0])
+            if img_bytes:
+                self.db.update_phone(td, image_path=sel[0])
+                clear_cached_image(f"p_{td}", get_app_path())
+                new_img = get_img_path_for_phone(td, self.db)
+                d = self.root.get_screen("phone_detail")
+                d.ids.detail_img.source = ""
+                Clock.schedule_once(lambda dt: setattr(d.ids.detail_img, "source", new_img), 0.15)
+                self.root.get_screen("main")._data_loaded = False
+                self.show_toast("Image updated!")
+            else:
+                self.show_toast("Could not read image")
+        elif tt == "spare_direct":
+            img_bytes = read_image_from_path(sel[0])
+            if img_bytes:
+                self.db.update_spare_part(td, image_path=sel[0])
+                clear_cached_image(f"s_{td}", get_app_path())
+                new_img = get_img_path_for_spare(td, self.db)
+                d = self.root.get_screen("spare_detail")
+                d.ids.detail_img.source = ""
+                Clock.schedule_once(lambda dt: setattr(d.ids.detail_img, "source", new_img), 0.15)
+                self.root.get_screen("main")._data_loaded = False
+                self.show_toast("Image updated!")
             else:
                 self.show_toast("Could not read image")
         elif tt == "restore_backup":

@@ -79,17 +79,22 @@ def get_default_image_path(app_path):
 
 
 def blob_to_file(blob_bytes, item_key, app_path):
-    """Write image BLOB to a cached file. Returns the file path."""
+    """Write image BLOB to a cached file. Returns the file path.
+    Always overwrites to ensure correct image is shown."""
     if not blob_bytes:
         return ""
     cache = get_cache_dir(app_path)
+    # Use correct extension for Kivy Image widget
     ext = ".jpg"
     if blob_bytes[:4] == b'\x89PNG':
         ext = ".png"
+    # Clear any old file with different extension first
+    for old_ext in (".jpg", ".png"):
+        old_path = os.path.join(cache, f"{item_key}{old_ext}")
+        if old_ext != ext and os.path.exists(old_path):
+            try: os.remove(old_path)
+            except: pass
     path = os.path.join(cache, f"{item_key}{ext}")
-    # Only write if not already cached
-    if os.path.exists(path) and os.path.getsize(path) == len(blob_bytes):
-        return path
     try:
         with open(path, 'wb') as f:
             f.write(blob_bytes)
@@ -99,9 +104,9 @@ def blob_to_file(blob_bytes, item_key, app_path):
 
 
 def clear_cached_image(item_key, app_path):
-    """Remove a cached image file so it gets recreated."""
+    """Remove a cached image file so it gets recreated from DB."""
     cache = get_cache_dir(app_path)
-    for ext in (".jpg", ".png"):
+    for ext in (".img", ".jpg", ".png"):
         path = os.path.join(cache, f"{item_key}{ext}")
         try:
             if os.path.exists(path):
