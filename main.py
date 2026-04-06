@@ -141,6 +141,7 @@ KV = """
             radius: [dp(10)]
     Image:
         source: root.phone_image
+        nocache: True
         size_hint: None, None
         size: dp(64), dp(78)
         pos_hint: {'center_y': .5}
@@ -203,6 +204,7 @@ KV = """
             radius: [dp(10)]
     Image:
         source: root.spare_image
+        nocache: True
         size_hint: None, None
         size: dp(56), dp(60)
         pos_hint: {'center_y': .5}
@@ -481,6 +483,7 @@ ScreenManager:
                             radius: [dp(14)]
                     Image:
                         id: detail_img
+                        nocache: True
                         allow_stretch: True
                         keep_ratio: True
                 ClickableBox:
@@ -705,6 +708,7 @@ ScreenManager:
                             radius: [dp(14)]
                     Image:
                         id: detail_img
+                        nocache: True
                         allow_stretch: True
                         keep_ratio: True
                 ClickableBox:
@@ -834,6 +838,7 @@ ScreenManager:
                             radius: [dp(10)]
                     Image:
                         id: preview_img
+                        nocache: True
                         allow_stretch: True
                         keep_ratio: True
                 BoxLayout:
@@ -990,6 +995,7 @@ ScreenManager:
                             radius: [dp(10)]
                     Image:
                         id: preview_img
+                        nocache: True
                         allow_stretch: True
                         keep_ratio: True
                 BoxLayout:
@@ -1465,7 +1471,9 @@ class PhoneDetailScreen(Screen):
 
     def _set_img(self, path):
         try:
-            self.ids.detail_img.source = path or get_default_image_path(get_app_path())
+            src = path or get_default_image_path(get_app_path())
+            self.ids.detail_img.source = src
+            self.ids.detail_img.reload()
         except: pass
 
     def _load_spares(self):
@@ -1571,7 +1579,9 @@ class SpareDetailScreen(Screen):
 
     def _set_img(self, path):
         try:
-            self.ids.detail_img.source = path or get_default_image_path(get_app_path())
+            src = path or get_default_image_path(get_app_path())
+            self.ids.detail_img.source = src
+            self.ids.detail_img.reload()
         except: pass
 
     def add_image(self):

@@ -79,22 +79,24 @@ def get_default_image_path(app_path):
 
 
 def blob_to_file(blob_bytes, item_key, app_path):
-    """Write image BLOB to a cached file. Returns the file path.
-    Always overwrites to ensure correct image is shown."""
+    """Write image BLOB to a unique cached file. Returns the file path.
+    Uses a hash-based filename to avoid Kivy Image cache issues."""
     if not blob_bytes:
         return ""
     cache = get_cache_dir(app_path)
-    # Use correct extension for Kivy Image widget
-    ext = ".jpg"
-    if blob_bytes[:4] == b'\x89PNG':
-        ext = ".png"
-    # Clear any old file with different extension first
-    for old_ext in (".jpg", ".png"):
-        old_path = os.path.join(cache, f"{item_key}{old_ext}")
-        if old_ext != ext and os.path.exists(old_path):
-            try: os.remove(old_path)
-            except: pass
-    path = os.path.join(cache, f"{item_key}{ext}")
+    ext = ".png" if blob_bytes[:4] == b'\x89PNG' else ".jpg"
+    # Use data length + first bytes as simple hash for unique filename
+    # This ensures Kivy sees a NEW path when image data changes
+    import hashlib
+    h = hashlib.md5(blob_bytes[:1024]).hexdigest()[:8]
+    path = os.path.join(cache, f"{item_key}_{h}{ext}")
+    if os.path.exists(path):
+        return path  # Already written with same content
+    # Clean old versions of this item
+    import glob
+    for old in glob.glob(os.path.join(cache, f"{item_key}_*")):
+        try: os.remove(old)
+        except: pass
     try:
         with open(path, 'wb') as f:
             f.write(blob_bytes)
