@@ -208,6 +208,54 @@ class NokiaDatabase:
         cur = self.conn.execute("SELECT COUNT(*) FROM spare_parts")
         return cur.fetchone()[0]
 
+    # ── Report / Statistics ─────────────────────────────────────
+
+    def get_report(self):
+        """Return comprehensive statistics."""
+        report = {}
+        report["total_phones"] = self.get_phone_count()
+        report["total_spares"] = self.get_spare_count()
+
+        # By working condition
+        cur = self.conn.execute(
+            """SELECT working_condition, COUNT(*) as cnt
+               FROM phones GROUP BY working_condition ORDER BY cnt DESC"""
+        )
+        report["by_working"] = [(r[0] or "Unknown", r[1]) for r in cur.fetchall()]
+
+        # By appearance
+        cur = self.conn.execute(
+            """SELECT appearance_condition, COUNT(*) as cnt
+               FROM phones GROUP BY appearance_condition ORDER BY cnt DESC"""
+        )
+        report["by_appearance"] = [(r[0] or "Unknown", r[1]) for r in cur.fetchall()]
+
+        # By model (top 20)
+        cur = self.conn.execute(
+            """SELECT name, COUNT(*) as cnt
+               FROM phones GROUP BY name ORDER BY cnt DESC LIMIT 20"""
+        )
+        report["by_model"] = [(r[0], r[1]) for r in cur.fetchall()]
+
+        # Unique models count
+        cur = self.conn.execute("SELECT COUNT(DISTINCT name) FROM phones")
+        report["unique_models"] = cur.fetchone()[0]
+
+        # By release year
+        cur = self.conn.execute(
+            """SELECT release_date, COUNT(*) as cnt
+               FROM phones GROUP BY release_date ORDER BY release_date"""
+        )
+        report["by_year"] = [(r[0] or "Unknown", r[1]) for r in cur.fetchall()]
+
+        # Phones with images
+        cur = self.conn.execute(
+            "SELECT COUNT(*) FROM phones WHERE image_path != '' AND image_path IS NOT NULL"
+        )
+        report["phones_with_images"] = cur.fetchone()[0]
+
+        return report
+
     def close(self):
         if self.conn:
             self.conn.close()

@@ -28,9 +28,8 @@ android.enable_androidx = True
 android.meta_data = android.support.FILE_PROVIDER_PATHS=filepaths.xml
 android.add_src = fileprovider_src/
 
-# Presplash and icon (you can replace these with your own)
-# presplash.filename = %(source.dir)s/assets/presplash.png
-# icon.filename = %(source.dir)s/assets/icon.png
+presplash.filename = %(source.dir)s/assets/presplash.png
+icon.filename = %(source.dir)s/assets/icon.png
 
 
 [buildozer]
