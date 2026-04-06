@@ -46,9 +46,17 @@ class NokiaDatabase:
                 created_at TEXT DEFAULT (datetime('now'))
             );
 
+            CREATE TABLE IF NOT EXISTS phone_gallery (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                phone_id TEXT NOT NULL,
+                image_data BLOB NOT NULL,
+                created_at TEXT DEFAULT (datetime('now'))
+            );
+
             CREATE INDEX IF NOT EXISTS idx_phones_name ON phones(name);
             CREATE INDEX IF NOT EXISTS idx_spare_name ON spare_parts(name);
             CREATE INDEX IF NOT EXISTS idx_spare_phone ON spare_parts(phone_id);
+            CREATE INDEX IF NOT EXISTS idx_gallery_phone ON phone_gallery(phone_id);
         """)
         # Add image_data column if upgrading from old schema
         try:
@@ -276,6 +284,36 @@ class NokiaDatabase:
             (q, q)
         )
         return [dict(r) for r in cur.fetchall()]
+
+    # ── Combined Search ─────────────────────────────────────────
+
+    # ── Phone Gallery ────────────────────────────────────────────
+
+    def add_gallery_image(self, phone_id, image_data):
+        """Add an additional image to a phone's gallery."""
+        self.conn.execute(
+            "INSERT INTO phone_gallery (phone_id, image_data, created_at) VALUES (?, ?, ?)",
+            (phone_id, image_data, datetime.now().isoformat())
+        )
+        self.conn.commit()
+
+    def get_gallery_images(self, phone_id):
+        """Get all gallery image BLOBs for a phone. Returns list of (id, image_data)."""
+        cur = self.conn.execute(
+            "SELECT id, image_data FROM phone_gallery WHERE phone_id = ? ORDER BY created_at",
+            (phone_id,)
+        )
+        return [(r[0], bytes(r[1])) for r in cur.fetchall() if r[1]]
+
+    def delete_gallery_image(self, gallery_id):
+        self.conn.execute("DELETE FROM phone_gallery WHERE id = ?", (gallery_id,))
+        self.conn.commit()
+
+    def get_gallery_count(self, phone_id):
+        cur = self.conn.execute(
+            "SELECT COUNT(*) FROM phone_gallery WHERE phone_id = ?", (phone_id,)
+        )
+        return cur.fetchone()[0]
 
     # ── Combined Search ─────────────────────────────────────────
 

@@ -499,7 +499,7 @@ ScreenManager:
                             radius: [dp(7)]
                     on_release: root.add_image()
                     Label:
-                        text: 'Add / Change Image'
+                        text: 'Add More Images'
                         color: 0, 0.314, 0.784, 1
                         font_size: sp(12)
                         bold: True
@@ -724,7 +724,7 @@ ScreenManager:
                             radius: [dp(7)]
                     on_release: root.add_image()
                     Label:
-                        text: 'Add / Change Image'
+                        text: 'Add More Images'
                         color: 0, 0.314, 0.784, 1
                         font_size: sp(12)
                         bold: True
@@ -1467,7 +1467,8 @@ class PhoneDetailScreen(Screen):
         r = p.get("remarks","") or ""; self.p_remarks = "" if r in ("None","none") else r
         img = get_img_path_for_phone(pid, app.db)
         Clock.schedule_once(lambda dt: self._set_img(img), 0.1)
-        Clock.schedule_once(lambda dt: self._load_spares(), 0.15)
+        Clock.schedule_once(lambda dt: self._load_gallery(), 0.15)
+        Clock.schedule_once(lambda dt: self._load_spares(), 0.2)
 
     def _set_img(self, path):
         try:
@@ -1475,6 +1476,26 @@ class PhoneDetailScreen(Screen):
             self.ids.detail_img.source = src
             self.ids.detail_img.reload()
         except: pass
+
+    def _load_gallery(self):
+        """Load gallery images from phone_gallery table."""
+        app = App.get_running_app()
+        grid = self.ids.gallery_grid
+        grid.clear_widgets()
+        images = app.db.get_gallery_images(self.p_id)
+        if not images:
+            grid.add_widget(Label(text="No gallery photos", font_size=sp(12),
+                color=(0.5,0.5,0.5,1), size_hint_y=None, height=dp(24)))
+            return
+        for gal_id, img_data in images:
+            # Write BLOB to cache file for display
+            img_path = write_blob_to_file(img_data, f"gal_{gal_id}", get_app_path())
+            if img_path:
+                box = BoxLayout(size_hint_y=None, height=dp(200), padding=dp(2))
+                img_widget = Image(source=img_path, nocache=True,
+                    allow_stretch=True, keep_ratio=True)
+                box.add_widget(img_widget)
+                grid.add_widget(box)
 
     def _load_spares(self):
         app = App.get_running_app()
@@ -1497,33 +1518,10 @@ class PhoneDetailScreen(Screen):
         app.root.transition = SlideTransition(direction="left"); app.root.current = "spare_detail"
 
     def add_image(self):
-        """Show popup with Gallery and Camera options."""
-        App.get_running_app().show_toast("STEP 1: add_image called")
-        popup = ModalView(size_hint=(0.72, None), height=dp(120))
-        c = BoxLayout(orientation="vertical", spacing=dp(4), padding=dp(10))
-        with c.canvas.before:
-            Color(1,1,1,1); c._bg = RoundedRectangle(pos=c.pos, size=c.size, radius=[dp(10)])
-        c.bind(pos=lambda w,v: setattr(w._bg,"pos",v), size=lambda w,v: setattr(w._bg,"size",v))
-        gb = ClickableBox(size_hint_y=None, height=dp(42), padding=(dp(10),dp(6)))
-        gb.add_widget(Label(text="Pick from Gallery", font_size=sp(14), color=(0.1,0.1,0.18,1)))
-        gb.bind(on_release=lambda *a: (popup.dismiss(), self._pick_gallery()))
-        cb = ClickableBox(size_hint_y=None, height=dp(42), padding=(dp(10),dp(6)))
-        cb.add_widget(Label(text="Take Photo", font_size=sp(14), color=(0.1,0.1,0.18,1)))
-        cb.bind(on_release=lambda *a: (popup.dismiss(), self._pick_camera()))
-        c.add_widget(gb); c.add_widget(cb)
-        popup.add_widget(c); popup.open()
-
-    def _pick_gallery(self):
+        """Open gallery to add more images for this phone."""
         app = App.get_running_app()
-        app.show_toast("STEP 2: _pick_gallery called")
-        app.pick_image_for = ("phone_direct", self.p_id)
-        app.open_file_chooser()
-
-    def _pick_camera(self):
-        app = App.get_running_app()
-        app.show_toast("STEP 2: _pick_camera called")
-        app.pick_image_for = ("phone_direct", self.p_id)
-        app.take_camera_photo()
+        app.pick_image_for = ("phone_gallery", self.p_id)
+        app.open_file_chooser(multiple=True)
 
     def go_back(self):
         app = App.get_running_app()
@@ -1588,29 +1586,10 @@ class SpareDetailScreen(Screen):
         except: pass
 
     def add_image(self):
-        popup = ModalView(size_hint=(0.72, None), height=dp(120))
-        c = BoxLayout(orientation="vertical", spacing=dp(4), padding=dp(10))
-        with c.canvas.before:
-            Color(1,1,1,1); c._bg = RoundedRectangle(pos=c.pos, size=c.size, radius=[dp(10)])
-        c.bind(pos=lambda w,v: setattr(w._bg,"pos",v), size=lambda w,v: setattr(w._bg,"size",v))
-        gb = ClickableBox(size_hint_y=None, height=dp(42), padding=(dp(10),dp(6)))
-        gb.add_widget(Label(text="Pick from Gallery", font_size=sp(14), color=(0.1,0.1,0.18,1)))
-        gb.bind(on_release=lambda *a: (popup.dismiss(), self._pick_gallery()))
-        cb = ClickableBox(size_hint_y=None, height=dp(42), padding=(dp(10),dp(6)))
-        cb.add_widget(Label(text="Take Photo", font_size=sp(14), color=(0.1,0.1,0.18,1)))
-        cb.bind(on_release=lambda *a: (popup.dismiss(), self._pick_camera()))
-        c.add_widget(gb); c.add_widget(cb)
-        popup.add_widget(c); popup.open()
-
-    def _pick_gallery(self):
+        """Open gallery to add/change spare part image."""
         app = App.get_running_app()
         app.pick_image_for = ("spare_direct", self.s_id)
         app.open_file_chooser()
-
-    def _pick_camera(self):
-        app = App.get_running_app()
-        app.pick_image_for = ("spare_direct", self.s_id)
-        app.take_camera_photo()
 
     def confirm_delete(self):
         popup = ModalView(size_hint=(0.78, None), height=dp(130))
@@ -1997,14 +1976,21 @@ class NokiaStorageApp(App):
         sb.bind(on_release=lambda *a: self._fsel(fc.selection, popup))
         row.add_widget(cb); row.add_widget(sb); c.add_widget(row); popup.open()
 
+    def _read_uri_bytes(self, uri):
+        """Read bytes from an Android content URI using file descriptor."""
+        from jnius import autoclass
+        PythonActivity = autoclass("org.kivy.android.PythonActivity")
+        context = PythonActivity.mActivity
+        pfd = context.getContentResolver().openFileDescriptor(uri, "r")
+        fd = pfd.detachFd()
+        with os.fdopen(fd, "rb") as f:
+            return f.read()
+
     def _ac(self, filters=None, multiple=False):
         """Android file chooser using direct Intent + activity result binding."""
-        self.show_toast("STEP 4: _ac Android chooser")
         try:
-            from jnius import autoclass, cast
-            self.show_toast("STEP 5: jnius imported")
+            from jnius import autoclass
             from android import activity as android_activity
-            self.show_toast("STEP 6: android.activity imported")
 
             Intent = autoclass("android.content.Intent")
             PythonActivity = autoclass("org.kivy.android.PythonActivity")
@@ -2016,88 +2002,99 @@ class NokiaStorageApp(App):
             intent = Intent(Intent.ACTION_GET_CONTENT)
             intent.setType(mime)
             intent.addCategory(Intent.CATEGORY_OPENABLE)
-            self.show_toast("STEP 7: Intent created")
+            if multiple:
+                intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, True)
 
             def on_result(request_code, result_code, data):
-                self.show_toast(f"STEP 8: on_result rc={request_code} res={result_code}")
                 if request_code != 42:
                     return
                 try:
                     android_activity.unbind(on_activity_result=on_result)
                 except:
                     pass
-                if result_code == -1 and data:
-                    try:
-                        uri = data.getData()
-                        uri_str = uri.toString()
-                        self.show_toast(f"STEP 9: URI={uri_str[:50]}")
-                        context = PythonActivity.mActivity
-                        pfd = context.getContentResolver().openFileDescriptor(uri, "r")
-                        fd = pfd.detachFd()
-                        self.show_toast(f"STEP 10: fd={fd}")
-                        with os.fdopen(fd, "rb") as f:
-                            img_bytes = f.read()
-                        self.show_toast(f"STEP 11: read {len(img_bytes)} bytes")
-                        if img_bytes and len(img_bytes) > 100:
-                            self._handle_image_bytes(img_bytes)
-                        else:
-                            self.show_toast("STEP 11: empty file!")
-                    except Exception as e:
-                        self.show_toast(f"STEP 9-ERR: {str(e)[:50]}")
+                if result_code != -1 or not data:
+                    return
+
+                # Collect all URIs (single or multiple selection)
+                uris = []
+                clip = data.getClipData()
+                if clip:
+                    for i in range(clip.getItemCount()):
+                        uris.append(clip.getItemAt(i).getUri())
                 else:
-                    self.show_toast(f"STEP 8: cancelled/no data res={result_code}")
+                    single = data.getData()
+                    if single:
+                        uris.append(single)
+
+                if not uris:
+                    return
+
+                # Read bytes from each URI and handle
+                all_bytes = []
+                for uri in uris:
+                    try:
+                        img_bytes = self._read_uri_bytes(uri)
+                        if img_bytes and len(img_bytes) > 100:
+                            all_bytes.append(img_bytes)
+                    except:
+                        pass
+
+                if all_bytes:
+                    self._handle_selected_images(all_bytes)
+                else:
+                    self.show_toast("Could not read images")
 
             android_activity.bind(on_activity_result=on_result)
             PythonActivity.mActivity.startActivityForResult(intent, 42)
-            self.show_toast("STEP 7b: startActivity called")
         except Exception as e:
-            self.show_toast(f"STEP 4-ERR: {str(e)[:50]}")
+            self.show_toast(f"Picker: {str(e)[:50]}")
 
-    def _compress_image(self, img_bytes):
-        """Return image bytes as-is. No limit, no truncation, no compression."""
-        return img_bytes
-
-    def _handle_image_bytes(self, img_bytes):
-        """Process image bytes after successful read."""
-        self.show_toast(f"STEP 12: _handle {len(img_bytes)} bytes")
+    def _handle_selected_images(self, images_bytes_list):
+        """Handle one or more selected images."""
         if not self.pick_image_for:
-            self.show_toast("STEP 12-ERR: No target set")
             return
         tt, td = self.pick_image_for
         self.pick_image_for = None
-        self.show_toast(f"STEP 13: target={tt} id={td}")
-
-        img_bytes = self._compress_image(img_bytes)
 
         if tt in ("add_phone_screen", "add_spare_screen"):
+            # For add/edit screens, use first image only
             sn = "add_phone" if tt == "add_phone_screen" else "add_spare"
-            self.show_toast(f"STEP 14: sending to {sn}")
-            self.root.get_screen(sn).on_image_selected(img_bytes)
+            self.root.get_screen(sn).on_image_selected(images_bytes_list[0])
 
         elif tt == "phone_direct":
-            self.show_toast("STEP 14: saving phone image to DB")
-            self.db.update_phone(td, image_data=img_bytes)
-            self.show_toast("STEP 15: saved to DB, writing cache")
+            # Set first image as main phone image
+            self.db.update_phone(td, image_data=images_bytes_list[0])
             clear_item_cache(f"p_{td}", get_app_path())
             new_img = get_img_path_for_phone(td, self.db)
-            self.show_toast(f"STEP 16: cache={new_img[:50] if new_img else 'EMPTY'}")
             d = self.root.get_screen("phone_detail")
             d.ids.detail_img.source = new_img
             d.ids.detail_img.reload()
             self.root.get_screen("main")._data_loaded = False
-            self.show_toast("STEP 17: DONE - image set!")
+            self.show_toast("Image saved!")
+
+        elif tt == "phone_gallery":
+            # Add ALL images to phone gallery
+            count = 0
+            for img_bytes in images_bytes_list:
+                self.db.add_gallery_image(td, img_bytes)
+                count += 1
+            self.show_toast(f"Added {count} images!")
+            # Refresh gallery on detail screen
+            d = self.root.get_screen("phone_detail")
+            Clock.schedule_once(lambda dt: d._load_gallery(), 0.2)
 
         elif tt == "spare_direct":
-            self.show_toast("STEP 14: saving spare image to DB")
-            self.db.update_spare_part(td, image_data=img_bytes)
+            self.db.update_spare_part(td, image_data=images_bytes_list[0])
             clear_item_cache(f"s_{td}", get_app_path())
             new_img = get_img_path_for_spare(td, self.db)
-            self.show_toast(f"STEP 16: cache={new_img[:50] if new_img else 'EMPTY'}")
             d = self.root.get_screen("spare_detail")
             d.ids.detail_img.source = new_img
             d.ids.detail_img.reload()
             self.root.get_screen("main")._data_loaded = False
-            self.show_toast("STEP 17: DONE - image set!")
+            self.show_toast("Image saved!")
+
+        elif tt == "restore_backup":
+            pass  # Handled in _fsel
 
     def _fsel(self, sel, popup=None):
         """Desktop file selection handler + restore backup."""
@@ -2110,10 +2107,14 @@ class NokiaStorageApp(App):
             self.root.get_screen("backup").on_backup_selected(sel[0])
             return
 
-        # Desktop: read bytes from file path
-        img_bytes = smart_read(sel[0])
-        if img_bytes:
-            self._handle_image_bytes(img_bytes)
+        # Desktop: read bytes from all selected files
+        all_bytes = []
+        for path in sel:
+            data = smart_read(path)
+            if data and len(data) > 100:
+                all_bytes.append(data)
+        if all_bytes:
+            self._handle_selected_images(all_bytes)
         else:
             self.show_toast("Could not read file")
 
@@ -2152,7 +2153,7 @@ class NokiaStorageApp(App):
                                     img_bytes = bytes(bytearray(java_bytes))
                                     baos.close()
                                     if img_bytes and len(img_bytes) > 100:
-                                        self._handle_image_bytes(img_bytes)
+                                        self._handle_selected_images([img_bytes])
                                         return
                             self.show_toast("Camera: no image data")
                         except Exception as e:
