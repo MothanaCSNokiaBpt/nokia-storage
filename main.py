@@ -856,22 +856,7 @@ ScreenManager:
                                 radius: [dp(7)]
                         on_release: root.pick_from_gallery()
                         Label:
-                            text: 'Gallery'
-                            color: 0, 0.314, 0.784, 1
-                            font_size: sp(12)
-                            bold: True
-                    ClickableBox:
-                        padding: dp(6), dp(5)
-                        canvas.before:
-                            Color:
-                                rgba: 0, 0.314, 0.784, 0.12
-                            RoundedRectangle:
-                                pos: self.pos
-                                size: self.size
-                                radius: [dp(7)]
-                        on_release: root.take_photo()
-                        Label:
-                            text: 'Camera'
+                            text: 'Select Image'
                             color: 0, 0.314, 0.784, 1
                             font_size: sp(12)
                             bold: True
@@ -1013,22 +998,7 @@ ScreenManager:
                                 radius: [dp(7)]
                         on_release: root.pick_from_gallery()
                         Label:
-                            text: 'Gallery'
-                            color: 0, 0.314, 0.784, 1
-                            font_size: sp(12)
-                            bold: True
-                    ClickableBox:
-                        padding: dp(6), dp(5)
-                        canvas.before:
-                            Color:
-                                rgba: 0, 0.314, 0.784, 0.12
-                            RoundedRectangle:
-                                pos: self.pos
-                                size: self.size
-                                radius: [dp(7)]
-                        on_release: root.take_photo()
-                        Label:
-                            text: 'Camera'
+                            text: 'Select Image'
                             color: 0, 0.314, 0.784, 1
                             font_size: sp(12)
                             bold: True
@@ -1658,10 +1628,6 @@ class AddPhoneScreen(Screen):
         app = App.get_running_app()
         app.pick_image_for = ("add_phone_screen", None); app.open_file_chooser()
 
-    def take_photo(self):
-        app = App.get_running_app()
-        app.pick_image_for = ("add_phone_screen", None); app.take_camera_photo()
-
     def on_image_selected(self, img_bytes):
         """Called with raw image bytes."""
         self._image_bytes = img_bytes
@@ -1716,9 +1682,7 @@ class AddSpareScreen(Screen):
         app = App.get_running_app()
         app.pick_image_for = ("add_spare_screen", None); app.open_file_chooser()
 
-    def take_photo(self):
-        app = App.get_running_app()
-        app.pick_image_for = ("add_spare_screen", None); app.take_camera_photo()
+
 
     def on_image_selected(self, img_bytes):
         self._image_bytes = img_bytes
@@ -2073,12 +2037,15 @@ class NokiaStorageApp(App):
             self.show_toast("Image saved!")
 
         elif tt == "phone_gallery":
-            # Add ALL images to phone gallery
+            # Add ALL images to phone gallery DB table
             count = 0
             for img_bytes in images_bytes_list:
-                self.db.add_gallery_image(td, img_bytes)
-                count += 1
-            self.show_toast(f"Added {count} images!")
+                try:
+                    self.db.add_gallery_image(td, img_bytes)
+                    count += 1
+                except Exception as e:
+                    self.show_toast(f"Gallery save err: {str(e)[:40]}")
+            self.show_toast(f"Added {count} gallery images!")
             # Refresh gallery on detail screen
             d = self.root.get_screen("phone_detail")
             Clock.schedule_once(lambda dt: d._load_gallery(), 0.2)
@@ -2117,56 +2084,6 @@ class NokiaStorageApp(App):
             self._handle_selected_images(all_bytes)
         else:
             self.show_toast("Could not read file")
-
-    def take_camera_photo(self):
-        if platform == "android":
-            try:
-                from jnius import autoclass
-                from android import activity as android_activity
-
-                Intent = autoclass("android.content.Intent")
-                MediaStore = autoclass("android.provider.MediaStore")
-                PythonActivity = autoclass("org.kivy.android.PythonActivity")
-                Bitmap = autoclass("android.graphics.Bitmap")
-                BitmapCF = autoclass("android.graphics.Bitmap$CompressFormat")
-                ByteArrayOutputStream = autoclass("java.io.ByteArrayOutputStream")
-
-                intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
-
-                def on_cam_result(request_code, result_code, data):
-                    if request_code != 43:
-                        return
-                    try:
-                        android_activity.unbind(on_activity_result=on_cam_result)
-                    except:
-                        pass
-                    if result_code == -1 and data:
-                        try:
-                            extras = data.getExtras()
-                            if extras:
-                                # Get bitmap - use getParcelable for reliable access
-                                bitmap = extras.getParcelable("data")
-                                if bitmap:
-                                    baos = ByteArrayOutputStream()
-                                    bitmap.compress(BitmapCF.JPEG, 90, baos)
-                                    java_bytes = baos.toByteArray()
-                                    img_bytes = bytes(bytearray(java_bytes))
-                                    baos.close()
-                                    if img_bytes and len(img_bytes) > 100:
-                                        self._handle_selected_images([img_bytes])
-                                        return
-                            self.show_toast("Camera: no image data")
-                        except Exception as e:
-                            self.show_toast(f"Cam err: {str(e)[:50]}")
-                    else:
-                        self.show_toast("Camera cancelled")
-
-                android_activity.bind(on_activity_result=on_cam_result)
-                PythonActivity.mActivity.startActivityForResult(intent, 43)
-            except Exception as e:
-                self.show_toast(f"Camera init: {str(e)[:50]}")
-        else:
-            self.show_toast("Camera on Android only")
 
     def on_stop(self):
         if self.db:
