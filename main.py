@@ -87,40 +87,64 @@ def get_downloads_path():
     return os.path.join(get_app_path(), "exports")
 
 DEFAULT_IMG = ""
+def _create_default_png(path):
+    """Create a 120x120 phone silhouette PNG using only struct+zlib (no Pillow needed)."""
+    import struct, zlib
+    W, H = 120, 120
+    # Pre-render a simple phone icon: light blue bg, darker phone shape
+    bg = (230, 238, 255)
+    phone_body = (180, 195, 220)
+    phone_screen = (160, 178, 210)
+    raw = b''
+    for y in range(H):
+        raw += b'\x00'  # filter byte
+        for x in range(W):
+            # Phone body: rect from (35,10) to (85,100) with rounded feel
+            in_body = 38 <= x <= 82 and 12 <= y <= 98
+            # Screen: rect from (43,25) to (77,72)
+            in_screen = 43 <= x <= 77 and 25 <= y <= 72
+            # Circle button: center(60,84) r=7
+            in_btn = (x - 60)**2 + (y - 84)**2 <= 49
+            if in_screen:
+                raw += bytes(phone_screen)
+            elif in_body or in_btn:
+                raw += bytes(phone_body)
+            else:
+                raw += bytes(bg)
+    compressed = zlib.compress(raw, 6)
+    def chunk(ctype, data):
+        c = ctype + data
+        crc = struct.pack('>I', zlib.crc32(c) & 0xffffffff)
+        return struct.pack('>I', len(data)) + c + crc
+    with open(path, 'wb') as f:
+        f.write(b'\x89PNG\r\n\x1a\n')
+        f.write(chunk(b'IHDR', struct.pack('>IIBBBBB', W, H, 8, 2, 0, 0, 0)))
+        f.write(chunk(b'IDAT', compressed))
+        f.write(chunk(b'IEND', b''))
+
 def get_default_image():
     global DEFAULT_IMG
     if DEFAULT_IMG and os.path.exists(DEFAULT_IMG):
         return DEFAULT_IMG
+    # Check bundled location first (same dir as main.py)
+    src = os.path.join(os.path.dirname(os.path.abspath(__file__)), "default_phone.png")
+    if os.path.exists(src):
+        DEFAULT_IMG = src
+        return src
     p = os.path.join(get_app_path(), "default_phone.png")
     if not os.path.exists(p):
         try:
             from PIL import Image as PILImage, ImageDraw
-            img = PILImage.new("RGB", (200, 200), (230, 238, 255))
+            img = PILImage.new("RGB", (120, 120), (230, 238, 255))
             draw = ImageDraw.Draw(img)
-            draw.rounded_rectangle([50, 20, 150, 170], radius=12,
-                                    fill=(200, 215, 240), outline=(160, 175, 200), width=2)
-            draw.rounded_rectangle([65, 45, 135, 115], radius=4, fill=(175, 195, 225))
-            draw.ellipse([88, 130, 112, 150], fill=(175, 195, 225))
-            img.save(p)
+            draw.rounded_rectangle([38, 12, 82, 98], radius=8,
+                                    fill=(180, 195, 220), outline=(160, 175, 200), width=1)
+            draw.rounded_rectangle([43, 25, 77, 72], radius=3, fill=(160, 178, 210))
+            draw.ellipse([53, 77, 67, 91], fill=(160, 178, 210))
+            img.save(p, optimize=True)
         except Exception:
             try:
-                import struct, zlib
-                width, height = 4, 4
-                raw = b''
-                for y in range(height):
-                    raw += b'\x00'
-                    for x in range(width):
-                        raw += b'\xe6\xee\xff'
-                compressed = zlib.compress(raw)
-                def chunk(ctype, data):
-                    c = ctype + data
-                    crc = struct.pack('>I', zlib.crc32(c) & 0xffffffff)
-                    return struct.pack('>I', len(data)) + c + crc
-                with open(p, 'wb') as f:
-                    f.write(b'\x89PNG\r\n\x1a\n')
-                    f.write(chunk(b'IHDR', struct.pack('>IIBBBBB', width, height, 8, 2, 0, 0, 0)))
-                    f.write(chunk(b'IDAT', compressed))
-                    f.write(chunk(b'IEND', b''))
+                _create_default_png(p)
             except Exception:
                 return ""
     DEFAULT_IMG = p
