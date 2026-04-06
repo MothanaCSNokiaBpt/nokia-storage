@@ -7,7 +7,7 @@ source.include_exts = py,kv,json,png,jpg,jpeg,atlas,xml
 source.include_patterns = assets/*
 version = 1.0.0
 
-requirements = python3,kivy,plyer,pyjnius,android
+requirements = python3,kivy==2.3.0,plyer,pyjnius,android
 
 orientation = portrait
 fullscreen = 0

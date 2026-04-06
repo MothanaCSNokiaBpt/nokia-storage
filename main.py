@@ -75,11 +75,7 @@ def get_gallery_dir(phone_id):
 
 # ── Image System: Memory-based using Kivy Texture ──────────────
 # Default 64x64 phone silhouette PNG embedded as base64
-_DEFAULT_B64 = (
-    "iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAZUlEQVR42u3aMQ0AIBAE"
-    "wfcvABFowAI1DQJwAR4IDflJ1sC0l4u59tcFAABAYkBt41UAAAAAQGI9tQsAAAAAAAAA"
-    "AAAAAAAAAAAAAAAAbKMAAAAAAAAAAAD8BHB4AAAAAAAAsg8OhD1uvqVIe0oAAAAASUVORK5CYII="
-)
+_DEFAULT_B64 = "iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAZUlEQVR42u3aMQ0AIBAEwfcvABFowAI1DQJwAR4IDflJ1sC0l4u59tcFAABAYkBt41UAAAAAqQGl9rsAAAAAAAAAAAAAAAAAAAAAAAAAbKMAAAAAAAAAAAA/ARyeAAAAAAAAsgMOhD1uvqVIe0oAAAAASUVORK5CYII="
 _DEFAULT_BYTES = base64.b64decode(_DEFAULT_B64)
 _DEFAULT_TEXTURE = None
 _TEXTURE_CACHE = {}
@@ -140,32 +136,64 @@ def invalidate_cache(key):
         del _TEXTURE_CACHE[key]
 
 def read_file_bytes(path):
-    """Read file bytes - handles both regular paths and Android content:// URIs."""
+    """Read file bytes - handles regular paths AND Android content:// URIs."""
     if not path:
         return None
+    # Method 1: Regular file path
     try:
-        if path.startswith("content://"):
-            if platform == "android":
-                from jnius import autoclass
-                PythonActivity = autoclass("org.kivy.android.PythonActivity")
-                ctx = PythonActivity.mActivity.getApplicationContext()
-                uri = autoclass("android.net.Uri").parse(path)
-                stream = ctx.getContentResolver().openInputStream(uri)
-                barray = autoclass("java.io.ByteArrayOutputStream")()
-                buf = bytearray(8192)
-                while True:
-                    jbuf = [0] * 8192
-                    n = stream.read(jbuf)
-                    if n == -1:
-                        break
-                    barray.write(jbuf, 0, n)
-                stream.close()
-                return bytes(barray.toByteArray())
-        if os.path.exists(path):
+        if not path.startswith("content://") and os.path.exists(path):
             with open(path, "rb") as f:
                 return f.read()
     except Exception:
         pass
+    # Method 2: Android content:// URI via ParcelFileDescriptor
+    if path.startswith("content://") and platform == "android":
+        try:
+            from jnius import autoclass
+            PythonActivity = autoclass("org.kivy.android.PythonActivity")
+            context = PythonActivity.mActivity
+            Uri = autoclass("android.net.Uri")
+            uri = Uri.parse(path)
+            # Get a native file descriptor from the content URI
+            pfd = context.getContentResolver().openFileDescriptor(uri, "r")
+            fd = pfd.detachFd()
+            # Read using Python's native file I/O - this ALWAYS works
+            with os.fdopen(fd, "rb") as f:
+                data = f.read()
+            return data
+        except Exception:
+            pass
+        # Fallback: try copying via InputStream to a temp file
+        try:
+            from jnius import autoclass
+            import tempfile
+            PythonActivity = autoclass("org.kivy.android.PythonActivity")
+            context = PythonActivity.mActivity
+            Uri = autoclass("android.net.Uri")
+            uri = Uri.parse(path)
+            inp = context.getContentResolver().openInputStream(uri)
+            # Write to temp file byte by byte via Java helper
+            tmp = os.path.join(get_app_path(), "_tmp_img.bin")
+            FileOutputStream = autoclass("java.io.FileOutputStream")
+            out = FileOutputStream(tmp)
+            buf = autoclass("java.lang.reflect.Array").newInstance(
+                autoclass("java.lang.Byte").TYPE, 8192)
+            while True:
+                n = inp.read(buf)
+                if n == -1:
+                    break
+                out.write(buf, 0, n)
+            inp.close()
+            out.close()
+            with open(tmp, "rb") as f:
+                data = f.read()
+            try:
+                os.remove(tmp)
+            except:
+                pass
+            return data
+        except Exception:
+            pass
     return None
 
 
