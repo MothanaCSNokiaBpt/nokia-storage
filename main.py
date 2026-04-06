@@ -86,93 +86,75 @@ def get_downloads_path():
             pass
     return os.path.join(get_app_path(), "exports")
 
-DEFAULT_IMG = ""
+# ── Embedded default phone image (base64 PNG) ──────────────────
+# This is always available - no file system needed
+import base64 as _b64
+_DEFAULT_PNG_B64 = (
+    "iVBORw0KGgoAAAANSUhEUgAAAHgAAAB4CAIAAAC2BqGFAAABmElEQVR42u3dMU7DQBBA0YmV"
+    "ig7Jd0mZLodOlzIXobKgo4XCDaJARMruzNrvlxQkPE0ce5F2D2/vX6H2TQhAgxZo0KAFGrR"
+    "AgwatHh0rvInr7d76JS7nU+7feMhdVFqJ53lu/ULLsuRyZ0Jfb/cOxL+4s6yn/SivH50Ol6l"
+    "C0CnKudbuOrYLnTjOiUNtokGDFmjQoBHEfhaVImL5+Gx4P/f6YqKbK3f4/WNA91FIt3aNBg1"
+    "aoEGDRgAatECDBi3QoAUaNGiBBi3QoEELNGiBBg1aoEELNGjQAg1aoEGDFmjQAg0atECD1lD"
+    "QfbYeSN/goMREt1aosI1Elf06Kli4RoMW6LCnUjxvI5mBruzHQYl//nAI7mlc5ai0N9UWoP/"
+    "jWN/alyHoB0e1+FCbaNCgBRp0NF/VK/7YYqJBPzKq9Z/Cx5jovx2HWOsYZlFp1bR65z9e9S4"
+    "dl/NpPV0w7bE+47A9dx2bhk4c6qyzI9MmOsU68YROZ87uA9opynLXAVqgQYMWaNACDRq0QIM"
+    "WaNCgBRq0QIMGrSf2DfHie0n1GIVVAAAAAElFTkSuQmCC"
+)
 
-def _find_bundled_file(filename):
-    """Find a file bundled with the app - works on both desktop and Android."""
-    # 1. Same directory as this script
-    d = os.path.join(os.path.dirname(os.path.abspath(__file__)), filename)
-    if os.path.exists(d):
-        return d
-    # 2. App storage path
-    d = os.path.join(get_app_path(), filename)
-    if os.path.exists(d):
-        return d
-    # 3. Kivy's resource paths (handles Android correctly)
-    try:
-        from kivy.resources import resource_find
-        r = resource_find(filename)
-        if r and os.path.exists(r):
-            return r
-    except Exception:
-        pass
-    # 4. Current working directory
-    if os.path.exists(filename):
-        return os.path.abspath(filename)
-    return None
-
-def _create_default_png(path):
-    """Create a 120x120 phone silhouette PNG using only struct+zlib."""
-    import struct, zlib
-    W, H = 120, 120
-    bg, body, screen = (230, 238, 255), (180, 195, 220), (160, 178, 210)
-    raw = b''
-    for y in range(H):
-        raw += b'\x00'
-        for x in range(W):
-            in_body = 38 <= x <= 82 and 12 <= y <= 98
-            in_screen = 43 <= x <= 77 and 25 <= y <= 72
-            in_btn = (x - 60)**2 + (y - 84)**2 <= 49
-            if in_screen:
-                raw += bytes(screen)
-            elif in_body or in_btn:
-                raw += bytes(body)
-            else:
-                raw += bytes(bg)
-    compressed = zlib.compress(raw, 6)
-    def chunk(ct, d):
-        c = ct + d
-        return struct.pack('>I', len(d)) + c + struct.pack('>I', zlib.crc32(c) & 0xffffffff)
-    with open(path, 'wb') as f:
-        f.write(b'\x89PNG\r\n\x1a\n')
-        f.write(chunk(b'IHDR', struct.pack('>IIBBBBB', W, H, 8, 2, 0, 0, 0)))
-        f.write(chunk(b'IDAT', compressed))
-        f.write(chunk(b'IEND', b''))
+DEFAULT_IMG_PATH = ""
+_IMG_CACHE = {}  # phone_id/spare_id -> temp file path
 
 def get_default_image():
-    global DEFAULT_IMG
-    if DEFAULT_IMG and os.path.exists(DEFAULT_IMG):
-        return DEFAULT_IMG
-    # Try to find the bundled file
-    found = _find_bundled_file("default_phone.png")
-    if found:
-        DEFAULT_IMG = found
-        return found
-    # Generate it in writable storage
-    p = os.path.join(get_app_path(), "default_phone.png")
+    """Write embedded PNG to temp file and return path. Guaranteed to work."""
+    global DEFAULT_IMG_PATH
+    if DEFAULT_IMG_PATH and os.path.exists(DEFAULT_IMG_PATH):
+        return DEFAULT_IMG_PATH
     try:
-        _create_default_png(p)
-    except Exception:
-        try:
-            from PIL import Image as PILImage, ImageDraw
-            img = PILImage.new("RGB", (120, 120), (230, 238, 255))
-            draw = ImageDraw.Draw(img)
-            draw.rounded_rectangle([38, 12, 82, 98], radius=8,
-                                    fill=(180, 195, 220), outline=(160, 175, 200), width=1)
-            draw.rounded_rectangle([43, 25, 77, 72], radius=3, fill=(160, 178, 210))
-            draw.ellipse([53, 77, 67, 91], fill=(160, 178, 210))
-            img.save(p, optimize=True)
-        except Exception:
-            return ""
-    if os.path.exists(p):
-        DEFAULT_IMG = p
+        cache_dir = os.path.join(get_app_path(), ".img_cache")
+        os.makedirs(cache_dir, exist_ok=True)
+        p = os.path.join(cache_dir, "default.png")
+        with open(p, "wb") as f:
+            f.write(_b64.b64decode(_DEFAULT_PNG_B64))
+        DEFAULT_IMG_PATH = p
         return p
-    return ""
+    except Exception:
+        return ""
 
-def safe_image(path):
-    if path and os.path.exists(path):
-        return path
+def get_image_for_item(item_type, item_id, db):
+    """Get displayable image path for a phone or spare part.
+    Writes BLOB from DB to cache file. Returns default if no image."""
+    cache_key = f"{item_type}_{item_id}"
+    if cache_key in _IMG_CACHE and os.path.exists(_IMG_CACHE[cache_key]):
+        return _IMG_CACHE[cache_key]
+    try:
+        if item_type == "phone":
+            img_data = db.get_phone_image(item_id)
+        else:
+            img_data = db.get_spare_image(item_id)
+        if img_data:
+            cache_dir = os.path.join(get_app_path(), ".img_cache")
+            os.makedirs(cache_dir, exist_ok=True)
+            ext = ".jpg"
+            if img_data[:4] == b'\x89PNG':
+                ext = ".png"
+            p = os.path.join(cache_dir, f"{cache_key}{ext}")
+            with open(p, "wb") as f:
+                f.write(img_data)
+            _IMG_CACHE[cache_key] = p
+            return p
+    except Exception:
+        pass
     return get_default_image()
+
+def invalidate_image_cache(item_type, item_id):
+    """Remove cached image so it reloads from DB."""
+    cache_key = f"{item_type}_{item_id}"
+    if cache_key in _IMG_CACHE:
+        try:
+            os.remove(_IMG_CACHE[cache_key])
+        except Exception:
+            pass
+        del _IMG_CACHE[cache_key]
 
 def copy_image_to_storage(source_path, dest_folder):
     if not source_path or not os.path.exists(source_path):
@@ -210,6 +192,8 @@ class PhoneCard(ButtonBehavior, BoxLayout):
     phone_name = StringProperty("")
     phone_date = StringProperty("")
     phone_image = StringProperty("")
+    phone_appear = StringProperty("")
+    phone_working = StringProperty("")
 
 class SpareCard(ButtonBehavior, BoxLayout):
     spare_id = NumericProperty(0)
@@ -236,9 +220,9 @@ KV = """
 
 <PhoneCard>:
     size_hint_y: None
-    height: dp(80)
+    height: dp(94)
     padding: dp(8)
-    spacing: dp(10)
+    spacing: dp(8)
     orientation: 'horizontal'
     canvas.before:
         Color:
@@ -250,39 +234,51 @@ KV = """
     AsyncImage:
         source: root.phone_image or ''
         size_hint: None, None
-        size: dp(62), dp(62)
+        size: dp(62), dp(76)
         pos_hint: {'center_y': .5}
         allow_stretch: True
         keep_ratio: True
     BoxLayout:
         orientation: 'vertical'
-        spacing: dp(2)
-        padding: 0, dp(4)
+        spacing: dp(1)
+        padding: 0, dp(3)
         Label:
             text: root.phone_name
-            font_size: sp(15)
+            font_size: sp(14)
             bold: True
             color: 0.1, 0.1, 0.18, 1
             text_size: self.size
             halign: 'left'
             valign: 'middle'
-            size_hint_y: 0.4
+            size_hint_y: None
+            height: dp(20)
         Label:
-            text: 'ID: ' + root.phone_id
-            font_size: sp(11)
-            color: 0.4, 0.4, 0.4, 1
-            text_size: self.size
-            halign: 'left'
-            valign: 'middle'
-            size_hint_y: 0.3
-        Label:
-            text: root.phone_date
+            text: 'ID: ' + root.phone_id + '  |  ' + root.phone_date
             font_size: sp(10)
-            color: 0.5, 0.5, 0.5, 1
+            color: 0.45, 0.45, 0.45, 1
             text_size: self.size
             halign: 'left'
             valign: 'middle'
-            size_hint_y: 0.3
+            size_hint_y: None
+            height: dp(16)
+        Label:
+            text: root.phone_appear
+            font_size: sp(10)
+            color: 0.26, 0.55, 0.28, 1
+            text_size: self.size
+            halign: 'left'
+            valign: 'middle'
+            size_hint_y: None
+            height: dp(16)
+        Label:
+            text: root.phone_working
+            font_size: sp(10)
+            color: 0, 0.28, 0.7, 1
+            text_size: self.size
+            halign: 'left'
+            valign: 'middle'
+            size_hint_y: None
+            height: dp(16)
 
 <SpareCard>:
     size_hint_y: None
@@ -1595,25 +1591,26 @@ class MainScreen(Screen):
         lbl_type = "found" if self._is_search else ("phones" if self.current_tab == "phones" else "parts")
         self.ids.count_label.text = f"{self._total_items} {lbl_type} | Page {cur_pg}/{total_pages}"
 
+        app = App.get_running_app()
         default_img = get_default_image()
 
         if self.current_tab == "phones":
             for p in page_items:
-                img = p.get("image_path", "") or ""
-                if not img or not os.path.exists(img):
-                    img = default_img
+                has_img = p.get("has_image", 0)
+                img = get_image_for_item("phone", p["id"], app.db) if has_img else default_img
                 card = PhoneCard(
                     phone_id=p["id"], phone_name=p["name"],
                     phone_date=p.get("release_date", "") or "",
                     phone_image=img,
+                    phone_appear=p.get("appearance_condition", "") or "",
+                    phone_working=p.get("working_condition", "") or "",
                 )
                 card.bind(on_release=partial(self._open_phone, p["id"]))
                 grid.add_widget(card)
         else:
             for s in page_items:
-                img = s.get("image_path", "") or ""
-                if not img or not os.path.exists(img):
-                    img = default_img
+                has_img = s.get("has_image", 0)
+                img = get_image_for_item("spare", s["id"], app.db) if has_img else default_img
                 card = SpareCard(
                     spare_id=s["id"], spare_name=s["name"],
                     spare_desc=s.get("description", "") or "",
@@ -1753,7 +1750,7 @@ class PhoneDetailScreen(Screen):
         self.p_working = phone.get("working_condition", "") or ""
         r = phone.get("remarks", "") or ""
         self.p_remarks = "" if r == "None" or r == "none" else r
-        self.image_source = safe_image(phone.get("image_path", ""))
+        self.image_source = get_image_for_item("phone", phone_id, app.db)
         Clock.schedule_once(lambda dt: self._load_extras(), 0.1)
 
     def _load_extras(self):
@@ -1780,10 +1777,13 @@ class PhoneDetailScreen(Screen):
         if not spares:
             grid.add_widget(Label(text="No spare parts", font_size=sp(12), color=(0.5,0.5,0.5,1), size_hint_y=None, height=dp(24)))
             return
+        default_img = get_default_image()
         for s in spares:
+            has_img = s.get("has_image", 0)
+            img = get_image_for_item("spare", s["id"], app.db) if has_img else default_img
             card = SpareCard(spare_id=s["id"], spare_name=s["name"],
                              spare_desc=s.get("description", "") or "",
-                             spare_image=safe_image(s.get("image_path", "")))
+                             spare_image=img)
             card.bind(on_release=partial(self._open_spare, s["id"]))
             grid.add_widget(card)
 
@@ -1907,7 +1907,7 @@ class SpareDetailScreen(Screen):
         d = spare.get("description", "") or ""
         self.s_desc = "" if d == "None" else d
         self.s_phone_id = spare.get("phone_id", "") or ""
-        self.s_image = safe_image(spare.get("image_path", ""))
+        self.s_image = get_image_for_item("spare", spare_id, app.db)
 
     def change_image(self):
         app = App.get_running_app()
@@ -2002,7 +2002,7 @@ class AddPhoneScreen(Screen):
         phone = app.db.get_phone(pid)
         if not phone:
             return
-        self.image_preview = safe_image(phone.get("image_path", ""))
+        self.image_preview = get_image_for_item("phone", pid, app.db)
         self._selected_image = phone.get("image_path", "") or ""
         Clock.schedule_once(partial(self._fill, phone), 0.1)
 
@@ -2294,18 +2294,26 @@ class SearchAllScreen(Screen):
             grid.add_widget(Label(text="Type and press Enter", font_size=sp(13), color=(0.5,0.5,0.5,1), size_hint_y=None, height=dp(36)))
             return
         phones, spares = app.db.search_all(text)
+        default_img = get_default_image()
         if phones:
             shown = phones[:PAGE_SIZE]
             grid.add_widget(Label(text=f"Phones ({len(phones)})", font_size=sp(14), bold=True, color=(0,0.314,0.784,1), size_hint_y=None, height=dp(26), text_size=(dp(300), None), halign="left"))
             for p in shown:
-                card = PhoneCard(phone_id=p["id"], phone_name=p["name"], phone_date=p.get("release_date","") or "", phone_image=safe_image(p.get("image_path","")))
+                has_img = p.get("has_image", 0)
+                img = get_image_for_item("phone", p["id"], app.db) if has_img else default_img
+                card = PhoneCard(phone_id=p["id"], phone_name=p["name"],
+                                 phone_date=p.get("release_date","") or "", phone_image=img,
+                                 phone_appear=p.get("appearance_condition","") or "",
+                                 phone_working=p.get("working_condition","") or "")
                 card.bind(on_release=partial(self._open_phone, p["id"]))
                 grid.add_widget(card)
         if spares:
             shown_s = spares[:PAGE_SIZE]
             grid.add_widget(Label(text=f"Spare Parts ({len(spares)})", font_size=sp(14), bold=True, color=(0,0.314,0.784,1), size_hint_y=None, height=dp(26), text_size=(dp(300), None), halign="left"))
             for s in shown_s:
-                card = SpareCard(spare_id=s["id"], spare_name=s["name"], spare_desc=s.get("description","") or "", spare_image=safe_image(s.get("image_path","")))
+                has_img = s.get("has_image", 0)
+                img = get_image_for_item("spare", s["id"], app.db) if has_img else default_img
+                card = SpareCard(spare_id=s["id"], spare_name=s["name"], spare_desc=s.get("description","") or "", spare_image=img)
                 card.bind(on_release=partial(self._open_spare, s["id"]))
                 grid.add_widget(card)
         if not phones and not spares:
@@ -2522,13 +2530,13 @@ class NokiaStorageApp(App):
         elif tt == "add_spare_screen":
             self.root.get_screen("add_spare").on_image_selected(selection[0])
         elif tt == "phone":
-            img = copy_image_to_storage(selection[0], get_phone_images_path())
-            if img:
-                self.db.update_phone(td, image_path=img)
-                d = self.root.get_screen("phone_detail")
-                d.image_source = ""
-                Clock.schedule_once(lambda dt: setattr(d, "image_source", img), 0.1)
-                self.show_toast("Image updated!")
+            self.db.update_phone(td, image_path=selection[0])
+            invalidate_image_cache("phone", td)
+            new_img = get_image_for_item("phone", td, self.db)
+            d = self.root.get_screen("phone_detail")
+            d.image_source = ""
+            Clock.schedule_once(lambda dt: setattr(d, "image_source", new_img), 0.15)
+            self.show_toast("Image updated!")
         elif tt == "phone_gallery":
             gdir = get_phone_gallery_path(td)
             count = 0
@@ -2540,13 +2548,13 @@ class NokiaStorageApp(App):
             d = self.root.get_screen("phone_detail")
             Clock.schedule_once(lambda dt: d._load_gallery(), 0.3)
         elif tt == "spare_direct":
-            img = copy_image_to_storage(selection[0], get_spare_images_path())
-            if img:
-                self.db.update_spare_part(td, image_path=img)
-                d = self.root.get_screen("spare_detail")
-                d.s_image = ""
-                Clock.schedule_once(lambda dt: setattr(d, "s_image", img), 0.1)
-                self.show_toast("Image updated!")
+            self.db.update_spare_part(td, image_path=selection[0])
+            invalidate_image_cache("spare", td)
+            new_img = get_image_for_item("spare", td, self.db)
+            d = self.root.get_screen("spare_detail")
+            d.s_image = ""
+            Clock.schedule_once(lambda dt: setattr(d, "s_image", new_img), 0.15)
+            self.show_toast("Image updated!")
         elif tt == "restore_backup":
             self.root.get_screen("backup").on_backup_selected(selection[0])
         elif tt == "bulk_images":

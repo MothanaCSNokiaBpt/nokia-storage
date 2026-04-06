@@ -1,6 +1,7 @@
 """
 Nokia Storage - Database Module
 SQLite database operations for phones and spare parts.
+Images stored as BLOB thumbnails for reliable display on Android.
 """
 
 import os
@@ -31,6 +32,7 @@ class NokiaDatabase:
                 working_condition TEXT,
                 remarks TEXT,
                 image_path TEXT,
+                image_data BLOB,
                 created_at TEXT DEFAULT (datetime('now'))
             );
 
@@ -39,6 +41,7 @@ class NokiaDatabase:
                 name TEXT NOT NULL,
                 phone_id TEXT,
                 image_path TEXT,
+                image_data BLOB,
                 description TEXT,
                 created_at TEXT DEFAULT (datetime('now'))
             );
@@ -47,19 +50,95 @@ class NokiaDatabase:
             CREATE INDEX IF NOT EXISTS idx_spare_name ON spare_parts(name);
             CREATE INDEX IF NOT EXISTS idx_spare_phone ON spare_parts(phone_id);
         """)
+        # Add image_data column if upgrading from old schema
+        try:
+            self.conn.execute("SELECT image_data FROM phones LIMIT 1")
+        except Exception:
+            try:
+                self.conn.execute("ALTER TABLE phones ADD COLUMN image_data BLOB")
+            except Exception:
+                pass
+        try:
+            self.conn.execute("SELECT image_data FROM spare_parts LIMIT 1")
+        except Exception:
+            try:
+                self.conn.execute("ALTER TABLE spare_parts ADD COLUMN image_data BLOB")
+            except Exception:
+                pass
         self.conn.commit()
+
+    # ── Image helpers ───────────────────────────────────────────
+
+    @staticmethod
+    def read_image_file(path):
+        """Read an image file and return bytes, or None."""
+        if not path:
+            return None
+        try:
+            # Handle Android content:// URIs
+            if path.startswith("content://"):
+                try:
+                    from jnius import autoclass
+                    PythonActivity = autoclass("org.kivy.android.PythonActivity")
+                    context = PythonActivity.mActivity.getApplicationContext()
+                    cr = context.getContentResolver()
+                    uri = autoclass("android.net.Uri").parse(path)
+                    stream = cr.openInputStream(uri)
+                    ByteArrayOutputStream = autoclass("java.io.ByteArrayOutputStream")
+                    baos = ByteArrayOutputStream()
+                    buf = bytearray(4096)
+                    jbuf = autoclass("java.lang.reflect.Array").newInstance(
+                        autoclass("java.lang.Byte").TYPE, 4096)
+                    while True:
+                        n = stream.read(jbuf)
+                        if n == -1:
+                            break
+                        baos.write(jbuf, 0, n)
+                    stream.close()
+                    return bytes(baos.toByteArray())
+                except Exception:
+                    return None
+            if os.path.exists(path):
+                with open(path, "rb") as f:
+                    return f.read()
+        except Exception:
+            pass
+        return None
+
+    @staticmethod
+    def make_thumbnail(image_bytes, max_size=300):
+        """Resize image to thumbnail. Returns bytes or original."""
+        if not image_bytes:
+            return image_bytes
+        try:
+            from PIL import Image as PILImage
+            import io
+            img = PILImage.open(io.BytesIO(image_bytes))
+            img.thumbnail((max_size, max_size), PILImage.LANCZOS)
+            if img.mode == 'RGBA':
+                img = img.convert('RGB')
+            buf = io.BytesIO()
+            img.save(buf, format='JPEG', quality=75, optimize=True)
+            return buf.getvalue()
+        except Exception:
+            return image_bytes
 
     # ── Phone CRUD ──────────────────────────────────────────────
 
     def add_phone(self, phone_id, name, release_date="", appearance="",
-                  working="", remarks="", image_path=""):
+                  working="", remarks="", image_path="", image_bytes=None):
+        if not image_bytes and image_path:
+            image_bytes = self.read_image_file(image_path)
+            if image_bytes:
+                image_bytes = self.make_thumbnail(image_bytes)
         self.conn.execute(
             """INSERT OR REPLACE INTO phones
                (id, name, release_date, appearance_condition,
-                working_condition, remarks, image_path, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                working_condition, remarks, image_path, image_data, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (phone_id, name, release_date, appearance, working,
-             remarks, image_path, datetime.now().isoformat())
+             remarks, image_path or "", image_bytes,
+             datetime.now().isoformat())
         )
         self.conn.commit()
 
@@ -67,6 +146,14 @@ class NokiaDatabase:
         allowed = {"name", "release_date", "appearance_condition",
                     "working_condition", "remarks", "image_path"}
         fields = {k: v for k, v in kwargs.items() if k in allowed}
+        # Handle image update
+        if "image_path" in kwargs:
+            img_bytes = self.read_image_file(kwargs["image_path"])
+            if img_bytes:
+                img_bytes = self.make_thumbnail(img_bytes)
+                fields["image_data"] = img_bytes
+        if "image_data" in kwargs:
+            fields["image_data"] = kwargs["image_data"]
         if not fields:
             return
         set_clause = ", ".join(f"{k} = ?" for k in fields)
@@ -86,15 +173,32 @@ class NokiaDatabase:
         return dict(row) if row else None
 
     def get_all_phones(self):
+        # Don't load image_data in list queries for performance
         cur = self.conn.execute(
-            "SELECT * FROM phones ORDER BY name, id"
+            """SELECT id, name, release_date, appearance_condition,
+                      working_condition, remarks, image_path,
+                      CASE WHEN image_data IS NOT NULL THEN 1 ELSE 0 END as has_image
+               FROM phones ORDER BY name, id"""
         )
         return [dict(r) for r in cur.fetchall()]
+
+    def get_phone_image(self, phone_id):
+        """Get image BLOB for a specific phone."""
+        cur = self.conn.execute(
+            "SELECT image_data FROM phones WHERE id = ?", (phone_id,)
+        )
+        row = cur.fetchone()
+        if row and row[0]:
+            return bytes(row[0])
+        return None
 
     def search_phones(self, query):
         q = f"%{query}%"
         cur = self.conn.execute(
-            """SELECT * FROM phones
+            """SELECT id, name, release_date, appearance_condition,
+                      working_condition, remarks, image_path,
+                      CASE WHEN image_data IS NOT NULL THEN 1 ELSE 0 END as has_image
+               FROM phones
                WHERE name LIKE ? OR id LIKE ? OR release_date LIKE ?
                ORDER BY name, id""",
             (q, q, q)
@@ -103,17 +207,31 @@ class NokiaDatabase:
 
     # ── Spare Parts CRUD ────────────────────────────────────────
 
-    def add_spare_part(self, name, phone_id="", image_path="", description=""):
+    def add_spare_part(self, name, phone_id="", image_path="", description="",
+                       image_bytes=None):
+        if not image_bytes and image_path:
+            image_bytes = self.read_image_file(image_path)
+            if image_bytes:
+                image_bytes = self.make_thumbnail(image_bytes)
         self.conn.execute(
-            """INSERT INTO spare_parts (name, phone_id, image_path, description, created_at)
-               VALUES (?, ?, ?, ?, ?)""",
-            (name, phone_id, image_path, description, datetime.now().isoformat())
+            """INSERT INTO spare_parts
+               (name, phone_id, image_path, image_data, description, created_at)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (name, phone_id, image_path or "", image_bytes,
+             description, datetime.now().isoformat())
         )
         self.conn.commit()
 
     def update_spare_part(self, spare_id, **kwargs):
         allowed = {"name", "phone_id", "image_path", "description"}
         fields = {k: v for k, v in kwargs.items() if k in allowed}
+        if "image_path" in kwargs:
+            img_bytes = self.read_image_file(kwargs["image_path"])
+            if img_bytes:
+                img_bytes = self.make_thumbnail(img_bytes)
+                fields["image_data"] = img_bytes
+        if "image_data" in kwargs:
+            fields["image_data"] = kwargs["image_data"]
         if not fields:
             return
         set_clause = ", ".join(f"{k} = ?" for k in fields)
@@ -134,15 +252,28 @@ class NokiaDatabase:
         row = cur.fetchone()
         return dict(row) if row else None
 
+    def get_spare_image(self, spare_id):
+        cur = self.conn.execute(
+            "SELECT image_data FROM spare_parts WHERE id = ?", (spare_id,)
+        )
+        row = cur.fetchone()
+        if row and row[0]:
+            return bytes(row[0])
+        return None
+
     def get_all_spare_parts(self):
         cur = self.conn.execute(
-            "SELECT * FROM spare_parts ORDER BY name"
+            """SELECT id, name, phone_id, image_path, description,
+                      CASE WHEN image_data IS NOT NULL THEN 1 ELSE 0 END as has_image
+               FROM spare_parts ORDER BY name"""
         )
         return [dict(r) for r in cur.fetchall()]
 
     def get_spare_parts_for_phone(self, phone_name):
         cur = self.conn.execute(
-            "SELECT * FROM spare_parts WHERE name LIKE ? ORDER BY created_at",
+            """SELECT id, name, phone_id, image_path, description,
+                      CASE WHEN image_data IS NOT NULL THEN 1 ELSE 0 END as has_image
+               FROM spare_parts WHERE name LIKE ? ORDER BY created_at""",
             (f"%{phone_name}%",)
         )
         return [dict(r) for r in cur.fetchall()]
@@ -150,7 +281,9 @@ class NokiaDatabase:
     def search_spare_parts(self, query):
         q = f"%{query}%"
         cur = self.conn.execute(
-            """SELECT * FROM spare_parts
+            """SELECT id, name, phone_id, image_path, description,
+                      CASE WHEN image_data IS NOT NULL THEN 1 ELSE 0 END as has_image
+               FROM spare_parts
                WHERE name LIKE ? OR description LIKE ?
                ORDER BY name""",
             (q, q)
@@ -160,16 +293,11 @@ class NokiaDatabase:
     # ── Combined Search ─────────────────────────────────────────
 
     def search_all(self, query):
-        phones = self.search_phones(query)
-        spares = self.search_spare_parts(query)
-        return phones, spares
+        return self.search_phones(query), self.search_spare_parts(query)
 
     # ── Import / Export ─────────────────────────────────────────
 
     def import_phones_from_rows(self, rows):
-        """Import phones from list of dicts with keys:
-           id, name, release_date, appearance_condition,
-           working_condition, remarks"""
         count = 0
         for row in rows:
             try:
@@ -178,15 +306,12 @@ class NokiaDatabase:
                        (id, name, release_date, appearance_condition,
                         working_condition, remarks, image_path, created_at)
                        VALUES (?, ?, ?, ?, ?, ?, '', ?)""",
-                    (
-                        str(row.get("id", "")),
-                        str(row.get("name", "")),
-                        str(row.get("release_date", "")),
-                        str(row.get("appearance_condition", "")),
-                        str(row.get("working_condition", "")),
-                        str(row.get("remarks", "")),
-                        datetime.now().isoformat(),
-                    )
+                    (str(row.get("id", "")), str(row.get("name", "")),
+                     str(row.get("release_date", "")),
+                     str(row.get("appearance_condition", "")),
+                     str(row.get("working_condition", "")),
+                     str(row.get("remarks", "")),
+                     datetime.now().isoformat())
                 )
                 count += 1
             except Exception:
@@ -195,10 +320,19 @@ class NokiaDatabase:
         return count
 
     def export_phones(self):
-        return self.get_all_phones()
+        cur = self.conn.execute(
+            """SELECT id, name, release_date, appearance_condition,
+                      working_condition, remarks, image_path
+               FROM phones ORDER BY name, id"""
+        )
+        return [dict(r) for r in cur.fetchall()]
 
     def export_spare_parts(self):
-        return self.get_all_spare_parts()
+        cur = self.conn.execute(
+            """SELECT id, name, phone_id, image_path, description
+               FROM spare_parts ORDER BY name"""
+        )
+        return [dict(r) for r in cur.fetchall()]
 
     def get_phone_count(self):
         cur = self.conn.execute("SELECT COUNT(*) FROM phones")
@@ -211,49 +345,26 @@ class NokiaDatabase:
     # ── Report / Statistics ─────────────────────────────────────
 
     def get_report(self):
-        """Return comprehensive statistics."""
         report = {}
         report["total_phones"] = self.get_phone_count()
         report["total_spares"] = self.get_spare_count()
-
-        # By working condition
         cur = self.conn.execute(
-            """SELECT working_condition, COUNT(*) as cnt
-               FROM phones GROUP BY working_condition ORDER BY cnt DESC"""
-        )
+            "SELECT working_condition, COUNT(*) as cnt FROM phones GROUP BY working_condition ORDER BY cnt DESC")
         report["by_working"] = [(r[0] or "Unknown", r[1]) for r in cur.fetchall()]
-
-        # By appearance
         cur = self.conn.execute(
-            """SELECT appearance_condition, COUNT(*) as cnt
-               FROM phones GROUP BY appearance_condition ORDER BY cnt DESC"""
-        )
+            "SELECT appearance_condition, COUNT(*) as cnt FROM phones GROUP BY appearance_condition ORDER BY cnt DESC")
         report["by_appearance"] = [(r[0] or "Unknown", r[1]) for r in cur.fetchall()]
-
-        # By model (top 20)
         cur = self.conn.execute(
-            """SELECT name, COUNT(*) as cnt
-               FROM phones GROUP BY name ORDER BY cnt DESC LIMIT 20"""
-        )
+            "SELECT name, COUNT(*) as cnt FROM phones GROUP BY name ORDER BY cnt DESC LIMIT 20")
         report["by_model"] = [(r[0], r[1]) for r in cur.fetchall()]
-
-        # Unique models count
         cur = self.conn.execute("SELECT COUNT(DISTINCT name) FROM phones")
         report["unique_models"] = cur.fetchone()[0]
-
-        # By release year
         cur = self.conn.execute(
-            """SELECT release_date, COUNT(*) as cnt
-               FROM phones GROUP BY release_date ORDER BY release_date"""
-        )
+            "SELECT release_date, COUNT(*) as cnt FROM phones GROUP BY release_date ORDER BY release_date")
         report["by_year"] = [(r[0] or "Unknown", r[1]) for r in cur.fetchall()]
-
-        # Phones with images
         cur = self.conn.execute(
-            "SELECT COUNT(*) FROM phones WHERE image_path != '' AND image_path IS NOT NULL"
-        )
+            "SELECT COUNT(*) FROM phones WHERE image_data IS NOT NULL")
         report["phones_with_images"] = cur.fetchone()[0]
-
         return report
 
     def close(self):
