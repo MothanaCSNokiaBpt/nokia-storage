@@ -107,12 +107,7 @@ class NokiaDatabase:
 
     @staticmethod
     def make_thumbnail(image_bytes, max_size=300):
-        """Return image bytes as-is. Kivy handles display scaling."""
-        if not image_bytes:
-            return image_bytes
-        # Limit to 500KB to keep DB reasonable
-        if len(image_bytes) > 500000:
-            return image_bytes[:500000]
+        """Return image bytes as-is. Compression handled by the app."""
         return image_bytes
 
     # ── Phone CRUD ──────────────────────────────────────────────

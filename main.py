@@ -1498,6 +1498,7 @@ class PhoneDetailScreen(Screen):
 
     def add_image(self):
         """Show popup with Gallery and Camera options."""
+        App.get_running_app().show_toast("STEP 1: add_image called")
         popup = ModalView(size_hint=(0.72, None), height=dp(120))
         c = BoxLayout(orientation="vertical", spacing=dp(4), padding=dp(10))
         with c.canvas.before:
@@ -1514,11 +1515,13 @@ class PhoneDetailScreen(Screen):
 
     def _pick_gallery(self):
         app = App.get_running_app()
+        app.show_toast("STEP 2: _pick_gallery called")
         app.pick_image_for = ("phone_direct", self.p_id)
         app.open_file_chooser()
 
     def _pick_camera(self):
         app = App.get_running_app()
+        app.show_toast("STEP 2: _pick_camera called")
         app.pick_image_for = ("phone_direct", self.p_id)
         app.take_camera_photo()
 
@@ -1684,14 +1687,16 @@ class AddPhoneScreen(Screen):
         """Called with raw image bytes."""
         self._image_bytes = img_bytes
         if img_bytes:
-            # Write to temp file for preview
-            tmp = os.path.join(get_cache_dir(get_app_path()), "_preview_phone.tmp")
+            # Write to temp file with correct extension for Kivy
+            ext = ".png" if img_bytes[:4] == b'\x89PNG' else ".jpg"
+            tmp = os.path.join(get_cache_dir(get_app_path()), f"_preview_phone{ext}")
             try:
                 with open(tmp, "wb") as f:
                     f.write(img_bytes)
-                self.ids.preview_img.source = ""  # force reload
-                Clock.schedule_once(lambda dt: setattr(self.ids.preview_img, "source", tmp), 0.1)
-            except: pass
+                self.ids.preview_img.source = ""
+                Clock.schedule_once(lambda dt: setattr(self.ids.preview_img, "source", tmp), 0.15)
+            except Exception as e:
+                App.get_running_app().show_toast(f"Preview err: {str(e)[:40]}")
 
     def save_phone(self):
         app = App.get_running_app()
@@ -1739,13 +1744,15 @@ class AddSpareScreen(Screen):
     def on_image_selected(self, img_bytes):
         self._image_bytes = img_bytes
         if img_bytes:
-            tmp = os.path.join(get_cache_dir(get_app_path()), "_preview_spare.tmp")
+            ext = ".png" if img_bytes[:4] == b'\x89PNG' else ".jpg"
+            tmp = os.path.join(get_cache_dir(get_app_path()), f"_preview_spare{ext}")
             try:
                 with open(tmp, "wb") as f:
                     f.write(img_bytes)
                 self.ids.preview_img.source = ""
-                Clock.schedule_once(lambda dt: setattr(self.ids.preview_img, "source", tmp), 0.1)
-            except: pass
+                Clock.schedule_once(lambda dt: setattr(self.ids.preview_img, "source", tmp), 0.15)
+            except Exception as e:
+                App.get_running_app().show_toast(f"Preview err: {str(e)[:40]}")
 
     def save_spare(self):
         app = App.get_running_app()
@@ -1974,6 +1981,7 @@ class NokiaStorageApp(App):
         except: pass
 
     def open_file_chooser(self, filters=None, multiple=False):
+        self.show_toast("STEP 3: open_file_chooser")
         if platform == "android": self._ac(filters, multiple)
         else: self._dc(filters, multiple)
 
@@ -1991,92 +1999,105 @@ class NokiaStorageApp(App):
 
     def _ac(self, filters=None, multiple=False):
         """Android file chooser using direct Intent + activity result binding."""
+        self.show_toast("STEP 4: _ac Android chooser")
         try:
             from jnius import autoclass, cast
+            self.show_toast("STEP 5: jnius imported")
             from android import activity as android_activity
+            self.show_toast("STEP 6: android.activity imported")
 
             Intent = autoclass("android.content.Intent")
             PythonActivity = autoclass("org.kivy.android.PythonActivity")
 
-            # Determine mime type
             mime = "image/*"
             if filters and "*.zip" in filters:
                 mime = "application/zip"
 
-            # Create intent
             intent = Intent(Intent.ACTION_GET_CONTENT)
             intent.setType(mime)
             intent.addCategory(Intent.CATEGORY_OPENABLE)
+            self.show_toast("STEP 7: Intent created")
 
-            # Bind result callback BEFORE starting activity
             def on_result(request_code, result_code, data):
+                self.show_toast(f"STEP 8: on_result rc={request_code} res={result_code}")
                 if request_code != 42:
                     return
                 try:
                     android_activity.unbind(on_activity_result=on_result)
                 except:
                     pass
-                if result_code == -1 and data:  # RESULT_OK = -1
+                if result_code == -1 and data:
                     try:
                         uri = data.getData()
                         uri_str = uri.toString()
-                        self.show_toast(f"Got: {uri_str[:50]}")
-                        # Read bytes directly from URI
+                        self.show_toast(f"STEP 9: URI={uri_str[:50]}")
                         context = PythonActivity.mActivity
                         pfd = context.getContentResolver().openFileDescriptor(uri, "r")
                         fd = pfd.detachFd()
+                        self.show_toast(f"STEP 10: fd={fd}")
                         with os.fdopen(fd, "rb") as f:
                             img_bytes = f.read()
+                        self.show_toast(f"STEP 11: read {len(img_bytes)} bytes")
                         if img_bytes and len(img_bytes) > 100:
-                            self.show_toast(f"Read {len(img_bytes)} bytes")
                             self._handle_image_bytes(img_bytes)
                         else:
-                            self.show_toast("Empty file")
+                            self.show_toast("STEP 11: empty file!")
                     except Exception as e:
-                        self.show_toast(f"Read err: {str(e)[:40]}")
+                        self.show_toast(f"STEP 9-ERR: {str(e)[:50]}")
                 else:
-                    self.show_toast("Cancelled")
+                    self.show_toast(f"STEP 8: cancelled/no data res={result_code}")
 
             android_activity.bind(on_activity_result=on_result)
             PythonActivity.mActivity.startActivityForResult(intent, 42)
+            self.show_toast("STEP 7b: startActivity called")
         except Exception as e:
-            self.show_toast(f"Picker err: {str(e)[:50]}")
+            self.show_toast(f"STEP 4-ERR: {str(e)[:50]}")
+
+    def _compress_image(self, img_bytes):
+        """Return image bytes as-is. No limit, no truncation, no compression."""
+        return img_bytes
 
     def _handle_image_bytes(self, img_bytes):
-        """Process image bytes after successful read from Android."""
+        """Process image bytes after successful read."""
+        self.show_toast(f"STEP 12: _handle {len(img_bytes)} bytes")
         if not self.pick_image_for:
-            self.show_toast("No target set")
+            self.show_toast("STEP 12-ERR: No target set")
             return
         tt, td = self.pick_image_for
         self.pick_image_for = None
+        self.show_toast(f"STEP 13: target={tt} id={td}")
 
-        # Limit to 500KB
-        if len(img_bytes) > 500000:
-            img_bytes = img_bytes[:500000]
+        img_bytes = self._compress_image(img_bytes)
 
         if tt in ("add_phone_screen", "add_spare_screen"):
             sn = "add_phone" if tt == "add_phone_screen" else "add_spare"
+            self.show_toast(f"STEP 14: sending to {sn}")
             self.root.get_screen(sn).on_image_selected(img_bytes)
 
         elif tt == "phone_direct":
+            self.show_toast("STEP 14: saving phone image to DB")
             self.db.update_phone(td, image_data=img_bytes)
+            self.show_toast("STEP 15: saved to DB, writing cache")
             clear_item_cache(f"p_{td}", get_app_path())
             new_img = get_img_path_for_phone(td, self.db)
+            self.show_toast(f"STEP 16: cache={new_img[:50] if new_img else 'EMPTY'}")
             d = self.root.get_screen("phone_detail")
             d.ids.detail_img.source = new_img
             d.ids.detail_img.reload()
             self.root.get_screen("main")._data_loaded = False
-            self.show_toast("Image saved!")
+            self.show_toast("STEP 17: DONE - image set!")
 
         elif tt == "spare_direct":
+            self.show_toast("STEP 14: saving spare image to DB")
             self.db.update_spare_part(td, image_data=img_bytes)
             clear_item_cache(f"s_{td}", get_app_path())
             new_img = get_img_path_for_spare(td, self.db)
+            self.show_toast(f"STEP 16: cache={new_img[:50] if new_img else 'EMPTY'}")
             d = self.root.get_screen("spare_detail")
             d.ids.detail_img.source = new_img
             d.ids.detail_img.reload()
             self.root.get_screen("main")._data_loaded = False
-            self.show_toast("Image saved!")
+            self.show_toast("STEP 17: DONE - image set!")
 
     def _fsel(self, sel, popup=None):
         """Desktop file selection handler + restore backup."""
@@ -2101,9 +2122,13 @@ class NokiaStorageApp(App):
             try:
                 from jnius import autoclass
                 from android import activity as android_activity
+
                 Intent = autoclass("android.content.Intent")
                 MediaStore = autoclass("android.provider.MediaStore")
                 PythonActivity = autoclass("org.kivy.android.PythonActivity")
+                Bitmap = autoclass("android.graphics.Bitmap")
+                BitmapCF = autoclass("android.graphics.Bitmap$CompressFormat")
+                ByteArrayOutputStream = autoclass("java.io.ByteArrayOutputStream")
 
                 intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
 
@@ -2116,31 +2141,29 @@ class NokiaStorageApp(App):
                         pass
                     if result_code == -1 and data:
                         try:
-                            # Camera returns thumbnail in extras
                             extras = data.getExtras()
                             if extras:
-                                Bitmap = autoclass("android.graphics.Bitmap")
-                                bitmap = cast("android.graphics.Bitmap", extras.get("data"))
+                                # Get bitmap - use getParcelable for reliable access
+                                bitmap = extras.getParcelable("data")
                                 if bitmap:
-                                    ByteArrayOutputStream = autoclass("java.io.ByteArrayOutputStream")
-                                    BitmapCompressFormat = autoclass("android.graphics.Bitmap$CompressFormat")
                                     baos = ByteArrayOutputStream()
-                                    bitmap.compress(BitmapCompressFormat.JPEG, 90, baos)
-                                    img_bytes = bytes(bytearray(baos.toByteArray()))
+                                    bitmap.compress(BitmapCF.JPEG, 90, baos)
+                                    java_bytes = baos.toByteArray()
+                                    img_bytes = bytes(bytearray(java_bytes))
+                                    baos.close()
                                     if img_bytes and len(img_bytes) > 100:
-                                        self.show_toast(f"Camera: {len(img_bytes)} bytes")
                                         self._handle_image_bytes(img_bytes)
                                         return
-                            self.show_toast("No camera data")
+                            self.show_toast("Camera: no image data")
                         except Exception as e:
-                            self.show_toast(f"Cam err: {str(e)[:40]}")
+                            self.show_toast(f"Cam err: {str(e)[:50]}")
                     else:
                         self.show_toast("Camera cancelled")
 
                 android_activity.bind(on_activity_result=on_cam_result)
                 PythonActivity.mActivity.startActivityForResult(intent, 43)
             except Exception as e:
-                self.show_toast(f"Camera: {str(e)[:50]}")
+                self.show_toast(f"Camera init: {str(e)[:50]}")
         else:
             self.show_toast("Camera on Android only")
 
