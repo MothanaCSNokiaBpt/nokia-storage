@@ -1,10 +1,11 @@
 """
 Nokia Storage Manager - Android Application
-Manage Nokia phones inventory and spare parts with images,
-CSV export, search, backup/restore, and reports.
+Images loaded via Kivy CoreImage from memory (no file path issues on Android).
 """
 
+import base64
 import csv
+import io
 import json
 import os
 import shutil
@@ -15,6 +16,7 @@ from functools import partial
 
 from kivy.app import App
 from kivy.clock import Clock
+from kivy.core.image import Image as CoreImage
 from kivy.core.window import Window
 from kivy.graphics import Color, Rectangle, RoundedRectangle
 from kivy.lang import Builder
@@ -25,7 +27,7 @@ from kivy.properties import (
 from kivy.uix.behaviors import ButtonBehavior
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.gridlayout import GridLayout
-from kivy.uix.image import AsyncImage
+from kivy.uix.image import Image
 from kivy.uix.label import Label
 from kivy.uix.modalview import ModalView
 from kivy.uix.popup import Popup
@@ -46,7 +48,7 @@ if platform == "android":
 
 PAGE_SIZE = 50
 
-# ── Helpers ─────────────────────────────────────────────────────
+# ── Paths ───────────────────────────────────────────────────────
 def get_app_path():
     if platform == "android":
         try:
@@ -54,26 +56,6 @@ def get_app_path():
         except Exception:
             return os.path.dirname(os.path.abspath(__file__))
     return os.path.dirname(os.path.abspath(__file__))
-
-def get_images_path():
-    p = os.path.join(get_app_path(), "images")
-    os.makedirs(p, exist_ok=True)
-    return p
-
-def get_phone_images_path():
-    p = os.path.join(get_images_path(), "phones")
-    os.makedirs(p, exist_ok=True)
-    return p
-
-def get_spare_images_path():
-    p = os.path.join(get_images_path(), "spares")
-    os.makedirs(p, exist_ok=True)
-    return p
-
-def get_phone_gallery_path(phone_id):
-    p = os.path.join(get_images_path(), "gallery", phone_id)
-    os.makedirs(p, exist_ok=True)
-    return p
 
 def get_db_path():
     return os.path.join(get_app_path(), "nokia_storage.db")
@@ -86,98 +68,105 @@ def get_downloads_path():
             pass
     return os.path.join(get_app_path(), "exports")
 
-# ── Embedded default phone image (base64 PNG) ──────────────────
-# This is always available - no file system needed
-import base64 as _b64
-_DEFAULT_PNG_B64 = (
-    "iVBORw0KGgoAAAANSUhEUgAAAHgAAAB4CAIAAAC2BqGFAAABmElEQVR42u3dMU7DQBBA0YmV"
-    "ig7Jd0mZLodOlzIXobKgo4XCDaJARMruzNrvlxQkPE0ce5F2D2/vX6H2TQhAgxZo0KAFGrR"
-    "AgwatHh0rvInr7d76JS7nU+7feMhdVFqJ53lu/ULLsuRyZ0Jfb/cOxL+4s6yn/SivH50Ol6l"
-    "C0CnKudbuOrYLnTjOiUNtokGDFmjQoBHEfhaVImL5+Gx4P/f6YqKbK3f4/WNA91FIt3aNBg1"
-    "aoEGDRgAatECDBi3QoAUaNGiBBi3QoEELNGiBBg1aoEELNGjQAg1aoEGDFmjQAg0atECD1lD"
-    "QfbYeSN/goMREt1aosI1Elf06Kli4RoMW6LCnUjxvI5mBruzHQYl//nAI7mlc5ai0N9UWoP/"
-    "jWN/alyHoB0e1+FCbaNCgBRp0NF/VK/7YYqJBPzKq9Z/Cx5jovx2HWOsYZlFp1bR65z9e9S4"
-    "dl/NpPV0w7bE+47A9dx2bhk4c6qyzI9MmOsU68YROZ87uA9opynLXAVqgQYMWaNACDRq0QIM"
-    "WaNCgBRq0QIMGrSf2DfHie0n1GIVVAAAAAElFTkSuQmCC"
+def get_gallery_dir(phone_id):
+    p = os.path.join(get_app_path(), "gallery", phone_id)
+    os.makedirs(p, exist_ok=True)
+    return p
+
+# ── Image System: Memory-based using Kivy Texture ──────────────
+# Default 64x64 phone silhouette PNG embedded as base64
+_DEFAULT_B64 = (
+    "iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAZUlEQVR42u3aMQ0AIBAE"
+    "wfcvABFowAI1DQJwAR4IDflJ1sC0l4u59tcFAABAYkBt41UAAAAAQGI9tQsAAAAAAAAA"
+    "AAAAAAAAAAAAAAAAbKMAAAAAAAAAAAD8BHB4AAAAAAAAsg8OhD1uvqVIe0oAAAAASUVORK5CYII="
 )
+_DEFAULT_BYTES = base64.b64decode(_DEFAULT_B64)
+_DEFAULT_TEXTURE = None
+_TEXTURE_CACHE = {}
 
-DEFAULT_IMG_PATH = ""
-_IMG_CACHE = {}  # phone_id/spare_id -> temp file path
-
-def get_default_image():
-    """Write embedded PNG to temp file and return path. Guaranteed to work."""
-    global DEFAULT_IMG_PATH
-    if DEFAULT_IMG_PATH and os.path.exists(DEFAULT_IMG_PATH):
-        return DEFAULT_IMG_PATH
+def get_default_texture():
+    """Get Kivy texture for default phone image. Created once, reused."""
+    global _DEFAULT_TEXTURE
+    if _DEFAULT_TEXTURE:
+        return _DEFAULT_TEXTURE
     try:
-        cache_dir = os.path.join(get_app_path(), ".img_cache")
-        os.makedirs(cache_dir, exist_ok=True)
-        p = os.path.join(cache_dir, "default.png")
-        with open(p, "wb") as f:
-            f.write(_b64.b64decode(_DEFAULT_PNG_B64))
-        DEFAULT_IMG_PATH = p
-        return p
-    except Exception:
-        return ""
-
-def get_image_for_item(item_type, item_id, db):
-    """Get displayable image path for a phone or spare part.
-    Writes BLOB from DB to cache file. Returns default if no image."""
-    cache_key = f"{item_type}_{item_id}"
-    if cache_key in _IMG_CACHE and os.path.exists(_IMG_CACHE[cache_key]):
-        return _IMG_CACHE[cache_key]
-    try:
-        if item_type == "phone":
-            img_data = db.get_phone_image(item_id)
-        else:
-            img_data = db.get_spare_image(item_id)
-        if img_data:
-            cache_dir = os.path.join(get_app_path(), ".img_cache")
-            os.makedirs(cache_dir, exist_ok=True)
-            ext = ".jpg"
-            if img_data[:4] == b'\x89PNG':
-                ext = ".png"
-            p = os.path.join(cache_dir, f"{cache_key}{ext}")
-            with open(p, "wb") as f:
-                f.write(img_data)
-            _IMG_CACHE[cache_key] = p
-            return p
+        _DEFAULT_TEXTURE = CoreImage(io.BytesIO(_DEFAULT_BYTES), ext="png").texture
     except Exception:
         pass
-    return get_default_image()
+    return _DEFAULT_TEXTURE
 
-def invalidate_image_cache(item_type, item_id):
-    """Remove cached image so it reloads from DB."""
-    cache_key = f"{item_type}_{item_id}"
-    if cache_key in _IMG_CACHE:
-        try:
-            os.remove(_IMG_CACHE[cache_key])
-        except Exception:
-            pass
-        del _IMG_CACHE[cache_key]
-
-def copy_image_to_storage(source_path, dest_folder):
-    if not source_path or not os.path.exists(source_path):
-        return ""
-    ext = os.path.splitext(source_path)[1] or ".jpg"
-    filename = f"{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}{ext}"
-    dest = os.path.join(dest_folder, filename)
+def bytes_to_texture(img_bytes):
+    """Convert image bytes to Kivy Texture. Returns None on failure."""
+    if not img_bytes:
+        return None
     try:
-        shutil.copy2(source_path, dest)
-        return dest
+        # Detect format
+        ext = "png"
+        if img_bytes[:2] == b'\xff\xd8':
+            ext = "jpg"
+        elif img_bytes[:4] == b'\x89PNG':
+            ext = "png"
+        return CoreImage(io.BytesIO(img_bytes), ext=ext).texture
     except Exception:
-        return ""
+        return None
 
-def get_gallery_images(phone_id):
-    gdir = os.path.join(get_images_path(), "gallery", phone_id)
-    if not os.path.exists(gdir):
-        return []
-    exts = ('.jpg', '.jpeg', '.png', '.bmp', '.gif')
-    imgs = []
-    for f in sorted(os.listdir(gdir)):
-        if f.lower().endswith(exts):
-            imgs.append(os.path.join(gdir, f))
-    return imgs
+def get_texture_for_phone(phone_id, db):
+    """Get texture for a phone - from cache, DB, or default."""
+    if phone_id in _TEXTURE_CACHE:
+        return _TEXTURE_CACHE[phone_id]
+    img_data = db.get_phone_image(phone_id)
+    if img_data:
+        tex = bytes_to_texture(img_data)
+        if tex:
+            _TEXTURE_CACHE[phone_id] = tex
+            return tex
+    return get_default_texture()
+
+def get_texture_for_spare(spare_id, db):
+    """Get texture for a spare part."""
+    key = f"s_{spare_id}"
+    if key in _TEXTURE_CACHE:
+        return _TEXTURE_CACHE[key]
+    img_data = db.get_spare_image(spare_id)
+    if img_data:
+        tex = bytes_to_texture(img_data)
+        if tex:
+            _TEXTURE_CACHE[key] = tex
+            return tex
+    return get_default_texture()
+
+def invalidate_cache(key):
+    if key in _TEXTURE_CACHE:
+        del _TEXTURE_CACHE[key]
+
+def read_file_bytes(path):
+    """Read file bytes - handles both regular paths and Android content:// URIs."""
+    if not path:
+        return None
+    try:
+        if path.startswith("content://"):
+            if platform == "android":
+                from jnius import autoclass
+                PythonActivity = autoclass("org.kivy.android.PythonActivity")
+                ctx = PythonActivity.mActivity.getApplicationContext()
+                uri = autoclass("android.net.Uri").parse(path)
+                stream = ctx.getContentResolver().openInputStream(uri)
+                barray = autoclass("java.io.ByteArrayOutputStream")()
+                buf = bytearray(8192)
+                while True:
+                    jbuf = [0] * 8192
+                    n = stream.read(jbuf)
+                    if n == -1:
+                        break
+                    barray.write(jbuf, 0, n)
+                stream.close()
+                return bytes(barray.toByteArray())
+        if os.path.exists(path):
+            with open(path, "rb") as f:
+                return f.read()
+    except Exception:
+        pass
+    return None
 
 
 # ── Custom Widgets ──────────────────────────────────────────────
@@ -191,7 +180,6 @@ class PhoneCard(ButtonBehavior, BoxLayout):
     phone_id = StringProperty("")
     phone_name = StringProperty("")
     phone_date = StringProperty("")
-    phone_image = StringProperty("")
     phone_appear = StringProperty("")
     phone_working = StringProperty("")
 
@@ -199,7 +187,6 @@ class SpareCard(ButtonBehavior, BoxLayout):
     spare_id = NumericProperty(0)
     spare_name = StringProperty("")
     spare_desc = StringProperty("")
-    spare_image = StringProperty("")
 
 class SearchBar(BoxLayout):
     def on_search_enter(self, text):
@@ -221,7 +208,7 @@ KV = """
 <PhoneCard>:
     size_hint_y: None
     height: dp(94)
-    padding: dp(8)
+    padding: dp(6)
     spacing: dp(8)
     orientation: 'horizontal'
     canvas.before:
@@ -231,17 +218,17 @@ KV = """
             pos: self.pos
             size: self.size
             radius: [dp(10)]
-    AsyncImage:
-        source: root.phone_image or ''
+    Image:
+        id: card_img
         size_hint: None, None
-        size: dp(62), dp(76)
+        size: dp(64), dp(78)
         pos_hint: {'center_y': .5}
         allow_stretch: True
         keep_ratio: True
     BoxLayout:
         orientation: 'vertical'
         spacing: dp(1)
-        padding: 0, dp(3)
+        padding: 0, dp(2)
         Label:
             text: root.phone_name
             font_size: sp(14)
@@ -264,7 +251,7 @@ KV = """
         Label:
             text: root.phone_appear
             font_size: sp(10)
-            color: 0.26, 0.55, 0.28, 1
+            color: 0.2, 0.5, 0.22, 1
             text_size: self.size
             halign: 'left'
             valign: 'middle'
@@ -283,8 +270,8 @@ KV = """
 <SpareCard>:
     size_hint_y: None
     height: dp(74)
-    padding: dp(8)
-    spacing: dp(10)
+    padding: dp(6)
+    spacing: dp(8)
     orientation: 'horizontal'
     canvas.before:
         Color:
@@ -293,10 +280,10 @@ KV = """
             pos: self.pos
             size: self.size
             radius: [dp(10)]
-    AsyncImage:
-        source: root.spare_image or ''
+    Image:
+        id: card_img
         size_hint: None, None
-        size: dp(56), dp(56)
+        size: dp(56), dp(60)
         pos_hint: {'center_y': .5}
         allow_stretch: True
         keep_ratio: True
@@ -374,8 +361,6 @@ ScreenManager:
         name: 'add_spare'
     ExportScreen:
         name: 'export_data'
-    BulkImageScreen:
-        name: 'bulk_images'
     BackupScreen:
         name: 'backup'
     SearchAllScreen:
@@ -476,8 +461,8 @@ ScreenManager:
                 valign: 'middle'
             ClickableBox:
                 size_hint_x: None
-                width: dp(90)
-                padding: dp(10), dp(5)
+                width: dp(80)
+                padding: dp(8), dp(5)
                 canvas.before:
                     Color:
                         rgba: 0, 0.314, 0.784, 1
@@ -493,8 +478,8 @@ ScreenManager:
                     bold: True
             ClickableBox:
                 size_hint_x: None
-                width: dp(90)
-                padding: dp(10), dp(5)
+                width: dp(86)
+                padding: dp(8), dp(5)
                 canvas.before:
                     Color:
                         rgba: 0, 0.44, 1, 1
@@ -561,6 +546,7 @@ ScreenManager:
                 height: self.minimum_height
                 padding: dp(14)
                 spacing: dp(10)
+                # Phone Image - using Image widget, texture set from Python
                 BoxLayout:
                     size_hint_y: None
                     height: dp(220)
@@ -572,45 +558,10 @@ ScreenManager:
                             pos: self.pos
                             size: self.size
                             radius: [dp(14)]
-                    AsyncImage:
-                        id: phone_image
-                        source: root.image_source or ''
+                    Image:
+                        id: detail_img
                         allow_stretch: True
                         keep_ratio: True
-                BoxLayout:
-                    size_hint_y: None
-                    height: dp(34)
-                    spacing: dp(6)
-                    ClickableBox:
-                        padding: dp(8), dp(4)
-                        canvas.before:
-                            Color:
-                                rgba: 0, 0.314, 0.784, 0.12
-                            RoundedRectangle:
-                                pos: self.pos
-                                size: self.size
-                                radius: [dp(7)]
-                        on_release: root.change_image()
-                        Label:
-                            text: 'Change Image'
-                            color: 0, 0.314, 0.784, 1
-                            font_size: sp(12)
-                            bold: True
-                    ClickableBox:
-                        padding: dp(8), dp(4)
-                        canvas.before:
-                            Color:
-                                rgba: 0, 0.44, 1, 0.12
-                            RoundedRectangle:
-                                pos: self.pos
-                                size: self.size
-                                radius: [dp(7)]
-                        on_release: root.add_gallery_image()
-                        Label:
-                            text: '+ Gallery Photo'
-                            color: 0, 0.44, 1, 1
-                            font_size: sp(12)
-                            bold: True
                 # Info Card
                 BoxLayout:
                     orientation: 'vertical'
@@ -650,7 +601,6 @@ ScreenManager:
                         height: dp(20)
                         text_size: self.size
                         halign: 'left'
-                    # Conditions VERTICAL
                     BoxLayout:
                         size_hint_y: None
                         height: dp(28)
@@ -665,7 +615,7 @@ ScreenManager:
                         Label:
                             text: 'Appearance: ' + root.p_appear
                             font_size: sp(12)
-                            color: 0.26, 0.63, 0.28, 1
+                            color: 0.2, 0.5, 0.22, 1
                             bold: True
                             text_size: self.size
                             halign: 'left'
@@ -684,7 +634,7 @@ ScreenManager:
                         Label:
                             text: 'Working: ' + root.p_working
                             font_size: sp(12)
-                            color: 0, 0.314, 0.784, 1
+                            color: 0, 0.28, 0.7, 1
                             bold: True
                             text_size: self.size
                             halign: 'left'
@@ -815,27 +765,10 @@ ScreenManager:
                             pos: self.pos
                             size: self.size
                             radius: [dp(14)]
-                    AsyncImage:
-                        source: root.s_image or ''
+                    Image:
+                        id: detail_img
                         allow_stretch: True
                         keep_ratio: True
-                ClickableBox:
-                    size_hint_y: None
-                    height: dp(34)
-                    padding: dp(10), dp(5)
-                    canvas.before:
-                        Color:
-                            rgba: 0, 0.314, 0.784, 0.12
-                        RoundedRectangle:
-                            pos: self.pos
-                            size: self.size
-                            radius: [dp(7)]
-                    on_release: root.change_image()
-                    Label:
-                        text: 'Change Image'
-                        color: 0, 0.314, 0.784, 1
-                        font_size: sp(12)
-                        bold: True
                 BoxLayout:
                     orientation: 'vertical'
                     size_hint_y: None
@@ -944,9 +877,8 @@ ScreenManager:
                             pos: self.pos
                             size: self.size
                             radius: [dp(10)]
-                    AsyncImage:
-                        id: preview_image
-                        source: root.image_preview or ''
+                    Image:
+                        id: preview_img
                         allow_stretch: True
                         keep_ratio: True
                 BoxLayout:
@@ -1101,9 +1033,8 @@ ScreenManager:
                             pos: self.pos
                             size: self.size
                             radius: [dp(10)]
-                    AsyncImage:
-                        id: spare_preview_image
-                        source: root.image_preview or ''
+                    Image:
+                        id: preview_img
                         allow_stretch: True
                         keep_ratio: True
                 BoxLayout:
@@ -1192,7 +1123,6 @@ ScreenManager:
             size_hint_y: None
             height: dp(52)
             padding: dp(6)
-            spacing: dp(6)
             canvas.before:
                 Color:
                     rgba: 0, 0.314, 0.784, 1
@@ -1217,13 +1147,13 @@ ScreenManager:
             padding: dp(18)
             spacing: dp(14)
             Label:
-                text: 'Export all data as CSV files\\nsaved to Downloads folder.'
+                text: 'Export all data as CSV to Downloads.'
                 font_size: sp(14)
                 color: 0.3, 0.3, 0.3, 1
-                text_size: self.width, None
                 size_hint_y: None
-                height: self.texture_size[1] + dp(10)
+                height: dp(30)
                 halign: 'left'
+                text_size: self.size
             Label:
                 id: export_status
                 text: ''
@@ -1252,104 +1182,6 @@ ScreenManager:
                     bold: True
             Widget:
 
-<BulkImageScreen>:
-    BoxLayout:
-        orientation: 'vertical'
-        BoxLayout:
-            size_hint_y: None
-            height: dp(52)
-            padding: dp(6)
-            spacing: dp(6)
-            canvas.before:
-                Color:
-                    rgba: 0, 0.314, 0.784, 1
-                Rectangle:
-                    pos: self.pos
-                    size: self.size
-            ClickableLabel:
-                size_hint_x: None
-                width: dp(36)
-                text: '<'
-                font_size: sp(22)
-                bold: True
-                color: 1, 1, 1, 1
-                on_release: root.go_back()
-            Label:
-                text: 'Bulk Image Import'
-                font_size: sp(17)
-                bold: True
-                color: 1, 1, 1, 1
-        BoxLayout:
-            orientation: 'vertical'
-            padding: dp(14)
-            spacing: dp(10)
-            BoxLayout:
-                size_hint_y: None
-                height: dp(36)
-                spacing: dp(6)
-                ClickableBox:
-                    padding: dp(10), dp(5)
-                    canvas.before:
-                        Color:
-                            rgba: (0, 0.314, 0.784, 1) if root.target_type == 'phones' else (0.9, 0.9, 0.9, 1)
-                        RoundedRectangle:
-                            pos: self.pos
-                            size: self.size
-                            radius: [dp(7)]
-                    on_release: root.set_target('phones')
-                    Label:
-                        text: 'Phones'
-                        color: (1,1,1,1) if root.target_type == 'phones' else (0.3,0.3,0.3,1)
-                        font_size: sp(12)
-                        bold: True
-                ClickableBox:
-                    padding: dp(10), dp(5)
-                    canvas.before:
-                        Color:
-                            rgba: (0, 0.314, 0.784, 1) if root.target_type == 'spares' else (0.9, 0.9, 0.9, 1)
-                        RoundedRectangle:
-                            pos: self.pos
-                            size: self.size
-                            radius: [dp(7)]
-                    on_release: root.set_target('spares')
-                    Label:
-                        text: 'Spare Parts'
-                        color: (1,1,1,1) if root.target_type == 'spares' else (0.3,0.3,0.3,1)
-                        font_size: sp(12)
-                        bold: True
-            ClickableBox:
-                size_hint_y: None
-                height: dp(40)
-                padding: dp(10), dp(7)
-                canvas.before:
-                    Color:
-                        rgba: 0, 0.314, 0.784, 1
-                    RoundedRectangle:
-                        pos: self.pos
-                        size: self.size
-                        radius: [dp(9)]
-                on_release: root.select_images()
-                Label:
-                    text: 'Select Images'
-                    color: 1, 1, 1, 1
-                    font_size: sp(13)
-                    bold: True
-            Label:
-                id: bulk_status
-                text: 'Select images to assign'
-                font_size: sp(12)
-                color: 0.5, 0.5, 0.5, 1
-                size_hint_y: None
-                height: dp(20)
-            ScrollView:
-                do_scroll_x: False
-                GridLayout:
-                    id: bulk_grid
-                    cols: 1
-                    spacing: dp(8)
-                    size_hint_y: None
-                    height: self.minimum_height
-
 <BackupScreen>:
     BoxLayout:
         orientation: 'vertical'
@@ -1357,7 +1189,6 @@ ScreenManager:
             size_hint_y: None
             height: dp(52)
             padding: dp(6)
-            spacing: dp(6)
             canvas.before:
                 Color:
                     rgba: 0, 0.314, 0.784, 1
@@ -1381,14 +1212,6 @@ ScreenManager:
             orientation: 'vertical'
             padding: dp(18)
             spacing: dp(14)
-            Label:
-                text: 'Full backup of data + images.\\nRestore on new device.'
-                font_size: sp(13)
-                color: 0.3, 0.3, 0.3, 1
-                text_size: self.width, None
-                size_hint_y: None
-                height: self.texture_size[1] + dp(6)
-                halign: 'left'
             ClickableBox:
                 size_hint_y: None
                 height: dp(46)
@@ -1441,7 +1264,6 @@ ScreenManager:
             size_hint_y: None
             height: dp(52)
             padding: dp(6)
-            spacing: dp(6)
             canvas.before:
                 Color:
                     rgba: 0, 0.314, 0.784, 1
@@ -1480,7 +1302,6 @@ ScreenManager:
             size_hint_y: None
             height: dp(52)
             padding: dp(6)
-            spacing: dp(6)
             canvas.before:
                 Color:
                     rgba: 0, 0.314, 0.784, 1
@@ -1520,13 +1341,12 @@ class MainScreen(Screen):
     _current_page = 0
     _total_items = 0
     _is_search = False
-    _data_loaded = False  # Track if data was already loaded
+    _data_loaded = False
 
     def on_enter(self):
         if not self._data_loaded:
             Clock.schedule_once(lambda dt: self.refresh_list(), 0.2)
         else:
-            # Coming back from detail - just re-render same page, no data reload
             self._render_page()
 
     def switch_tab(self, tab):
@@ -1534,21 +1354,15 @@ class MainScreen(Screen):
         self._current_page = 0
         self._is_search = False
         self._data_loaded = False
-        try:
-            self.ids.search_bar.ids.search_input.text = ""
-        except Exception:
-            pass
+        try: self.ids.search_bar.ids.search_input.text = ""
+        except: pass
         self.refresh_list()
 
     def refresh_list(self):
         app = App.get_running_app()
-        if not app.db:
-            return
+        if not app.db: return
         self._current_page = 0
-        if self.current_tab == "phones":
-            self._all_items = app.db.get_all_phones()
-        else:
-            self._all_items = app.db.get_all_spare_parts()
+        self._all_items = app.db.get_all_phones() if self.current_tab == "phones" else app.db.get_all_spare_parts()
         self._total_items = len(self._all_items)
         self._is_search = False
         self._data_loaded = True
@@ -1561,114 +1375,70 @@ class MainScreen(Screen):
             self.refresh_list()
             return
         self._current_page = 0
-        if self.current_tab == "phones":
-            self._all_items = app.db.search_phones(text)
-        else:
-            self._all_items = app.db.search_spare_parts(text)
+        self._all_items = app.db.search_phones(text) if self.current_tab == "phones" else app.db.search_spare_parts(text)
         self._total_items = len(self._all_items)
         self._is_search = True
         self._data_loaded = True
         self._render_page()
 
-    def _make_pager_btn(self, text, callback):
-        b = ClickableBox(padding=(dp(6), dp(3)), size_hint_x=None, width=dp(52))
+    def _pgbtn(self, text, cb):
+        b = ClickableBox(padding=(dp(6), dp(3)), size_hint_x=None, width=dp(50))
         with b.canvas.before:
             Color(0, 0.314, 0.784, 1)
             b._bg = RoundedRectangle(pos=b.pos, size=b.size, radius=[dp(6)])
         b.bind(pos=lambda w, v: setattr(w._bg, "pos", v), size=lambda w, v: setattr(w._bg, "size", v))
         b.add_widget(Label(text=text, color=(1,1,1,1), font_size=sp(11), bold=True))
-        b.bind(on_release=callback)
+        b.bind(on_release=cb)
         return b
 
     def _render_page(self):
+        app = App.get_running_app()
         grid = self.ids.content_list
         grid.clear_widgets()
         start = self._current_page * PAGE_SIZE
         end = min(start + PAGE_SIZE, self._total_items)
-        page_items = self._all_items[start:end]
-        total_pages = max(1, (self._total_items + PAGE_SIZE - 1) // PAGE_SIZE)
-        cur_pg = self._current_page + 1
-        lbl_type = "found" if self._is_search else ("phones" if self.current_tab == "phones" else "parts")
-        self.ids.count_label.text = f"{self._total_items} {lbl_type} | Page {cur_pg}/{total_pages}"
-
-        app = App.get_running_app()
-        default_img = get_default_image()
+        items = self._all_items[start:end]
+        tp = max(1, (self._total_items + PAGE_SIZE - 1) // PAGE_SIZE)
+        cp = self._current_page + 1
+        lt = "found" if self._is_search else ("phones" if self.current_tab == "phones" else "parts")
+        self.ids.count_label.text = f"{self._total_items} {lt} | {cp}/{tp}"
+        dtex = get_default_texture()
 
         if self.current_tab == "phones":
-            for p in page_items:
-                has_img = p.get("has_image", 0)
-                img = get_image_for_item("phone", p["id"], app.db) if has_img else default_img
-                card = PhoneCard(
-                    phone_id=p["id"], phone_name=p["name"],
-                    phone_date=p.get("release_date", "") or "",
-                    phone_image=img,
-                    phone_appear=p.get("appearance_condition", "") or "",
-                    phone_working=p.get("working_condition", "") or "",
-                )
+            for p in items:
+                card = PhoneCard(phone_id=p["id"], phone_name=p["name"],
+                    phone_date=p.get("release_date","") or "",
+                    phone_appear=p.get("appearance_condition","") or "",
+                    phone_working=p.get("working_condition","") or "")
+                tex = get_texture_for_phone(p["id"], app.db) if p.get("has_image") else dtex
+                if tex: card.ids.card_img.texture = tex
                 card.bind(on_release=partial(self._open_phone, p["id"]))
                 grid.add_widget(card)
         else:
-            for s in page_items:
-                has_img = s.get("has_image", 0)
-                img = get_image_for_item("spare", s["id"], app.db) if has_img else default_img
-                card = SpareCard(
-                    spare_id=s["id"], spare_name=s["name"],
-                    spare_desc=s.get("description", "") or "",
-                    spare_image=img,
-                )
+            for s in items:
+                card = SpareCard(spare_id=s["id"], spare_name=s["name"], spare_desc=s.get("description","") or "")
+                tex = get_texture_for_spare(s["id"], app.db) if s.get("has_image") else dtex
+                if tex: card.ids.card_img.texture = tex
                 card.bind(on_release=partial(self._open_spare, s["id"]))
                 grid.add_widget(card)
 
-        # Pagination controls
         if self._total_items > PAGE_SIZE:
-            pager = BoxLayout(size_hint_y=None, height=dp(38), spacing=dp(4), padding=(dp(2), dp(3)))
+            pg = BoxLayout(size_hint_y=None, height=dp(36), spacing=dp(3), padding=(dp(2),dp(2)))
+            if self._current_page > 1: pg.add_widget(self._pgbtn("|<", lambda *a: self._goto(0)))
+            if self._current_page > 0: pg.add_widget(self._pgbtn("< Prev", lambda *a: self._goto(self._current_page-1)))
+            pi = TextInput(text=str(cp), multiline=False, size_hint_x=None, width=dp(40),
+                font_size=sp(11), halign="center", padding=(dp(3),dp(5)), input_filter="int")
+            pi.bind(on_text_validate=lambda w: self._goto(max(0, min(tp-1, int(w.text)-1)) if w.text.isdigit() else 0))
+            pg.add_widget(pi)
+            pg.add_widget(Label(text=f"/{tp}", font_size=sp(11), color=(0.4,0.4,0.4,1), size_hint_x=None, width=dp(30)))
+            if end < self._total_items: pg.add_widget(self._pgbtn("Next >", lambda *a: self._goto(self._current_page+1)))
+            if self._current_page < tp-2: pg.add_widget(self._pgbtn(">|", lambda *a: self._goto(tp-1)))
+            grid.add_widget(pg)
+        try: self.ids.scroll_view.scroll_y = 1
+        except: pass
 
-            # First page
-            if self._current_page > 1:
-                pager.add_widget(self._make_pager_btn("|<", lambda *a: self._go_to_page(0)))
-            # Prev
-            if self._current_page > 0:
-                pager.add_widget(self._make_pager_btn("< Prev", lambda *a: self._go_page(-1)))
-
-            # Page number input
-            pg_box = BoxLayout(spacing=dp(3))
-            pg_input = TextInput(
-                text=str(cur_pg), multiline=False,
-                size_hint_x=None, width=dp(44),
-                font_size=sp(12), halign="center",
-                padding=(dp(4), dp(6)),
-                input_filter="int",
-            )
-            pg_input.bind(on_text_validate=lambda w: self._go_to_page(
-                max(0, min(total_pages - 1, int(w.text) - 1)) if w.text.isdigit() else 0
-            ))
-            pg_box.add_widget(pg_input)
-            pg_box.add_widget(Label(
-                text=f"/ {total_pages}", font_size=sp(12),
-                color=(0.4, 0.4, 0.4, 1), size_hint_x=None, width=dp(36),
-            ))
-            pager.add_widget(pg_box)
-
-            # Next
-            if end < self._total_items:
-                pager.add_widget(self._make_pager_btn("Next >", lambda *a: self._go_page(1)))
-            # Last page
-            if self._current_page < total_pages - 2:
-                pager.add_widget(self._make_pager_btn(">|", lambda *a: self._go_to_page(total_pages - 1)))
-
-            grid.add_widget(pager)
-
-        try:
-            self.ids.scroll_view.scroll_y = 1
-        except Exception:
-            pass
-
-    def _go_page(self, d):
-        self._current_page += d
-        self._render_page()
-
-    def _go_to_page(self, page_num):
-        self._current_page = page_num
+    def _goto(self, p):
+        self._current_page = p
         self._render_page()
 
     def _open_phone(self, pid, *a):
@@ -1687,535 +1457,308 @@ class MainScreen(Screen):
         app = App.get_running_app()
         app.root.transition = SlideTransition(direction="left")
         if self.current_tab == "phones":
-            s = app.root.get_screen("add_phone")
-            s.edit_mode = False
-            s.clear_form()
+            s = app.root.get_screen("add_phone"); s.edit_mode = False; s.clear_form()
             app.root.current = "add_phone"
         else:
-            s = app.root.get_screen("add_spare")
-            s.clear_form()
+            s = app.root.get_screen("add_spare"); s.clear_form()
             app.root.current = "add_spare"
 
     def search_all(self):
         app = App.get_running_app()
-        try:
-            q = self.ids.search_bar.ids.search_input.text
-        except Exception:
-            q = ""
+        try: q = self.ids.search_bar.ids.search_input.text
+        except: q = ""
         app.root.get_screen("search_all").initial_query = q
         app.root.transition = SlideTransition(direction="left")
         app.root.current = "search_all"
 
     def show_menu(self):
-        app = App.get_running_app()
-        popup = ModalView(size_hint=(0.72, None), height=dp(240))
-        content = BoxLayout(orientation="vertical", spacing=dp(2), padding=dp(10))
-        with content.canvas.before:
-            Color(1, 1, 1, 1)
-            content._bg = RoundedRectangle(pos=content.pos, size=content.size, radius=[dp(10)])
-        content.bind(pos=lambda w, v: setattr(w._bg, "pos", v), size=lambda w, v: setattr(w._bg, "size", v))
-        for txt, tgt in [("Export Data", "export_data"), ("Bulk Image Import", "bulk_images"),
-                          ("Backup & Restore", "backup"), ("Storage Report", "report")]:
-            btn = ClickableBox(size_hint_y=None, height=dp(46), padding=(dp(14), dp(8)))
-            btn.add_widget(Label(text=txt, font_size=sp(14), color=(0.1,0.1,0.18,1), text_size=(dp(200), None), halign="left"))
-            btn.bind(on_release=lambda *a, t=tgt, p=popup: (p.dismiss(), self._goto(t)))
-            content.add_widget(btn)
-        popup.add_widget(content)
-        popup.open()
+        popup = ModalView(size_hint=(0.72, None), height=dp(230))
+        c = BoxLayout(orientation="vertical", spacing=dp(2), padding=dp(10))
+        with c.canvas.before:
+            Color(1,1,1,1)
+            c._bg = RoundedRectangle(pos=c.pos, size=c.size, radius=[dp(10)])
+        c.bind(pos=lambda w,v: setattr(w._bg,"pos",v), size=lambda w,v: setattr(w._bg,"size",v))
+        for t, n in [("Export Data","export_data"),("Backup & Restore","backup"),("Storage Report","report")]:
+            b = ClickableBox(size_hint_y=None, height=dp(46), padding=(dp(14),dp(8)))
+            b.add_widget(Label(text=t, font_size=sp(14), color=(0.1,0.1,0.18,1), text_size=(dp(200),None), halign="left"))
+            b.bind(on_release=lambda *a, nm=n, p=popup: (p.dismiss(), self._nav(nm)))
+            c.add_widget(b)
+        popup.add_widget(c); popup.open()
 
-    def _goto(self, name):
+    def _nav(self, n):
         app = App.get_running_app()
-        app.root.transition = SlideTransition(direction="left")
-        app.root.current = name
+        app.root.transition = SlideTransition(direction="left"); app.root.current = n
 
 
 class PhoneDetailScreen(Screen):
-    p_id = StringProperty("")
-    p_name = StringProperty("")
-    p_date = StringProperty("")
-    p_appear = StringProperty("")
-    p_working = StringProperty("")
-    p_remarks = StringProperty("")
-    image_source = StringProperty("")
+    p_id = StringProperty(""); p_name = StringProperty(""); p_date = StringProperty("")
+    p_appear = StringProperty(""); p_working = StringProperty(""); p_remarks = StringProperty("")
 
-    def load_phone(self, phone_id):
+    def load_phone(self, pid):
         app = App.get_running_app()
-        phone = app.db.get_phone(phone_id)
-        if not phone:
-            return
-        self.p_id = phone["id"]
-        self.p_name = phone["name"]
-        self.p_date = phone.get("release_date", "") or ""
-        self.p_appear = phone.get("appearance_condition", "") or ""
-        self.p_working = phone.get("working_condition", "") or ""
-        r = phone.get("remarks", "") or ""
-        self.p_remarks = "" if r == "None" or r == "none" else r
-        self.image_source = get_image_for_item("phone", phone_id, app.db)
-        Clock.schedule_once(lambda dt: self._load_extras(), 0.1)
+        p = app.db.get_phone(pid)
+        if not p: return
+        self.p_id = p["id"]; self.p_name = p["name"]
+        self.p_date = p.get("release_date","") or ""
+        self.p_appear = p.get("appearance_condition","") or ""
+        self.p_working = p.get("working_condition","") or ""
+        r = p.get("remarks","") or ""; self.p_remarks = "" if r in ("None","none") else r
+        tex = get_texture_for_phone(pid, app.db)
+        Clock.schedule_once(lambda dt: self._set_img(tex), 0.1)
+        Clock.schedule_once(lambda dt: self._load_spares(), 0.15)
 
-    def _load_extras(self):
-        self._load_gallery()
-        self._load_spares()
-
-    def _load_gallery(self):
-        grid = self.ids.gallery_grid
-        grid.clear_widgets()
-        imgs = get_gallery_images(self.p_id)
-        if not imgs:
-            grid.add_widget(Label(text="No gallery photos", font_size=sp(12), color=(0.5,0.5,0.5,1), size_hint_y=None, height=dp(24)))
-            return
-        for img_path in imgs:
-            box = BoxLayout(size_hint_y=None, height=dp(100), padding=dp(2))
-            box.add_widget(AsyncImage(source=img_path, allow_stretch=True, keep_ratio=True))
-            grid.add_widget(box)
+    def _set_img(self, tex):
+        try:
+            if tex: self.ids.detail_img.texture = tex
+        except: pass
 
     def _load_spares(self):
         app = App.get_running_app()
-        grid = self.ids.spare_parts_grid
-        grid.clear_widgets()
+        grid = self.ids.spare_parts_grid; grid.clear_widgets()
         spares = app.db.get_spare_parts_for_phone(self.p_name)
+        dtex = get_default_texture()
         if not spares:
             grid.add_widget(Label(text="No spare parts", font_size=sp(12), color=(0.5,0.5,0.5,1), size_hint_y=None, height=dp(24)))
             return
-        default_img = get_default_image()
         for s in spares:
-            has_img = s.get("has_image", 0)
-            img = get_image_for_item("spare", s["id"], app.db) if has_img else default_img
-            card = SpareCard(spare_id=s["id"], spare_name=s["name"],
-                             spare_desc=s.get("description", "") or "",
-                             spare_image=img)
+            card = SpareCard(spare_id=s["id"], spare_name=s["name"], spare_desc=s.get("description","") or "")
+            tex = get_texture_for_spare(s["id"], app.db) if s.get("has_image") else dtex
+            if tex: card.ids.card_img.texture = tex
             card.bind(on_release=partial(self._open_spare, s["id"]))
             grid.add_widget(card)
 
     def _open_spare(self, sid, *a):
         app = App.get_running_app()
         app.root.get_screen("spare_detail").load_spare(sid)
-        app.root.transition = SlideTransition(direction="left")
-        app.root.current = "spare_detail"
+        app.root.transition = SlideTransition(direction="left"); app.root.current = "spare_detail"
 
     def go_back(self):
         app = App.get_running_app()
-        app.root.transition = SlideTransition(direction="right")
-        app.root.current = "main"
+        app.root.transition = SlideTransition(direction="right"); app.root.current = "main"
 
     def edit_phone(self):
         app = App.get_running_app()
-        s = app.root.get_screen("add_phone")
-        s.edit_mode = True
-        s.load_for_edit(self.p_id)
-        app.root.transition = SlideTransition(direction="left")
-        app.root.current = "add_phone"
+        s = app.root.get_screen("add_phone"); s.edit_mode = True; s.load_for_edit(self.p_id)
+        app.root.transition = SlideTransition(direction="left"); app.root.current = "add_phone"
 
     def confirm_delete(self):
         popup = ModalView(size_hint=(0.78, None), height=dp(130))
         c = BoxLayout(orientation="vertical", spacing=dp(10), padding=dp(14))
         with c.canvas.before:
-            Color(1,1,1,1)
-            c._bg = RoundedRectangle(pos=c.pos, size=c.size, radius=[dp(10)])
-        c.bind(pos=lambda w, v: setattr(w._bg, "pos", v), size=lambda w, v: setattr(w._bg, "size", v))
+            Color(1,1,1,1); c._bg = RoundedRectangle(pos=c.pos, size=c.size, radius=[dp(10)])
+        c.bind(pos=lambda w,v: setattr(w._bg,"pos",v), size=lambda w,v: setattr(w._bg,"size",v))
         c.add_widget(Label(text=f"Delete {self.p_name}?", font_size=sp(15), color=(0.1,0.1,0.18,1), size_hint_y=None, height=dp(28)))
         row = BoxLayout(spacing=dp(8), size_hint_y=None, height=dp(40))
-        cb = ClickableBox(padding=(dp(8), dp(5)))
-        cb.add_widget(Label(text="Cancel", font_size=sp(13), color=(0.4,0.4,0.4,1)))
+        cb = ClickableBox(padding=(dp(8),dp(5))); cb.add_widget(Label(text="Cancel", font_size=sp(13), color=(0.4,0.4,0.4,1)))
         cb.bind(on_release=lambda *a: popup.dismiss())
-        db = ClickableBox(padding=(dp(8), dp(5)))
+        db = ClickableBox(padding=(dp(8),dp(5)))
         with db.canvas.before:
-            Color(0.9, 0.22, 0.21, 1)
-            db._bg = RoundedRectangle(pos=db.pos, size=db.size, radius=[dp(7)])
-        db.bind(pos=lambda w, v: setattr(w._bg, "pos", v), size=lambda w, v: setattr(w._bg, "size", v))
+            Color(0.9,0.22,0.21,1); db._bg = RoundedRectangle(pos=db.pos, size=db.size, radius=[dp(7)])
+        db.bind(pos=lambda w,v: setattr(w._bg,"pos",v), size=lambda w,v: setattr(w._bg,"size",v))
         db.add_widget(Label(text="Delete", font_size=sp(13), color=(1,1,1,1), bold=True))
-        db.bind(on_release=lambda *a: self._do_delete(popup))
-        row.add_widget(cb)
-        row.add_widget(db)
-        c.add_widget(row)
-        popup.add_widget(c)
-        popup.open()
-
-    def _do_delete(self, popup):
-        app = App.get_running_app()
-        app.db.delete_phone(self.p_id)
-        app.root.get_screen("main")._data_loaded = False
-        popup.dismiss()
-        self.go_back()
-
-    def change_image(self):
-        app = App.get_running_app()
-        popup = ModalView(size_hint=(0.7, None), height=dp(120))
-        c = BoxLayout(orientation="vertical", spacing=dp(4), padding=dp(10))
-        with c.canvas.before:
-            Color(1,1,1,1)
-            c._bg = RoundedRectangle(pos=c.pos, size=c.size, radius=[dp(10)])
-        c.bind(pos=lambda w, v: setattr(w._bg, "pos", v), size=lambda w, v: setattr(w._bg, "size", v))
-        gb = ClickableBox(size_hint_y=None, height=dp(42), padding=(dp(10), dp(6)))
-        gb.add_widget(Label(text="Pick from Gallery", font_size=sp(14), color=(0.1,0.1,0.18,1)))
-        gb.bind(on_release=lambda *a: (popup.dismiss(), self._pick_image_gallery()))
-        cb = ClickableBox(size_hint_y=None, height=dp(42), padding=(dp(10), dp(6)))
-        cb.add_widget(Label(text="Take Photo", font_size=sp(14), color=(0.1,0.1,0.18,1)))
-        cb.bind(on_release=lambda *a: (popup.dismiss(), self._pick_image_camera()))
-        c.add_widget(gb)
-        c.add_widget(cb)
-        popup.add_widget(c)
-        popup.open()
-
-    def _pick_image_gallery(self):
-        app = App.get_running_app()
-        app.pick_image_for = ("phone", self.p_id)
-        app.open_file_chooser()
-
-    def _pick_image_camera(self):
-        app = App.get_running_app()
-        app.pick_image_for = ("phone", self.p_id)
-        app.take_camera_photo()
-
-    def add_gallery_image(self):
-        app = App.get_running_app()
-        app.pick_image_for = ("phone_gallery", self.p_id)
-        app.open_file_chooser(multiple=True)
+        db.bind(on_release=lambda *a: (App.get_running_app().db.delete_phone(self.p_id),
+            setattr(App.get_running_app().root.get_screen("main"), "_data_loaded", False),
+            popup.dismiss(), self.go_back()))
+        row.add_widget(cb); row.add_widget(db); c.add_widget(row)
+        popup.add_widget(c); popup.open()
 
     def add_spare_for_phone(self):
         app = App.get_running_app()
-        s = app.root.get_screen("add_spare")
-        s.clear_form()
+        s = app.root.get_screen("add_spare"); s.clear_form()
         Clock.schedule_once(lambda dt: self._prefill(s), 0.2)
-        app.root.transition = SlideTransition(direction="left")
-        app.root.current = "add_spare"
+        app.root.transition = SlideTransition(direction="left"); app.root.current = "add_spare"
 
     def _prefill(self, s):
-        try:
-            s.ids.spare_input_name.text = self.p_name
-            s.ids.spare_input_phone_id.text = self.p_id
-        except Exception:
-            pass
+        try: s.ids.spare_input_name.text = self.p_name; s.ids.spare_input_phone_id.text = self.p_id
+        except: pass
 
 
 class SpareDetailScreen(Screen):
-    s_id = NumericProperty(0)
-    s_id_str = StringProperty("")
-    s_name = StringProperty("")
-    s_desc = StringProperty("")
-    s_phone_id = StringProperty("")
-    s_image = StringProperty("")
+    s_id = NumericProperty(0); s_id_str = StringProperty(""); s_name = StringProperty("")
+    s_desc = StringProperty(""); s_phone_id = StringProperty("")
 
-    def load_spare(self, spare_id):
+    def load_spare(self, sid):
         app = App.get_running_app()
-        spare = app.db.get_spare_part(spare_id)
-        if not spare:
-            return
-        self.s_id = spare["id"]
-        self.s_id_str = str(spare["id"])
-        self.s_name = spare["name"]
-        d = spare.get("description", "") or ""
-        self.s_desc = "" if d == "None" else d
-        self.s_phone_id = spare.get("phone_id", "") or ""
-        self.s_image = get_image_for_item("spare", spare_id, app.db)
+        s = app.db.get_spare_part(sid)
+        if not s: return
+        self.s_id = s["id"]; self.s_id_str = str(s["id"]); self.s_name = s["name"]
+        d = s.get("description","") or ""; self.s_desc = "" if d=="None" else d
+        self.s_phone_id = s.get("phone_id","") or ""
+        tex = get_texture_for_spare(sid, app.db)
+        Clock.schedule_once(lambda dt: self._set_img(tex), 0.1)
 
-    def change_image(self):
-        app = App.get_running_app()
-        popup = ModalView(size_hint=(0.7, None), height=dp(120))
-        c = BoxLayout(orientation="vertical", spacing=dp(4), padding=dp(10))
-        with c.canvas.before:
-            Color(1,1,1,1)
-            c._bg = RoundedRectangle(pos=c.pos, size=c.size, radius=[dp(10)])
-        c.bind(pos=lambda w, v: setattr(w._bg, "pos", v), size=lambda w, v: setattr(w._bg, "size", v))
-        gb = ClickableBox(size_hint_y=None, height=dp(42), padding=(dp(10), dp(6)))
-        gb.add_widget(Label(text="Pick from Gallery", font_size=sp(14), color=(0.1,0.1,0.18,1)))
-        gb.bind(on_release=lambda *a: (popup.dismiss(), self._pick_gallery()))
-        cb = ClickableBox(size_hint_y=None, height=dp(42), padding=(dp(10), dp(6)))
-        cb.add_widget(Label(text="Take Photo", font_size=sp(14), color=(0.1,0.1,0.18,1)))
-        cb.bind(on_release=lambda *a: (popup.dismiss(), self._pick_camera()))
-        c.add_widget(gb)
-        c.add_widget(cb)
-        popup.add_widget(c)
-        popup.open()
-
-    def _pick_gallery(self):
-        app = App.get_running_app()
-        app.pick_image_for = ("spare_direct", self.s_id)
-        app.open_file_chooser()
-
-    def _pick_camera(self):
-        app = App.get_running_app()
-        app.pick_image_for = ("spare_direct", self.s_id)
-        app.take_camera_photo()
+    def _set_img(self, tex):
+        try:
+            if tex: self.ids.detail_img.texture = tex
+        except: pass
 
     def confirm_delete(self):
         popup = ModalView(size_hint=(0.78, None), height=dp(130))
         c = BoxLayout(orientation="vertical", spacing=dp(10), padding=dp(14))
         with c.canvas.before:
-            Color(1,1,1,1)
-            c._bg = RoundedRectangle(pos=c.pos, size=c.size, radius=[dp(10)])
-        c.bind(pos=lambda w, v: setattr(w._bg, "pos", v), size=lambda w, v: setattr(w._bg, "size", v))
+            Color(1,1,1,1); c._bg = RoundedRectangle(pos=c.pos, size=c.size, radius=[dp(10)])
+        c.bind(pos=lambda w,v: setattr(w._bg,"pos",v), size=lambda w,v: setattr(w._bg,"size",v))
         c.add_widget(Label(text=f"Delete {self.s_name}?", font_size=sp(15), color=(0.1,0.1,0.18,1), size_hint_y=None, height=dp(28)))
         row = BoxLayout(spacing=dp(8), size_hint_y=None, height=dp(40))
-        cb = ClickableBox(padding=(dp(8), dp(5)))
-        cb.add_widget(Label(text="Cancel", font_size=sp(13)))
+        cb = ClickableBox(padding=(dp(8),dp(5))); cb.add_widget(Label(text="Cancel", font_size=sp(13)))
         cb.bind(on_release=lambda *a: popup.dismiss())
-        db = ClickableBox(padding=(dp(8), dp(5)))
+        db = ClickableBox(padding=(dp(8),dp(5)))
         with db.canvas.before:
-            Color(0.9, 0.22, 0.21, 1)
-            db._bg = RoundedRectangle(pos=db.pos, size=db.size, radius=[dp(7)])
-        db.bind(pos=lambda w, v: setattr(w._bg, "pos", v), size=lambda w, v: setattr(w._bg, "size", v))
+            Color(0.9,0.22,0.21,1); db._bg = RoundedRectangle(pos=db.pos, size=db.size, radius=[dp(7)])
+        db.bind(pos=lambda w,v: setattr(w._bg,"pos",v), size=lambda w,v: setattr(w._bg,"size",v))
         db.add_widget(Label(text="Delete", font_size=sp(13), color=(1,1,1,1), bold=True))
-        db.bind(on_release=lambda *a: self._do_delete(popup))
-        row.add_widget(cb)
-        row.add_widget(db)
-        c.add_widget(row)
-        popup.add_widget(c)
-        popup.open()
-
-    def _do_delete(self, popup):
-        app = App.get_running_app()
-        app.db.delete_spare_part(self.s_id)
-        app.root.get_screen("main")._data_loaded = False
-        popup.dismiss()
-        self.go_back()
+        db.bind(on_release=lambda *a: (App.get_running_app().db.delete_spare_part(self.s_id),
+            setattr(App.get_running_app().root.get_screen("main"), "_data_loaded", False),
+            popup.dismiss(), self.go_back()))
+        row.add_widget(cb); row.add_widget(db); c.add_widget(row)
+        popup.add_widget(c); popup.open()
 
     def go_back(self):
         app = App.get_running_app()
-        app.root.transition = SlideTransition(direction="right")
-        app.root.current = "main"
+        app.root.transition = SlideTransition(direction="right"); app.root.current = "main"
 
 
 class AddPhoneScreen(Screen):
     edit_mode = BooleanProperty(False)
     screen_title = StringProperty("Add Phone")
-    image_preview = StringProperty("")
-    _selected_image = StringProperty("")
+    _image_bytes = None  # Store raw bytes in memory
 
     def on_edit_mode(self, *a):
         self.screen_title = "Edit Phone" if self.edit_mode else "Add Phone"
 
     def clear_form(self):
-        self.image_preview = get_default_image()
-        self._selected_image = ""
+        self._image_bytes = None
         Clock.schedule_once(self._clear, 0.1)
 
     def _clear(self, *a):
         try:
-            for fid in ["input_id", "input_name", "input_date", "input_appear", "input_working", "input_remarks"]:
+            for fid in ["input_id","input_name","input_date","input_appear","input_working","input_remarks"]:
                 self.ids[fid].text = ""
-        except Exception:
-            pass
+            self.ids.preview_img.texture = get_default_texture()
+        except: pass
 
     def load_for_edit(self, pid):
         app = App.get_running_app()
-        phone = app.db.get_phone(pid)
-        if not phone:
-            return
-        self.image_preview = get_image_for_item("phone", pid, app.db)
-        self._selected_image = phone.get("image_path", "") or ""
-        Clock.schedule_once(partial(self._fill, phone), 0.1)
+        p = app.db.get_phone(pid)
+        if not p: return
+        self._image_bytes = app.db.get_phone_image(pid)
+        tex = bytes_to_texture(self._image_bytes) if self._image_bytes else get_default_texture()
+        Clock.schedule_once(partial(self._fill, p, tex), 0.1)
 
-    def _fill(self, phone, *a):
+    def _fill(self, p, tex, *a):
         try:
-            self.ids.input_id.text = phone["id"]
-            self.ids.input_name.text = phone["name"]
-            self.ids.input_date.text = phone.get("release_date", "") or ""
-            self.ids.input_appear.text = phone.get("appearance_condition", "") or ""
-            self.ids.input_working.text = phone.get("working_condition", "") or ""
-            r = phone.get("remarks", "") or ""
-            self.ids.input_remarks.text = "" if r == "None" else r
-        except Exception:
-            pass
+            self.ids.input_id.text = p["id"]; self.ids.input_name.text = p["name"]
+            self.ids.input_date.text = p.get("release_date","") or ""
+            self.ids.input_appear.text = p.get("appearance_condition","") or ""
+            self.ids.input_working.text = p.get("working_condition","") or ""
+            r = p.get("remarks","") or ""; self.ids.input_remarks.text = "" if r in ("None","none") else r
+            if tex: self.ids.preview_img.texture = tex
+        except: pass
 
     def pick_from_gallery(self):
         app = App.get_running_app()
-        app.pick_image_for = ("add_phone_screen", None)
-        app.open_file_chooser()
+        app.pick_image_for = ("add_phone_screen", None); app.open_file_chooser()
 
     def take_photo(self):
         app = App.get_running_app()
-        app.pick_image_for = ("add_phone_screen", None)
-        app.take_camera_photo()
+        app.pick_image_for = ("add_phone_screen", None); app.take_camera_photo()
 
-    def on_image_selected(self, path):
-        self._selected_image = path
-        self.image_preview = ""
-        Clock.schedule_once(lambda dt: setattr(self, "image_preview", path), 0.1)
+    def on_image_selected(self, img_bytes):
+        """Called with raw image bytes."""
+        self._image_bytes = img_bytes
+        tex = bytes_to_texture(img_bytes)
+        if tex:
+            try: self.ids.preview_img.texture = tex
+            except: pass
 
     def save_phone(self):
         app = App.get_running_app()
-        try:
-            pid = self.ids.input_id.text.strip()
-            name = self.ids.input_name.text.strip()
-        except Exception:
-            return
+        try: pid = self.ids.input_id.text.strip(); name = self.ids.input_name.text.strip()
+        except: return
         if not pid or not name:
-            app.show_toast("ID and Name required")
-            return
-        img = self._selected_image
-        if img and not img.startswith(get_phone_images_path()):
-            img = copy_image_to_storage(img, get_phone_images_path())
-        app.db.add_phone(
-            phone_id=pid, name=name,
+            app.show_toast("ID and Name required"); return
+        app.db.add_phone(phone_id=pid, name=name,
             release_date=self.ids.input_date.text.strip(),
             appearance=self.ids.input_appear.text.strip(),
             working=self.ids.input_working.text.strip(),
             remarks=self.ids.input_remarks.text.strip(),
-            image_path=img or "",
-        )
-        app.show_toast("Phone saved!")
-        # Invalidate list cache so it reloads
+            image_bytes=self._image_bytes)
+        invalidate_cache(pid)
         app.root.get_screen("main")._data_loaded = False
-        self.go_back()
+        app.show_toast("Phone saved!"); self.go_back()
 
     def go_back(self):
         app = App.get_running_app()
-        app.root.transition = SlideTransition(direction="right")
-        app.root.current = "main"
+        app.root.transition = SlideTransition(direction="right"); app.root.current = "main"
 
 
 class AddSpareScreen(Screen):
-    image_preview = StringProperty("")
-    _selected_image = StringProperty("")
+    _image_bytes = None
 
     def clear_form(self):
-        self.image_preview = get_default_image()
-        self._selected_image = ""
+        self._image_bytes = None
         Clock.schedule_once(self._clear, 0.1)
 
     def _clear(self, *a):
         try:
-            self.ids.spare_input_name.text = ""
-            self.ids.spare_input_desc.text = ""
+            self.ids.spare_input_name.text = ""; self.ids.spare_input_desc.text = ""
             self.ids.spare_input_phone_id.text = ""
-        except Exception:
-            pass
+            self.ids.preview_img.texture = get_default_texture()
+        except: pass
 
     def pick_from_gallery(self):
         app = App.get_running_app()
-        app.pick_image_for = ("add_spare_screen", None)
-        app.open_file_chooser()
+        app.pick_image_for = ("add_spare_screen", None); app.open_file_chooser()
 
     def take_photo(self):
         app = App.get_running_app()
-        app.pick_image_for = ("add_spare_screen", None)
-        app.take_camera_photo()
+        app.pick_image_for = ("add_spare_screen", None); app.take_camera_photo()
 
-    def on_image_selected(self, path):
-        self._selected_image = path
-        self.image_preview = ""
-        Clock.schedule_once(lambda dt: setattr(self, "image_preview", path), 0.1)
+    def on_image_selected(self, img_bytes):
+        self._image_bytes = img_bytes
+        tex = bytes_to_texture(img_bytes)
+        if tex:
+            try: self.ids.preview_img.texture = tex
+            except: pass
 
     def save_spare(self):
         app = App.get_running_app()
-        try:
-            name = self.ids.spare_input_name.text.strip()
-        except Exception:
-            return
-        if not name:
-            app.show_toast("Name required")
-            return
-        img = self._selected_image
-        if img and not img.startswith(get_spare_images_path()):
-            img = copy_image_to_storage(img, get_spare_images_path())
-        app.db.add_spare_part(
-            name=name,
-            phone_id=self.ids.spare_input_phone_id.text.strip(),
-            image_path=img or "",
-            description=self.ids.spare_input_desc.text.strip(),
-        )
-        app.show_toast("Spare part saved!")
+        try: name = self.ids.spare_input_name.text.strip()
+        except: return
+        if not name: app.show_toast("Name required"); return
+        app.db.add_spare_part(name=name, phone_id=self.ids.spare_input_phone_id.text.strip(),
+            image_bytes=self._image_bytes, description=self.ids.spare_input_desc.text.strip())
         app.root.get_screen("main")._data_loaded = False
-        self.go_back()
+        app.show_toast("Spare part saved!"); self.go_back()
 
     def go_back(self):
         app = App.get_running_app()
-        app.root.transition = SlideTransition(direction="right")
-        app.root.current = "main"
+        app.root.transition = SlideTransition(direction="right"); app.root.current = "main"
 
 
 class ExportScreen(Screen):
     def do_export(self):
         app = App.get_running_app()
         try:
-            out_dir = get_downloads_path()
-            os.makedirs(out_dir, exist_ok=True)
+            od = get_downloads_path(); os.makedirs(od, exist_ok=True)
             ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-            phones_path = os.path.join(out_dir, f"nokia_phones_{ts}.csv")
+            fp = os.path.join(od, f"nokia_phones_{ts}.csv")
             phones = app.db.export_phones()
-            with open(phones_path, "w", newline="", encoding="utf-8") as f:
+            with open(fp, "w", newline="", encoding="utf-8") as f:
                 w = csv.writer(f)
-                w.writerow(["ID", "Name", "Release Date", "Appearance", "Working", "Remarks"])
+                w.writerow(["ID","Name","Release Date","Appearance","Working","Remarks"])
                 for p in phones:
-                    w.writerow([p["id"], p["name"], p.get("release_date", ""),
-                                p.get("appearance_condition", ""), p.get("working_condition", ""),
-                                p.get("remarks", "")])
-            spares_path = os.path.join(out_dir, f"nokia_spares_{ts}.csv")
+                    w.writerow([p["id"],p["name"],p.get("release_date",""),p.get("appearance_condition",""),p.get("working_condition",""),p.get("remarks","")])
+            sp2 = os.path.join(od, f"nokia_spares_{ts}.csv")
             spares = app.db.export_spare_parts()
-            with open(spares_path, "w", newline="", encoding="utf-8") as f:
+            with open(sp2, "w", newline="", encoding="utf-8") as f:
                 w = csv.writer(f)
-                w.writerow(["ID", "Name", "Phone ID", "Description"])
-                for s in spares:
-                    w.writerow([s["id"], s["name"], s.get("phone_id", ""), s.get("description", "")])
-            self.ids.export_status.text = f"Saved to Downloads:\\n{os.path.basename(phones_path)}\\n{os.path.basename(spares_path)}"
-            self.ids.export_status.color = (0.26, 0.63, 0.28, 1)
-            app.show_toast("Exported to Downloads!")
+                w.writerow(["ID","Name","Phone ID","Description"])
+                for s in spares: w.writerow([s["id"],s["name"],s.get("phone_id",""),s.get("description","")])
+            self.ids.export_status.text = f"Saved to Downloads!"; self.ids.export_status.color = (0.26,0.63,0.28,1)
+            app.show_toast("Exported!")
         except Exception as e:
-            self.ids.export_status.text = f"Error: {str(e)[:80]}"
-            self.ids.export_status.color = (0.9, 0.22, 0.21, 1)
-
-    def go_back(self):
-        App.get_running_app().root.transition = SlideTransition(direction="right")
-        App.get_running_app().root.current = "main"
-
-
-class BulkImageScreen(Screen):
-    target_type = StringProperty("phones")
-
-    def set_target(self, t):
-        self.target_type = t
-
-    def select_images(self):
-        app = App.get_running_app()
-        app.pick_image_for = ("bulk_images", self.target_type)
-        app.open_file_chooser(multiple=True)
-
-    def on_images_selected(self, paths):
-        grid = self.ids.bulk_grid
-        grid.clear_widgets()
-        self.ids.bulk_status.text = f"{len(paths)} images selected"
-        for path in paths:
-            row = BoxLayout(orientation="horizontal", size_hint_y=None, height=dp(90), spacing=dp(6), padding=dp(3))
-            row.add_widget(AsyncImage(source=path, size_hint=(None, 1), width=dp(70), allow_stretch=True, keep_ratio=True))
-            form = BoxLayout(orientation="vertical", spacing=dp(3))
-            ni = TextInput(hint_text="Name", multiline=False, size_hint_y=None, height=dp(34), font_size=sp(12))
-            form.add_widget(ni)
-            ii = None
-            if self.target_type == "phones":
-                ii = TextInput(hint_text="Phone ID", multiline=False, size_hint_y=None, height=dp(34), font_size=sp(12))
-                form.add_widget(ii)
-            row.add_widget(form)
-            row._path, row._name_input, row._id_input = path, ni, ii
-            grid.add_widget(row)
-        sb = ClickableBox(size_hint_y=None, height=dp(42), padding=(dp(10), dp(7)))
-        with sb.canvas.before:
-            Color(0, 0.314, 0.784, 1)
-            sb._bg = RoundedRectangle(pos=sb.pos, size=sb.size, radius=[dp(8)])
-        sb.bind(pos=lambda w, v: setattr(w._bg, "pos", v), size=lambda w, v: setattr(w._bg, "size", v))
-        sb.add_widget(Label(text="Save All", color=(1,1,1,1), font_size=sp(14), bold=True))
-        sb.bind(on_release=lambda *a: self._save_all())
-        grid.add_widget(sb)
-
-    def _save_all(self):
-        app = App.get_running_app()
-        count = 0
-        for child in list(self.ids.bulk_grid.children):
-            if not hasattr(child, "_path"):
-                continue
-            name = child._name_input.text.strip()
-            if not name:
-                continue
-            if self.target_type == "phones":
-                pid = child._id_input.text.strip() if child._id_input else f"BULK-{datetime.now().strftime('%H%M%S%f')}"
-                img = copy_image_to_storage(child._path, get_phone_images_path())
-                app.db.add_phone(phone_id=pid or f"BULK-{count}", name=name, image_path=img)
-            else:
-                img = copy_image_to_storage(child._path, get_spare_images_path())
-                app.db.add_spare_part(name=name, image_path=img)
-            count += 1
-        self.ids.bulk_status.text = f"Saved {count} items!"
-        app.show_toast(f"Saved {count}!")
+            self.ids.export_status.text = f"Error: {str(e)[:80]}"; self.ids.export_status.color = (0.9,0.22,0.21,1)
 
     def go_back(self):
         App.get_running_app().root.transition = SlideTransition(direction="right")
@@ -2226,46 +1769,31 @@ class BackupScreen(Screen):
     def create_backup(self):
         app = App.get_running_app()
         try:
-            out_dir = get_downloads_path()
-            os.makedirs(out_dir, exist_ok=True)
-            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-            bf = os.path.join(out_dir, f"nokia_backup_{ts}.zip")
+            od = get_downloads_path(); os.makedirs(od, exist_ok=True)
+            bf = os.path.join(od, f"nokia_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip")
             with zipfile.ZipFile(bf, "w", zipfile.ZIP_DEFLATED) as zf:
-                dp_ = get_db_path()
-                if os.path.exists(dp_):
-                    zf.write(dp_, "nokia_storage.db")
-                idir = get_images_path()
-                if os.path.exists(idir):
-                    for rd, ds, fs in os.walk(idir):
-                        for f in fs:
-                            fp = os.path.join(rd, f)
-                            zf.write(fp, os.path.relpath(fp, get_app_path()))
-            self.ids.backup_status.text = f"Backup saved to Downloads:\\n{os.path.basename(bf)}"
-            self.ids.backup_status.color = (0.26, 0.63, 0.28, 1)
-            app.show_toast("Backup created in Downloads!")
+                dbp = get_db_path()
+                if os.path.exists(dbp): zf.write(dbp, "nokia_storage.db")
+            self.ids.backup_status.text = f"Saved to Downloads!"; self.ids.backup_status.color = (0.26,0.63,0.28,1)
+            app.show_toast("Backup created!")
         except Exception as e:
-            self.ids.backup_status.text = f"Error: {str(e)[:80]}"
-            self.ids.backup_status.color = (0.9, 0.22, 0.21, 1)
+            self.ids.backup_status.text = f"Error: {str(e)[:80]}"; self.ids.backup_status.color = (0.9,0.22,0.21,1)
 
     def restore_backup(self):
         app = App.get_running_app()
-        app.pick_image_for = ("restore_backup", None)
-        app.open_file_chooser(filters=["*.zip"])
+        app.pick_image_for = ("restore_backup", None); app.open_file_chooser(filters=["*.zip"])
 
     def on_backup_selected(self, path):
         app = App.get_running_app()
         try:
             app.db.close()
-            with zipfile.ZipFile(path, "r") as zf:
-                zf.extractall(get_app_path())
+            with zipfile.ZipFile(path, "r") as zf: zf.extractall(get_app_path())
             app.db = NokiaDatabase(get_db_path())
-            self.ids.backup_status.text = "Restore complete!"
-            self.ids.backup_status.color = (0.26, 0.63, 0.28, 1)
-            app.show_toast("Restored!")
+            _TEXTURE_CACHE.clear()
+            self.ids.backup_status.text = "Restored!"; app.show_toast("Restored!")
         except Exception as e:
             app.db = NokiaDatabase(get_db_path())
             self.ids.backup_status.text = f"Error: {str(e)[:80]}"
-            self.ids.backup_status.color = (0.9, 0.22, 0.21, 1)
 
     def go_back(self):
         App.get_running_app().root.transition = SlideTransition(direction="right")
@@ -2274,63 +1802,47 @@ class BackupScreen(Screen):
 
 class SearchAllScreen(Screen):
     initial_query = StringProperty("")
-
     def on_enter(self):
-        if self.initial_query:
-            Clock.schedule_once(self._set_q, 0.1)
-
-    def _set_q(self, *a):
-        try:
-            self.ids.search_all_bar.ids.search_input.text = self.initial_query
-        except Exception:
-            pass
+        if self.initial_query: Clock.schedule_once(self._sq, 0.1)
+    def _sq(self, *a):
+        try: self.ids.search_all_bar.ids.search_input.text = self.initial_query
+        except: pass
         self.do_search(self.initial_query)
 
     def do_search(self, text):
         app = App.get_running_app()
-        grid = self.ids.results_list
-        grid.clear_widgets()
+        grid = self.ids.results_list; grid.clear_widgets()
         if not text.strip():
             grid.add_widget(Label(text="Type and press Enter", font_size=sp(13), color=(0.5,0.5,0.5,1), size_hint_y=None, height=dp(36)))
             return
         phones, spares = app.db.search_all(text)
-        default_img = get_default_image()
+        dtex = get_default_texture()
         if phones:
-            shown = phones[:PAGE_SIZE]
-            grid.add_widget(Label(text=f"Phones ({len(phones)})", font_size=sp(14), bold=True, color=(0,0.314,0.784,1), size_hint_y=None, height=dp(26), text_size=(dp(300), None), halign="left"))
-            for p in shown:
-                has_img = p.get("has_image", 0)
-                img = get_image_for_item("phone", p["id"], app.db) if has_img else default_img
-                card = PhoneCard(phone_id=p["id"], phone_name=p["name"],
-                                 phone_date=p.get("release_date","") or "", phone_image=img,
-                                 phone_appear=p.get("appearance_condition","") or "",
-                                 phone_working=p.get("working_condition","") or "")
-                card.bind(on_release=partial(self._open_phone, p["id"]))
-                grid.add_widget(card)
+            grid.add_widget(Label(text=f"Phones ({len(phones)})", font_size=sp(14), bold=True, color=(0,0.314,0.784,1), size_hint_y=None, height=dp(26), text_size=(dp(300),None), halign="left"))
+            for p in phones[:PAGE_SIZE]:
+                card = PhoneCard(phone_id=p["id"], phone_name=p["name"], phone_date=p.get("release_date","") or "",
+                    phone_appear=p.get("appearance_condition","") or "", phone_working=p.get("working_condition","") or "")
+                tex = get_texture_for_phone(p["id"], app.db) if p.get("has_image") else dtex
+                if tex: card.ids.card_img.texture = tex
+                card.bind(on_release=partial(self._op, p["id"])); grid.add_widget(card)
         if spares:
-            shown_s = spares[:PAGE_SIZE]
-            grid.add_widget(Label(text=f"Spare Parts ({len(spares)})", font_size=sp(14), bold=True, color=(0,0.314,0.784,1), size_hint_y=None, height=dp(26), text_size=(dp(300), None), halign="left"))
-            for s in shown_s:
-                has_img = s.get("has_image", 0)
-                img = get_image_for_item("spare", s["id"], app.db) if has_img else default_img
-                card = SpareCard(spare_id=s["id"], spare_name=s["name"], spare_desc=s.get("description","") or "", spare_image=img)
-                card.bind(on_release=partial(self._open_spare, s["id"]))
-                grid.add_widget(card)
+            grid.add_widget(Label(text=f"Spare Parts ({len(spares)})", font_size=sp(14), bold=True, color=(0,0.314,0.784,1), size_hint_y=None, height=dp(26), text_size=(dp(300),None), halign="left"))
+            for s in spares[:PAGE_SIZE]:
+                card = SpareCard(spare_id=s["id"], spare_name=s["name"], spare_desc=s.get("description","") or "")
+                tex = get_texture_for_spare(s["id"], app.db) if s.get("has_image") else dtex
+                if tex: card.ids.card_img.texture = tex
+                card.bind(on_release=partial(self._os, s["id"])); grid.add_widget(card)
         if not phones and not spares:
             grid.add_widget(Label(text="No results", font_size=sp(13), color=(0.5,0.5,0.5,1), size_hint_y=None, height=dp(36)))
 
-    def _open_phone(self, pid, *a):
+    def _op(self, pid, *a):
         app = App.get_running_app()
         app.root.get_screen("phone_detail").load_phone(pid)
-        app.root.transition = SlideTransition(direction="left")
-        app.root.current = "phone_detail"
-
-    def _open_spare(self, sid, *a):
+        app.root.transition = SlideTransition(direction="left"); app.root.current = "phone_detail"
+    def _os(self, sid, *a):
         app = App.get_running_app()
         app.root.get_screen("spare_detail").load_spare(sid)
-        app.root.transition = SlideTransition(direction="left")
-        app.root.current = "spare_detail"
-
+        app.root.transition = SlideTransition(direction="left"); app.root.current = "spare_detail"
     def go_back(self):
         App.get_running_app().root.transition = SlideTransition(direction="right")
         App.get_running_app().root.current = "main"
@@ -2338,63 +1850,35 @@ class SearchAllScreen(Screen):
 
 class ReportScreen(Screen):
     def on_enter(self):
-        Clock.schedule_once(lambda dt: self._load_report(), 0.2)
-
-    def _load_report(self):
+        Clock.schedule_once(lambda dt: self._load(), 0.2)
+    def _load(self):
         app = App.get_running_app()
-        grid = self.ids.report_grid
-        grid.clear_widgets()
-        try:
-            r = app.db.get_report()
-        except Exception:
-            grid.add_widget(Label(text="Error loading report", font_size=sp(14), color=(0.9,0.2,0.2,1), size_hint_y=None, height=dp(30)))
-            return
-
-        def section(title):
-            grid.add_widget(Label(text=title, font_size=sp(16), bold=True, color=(0,0.314,0.784,1), size_hint_y=None, height=dp(30), text_size=(dp(300), None), halign="left"))
-
-        def stat(label, value):
-            row = BoxLayout(size_hint_y=None, height=dp(26), padding=(dp(8), dp(2)))
-            row.add_widget(Label(text=label, font_size=sp(13), color=(0.3,0.3,0.3,1), text_size=(dp(220), None), halign="left"))
-            row.add_widget(Label(text=str(value), font_size=sp(13), bold=True, color=(0.1,0.1,0.18,1), size_hint_x=None, width=dp(60), halign="right", text_size=(dp(60), None)))
-            grid.add_widget(row)
-
-        # Overview
-        section("Overview")
-        box = BoxLayout(orientation="vertical", size_hint_y=None, padding=dp(12), spacing=dp(6))
-        box.height = dp(120)
-        with box.canvas.before:
-            Color(1,1,1,1)
-            box._bg = RoundedRectangle(pos=box.pos, size=box.size, radius=[dp(10)])
-        box.bind(pos=lambda w, v: setattr(w._bg, "pos", v), size=lambda w, v: setattr(w._bg, "size", v))
-        box.add_widget(Label(text=f"Total Phones: {r['total_phones']}", font_size=sp(16), bold=True, color=(0.1,0.1,0.18,1), size_hint_y=None, height=dp(24), text_size=(dp(280), None), halign="left"))
-        box.add_widget(Label(text=f"Unique Models: {r['unique_models']}", font_size=sp(14), color=(0.3,0.3,0.3,1), size_hint_y=None, height=dp(22), text_size=(dp(280), None), halign="left"))
-        box.add_widget(Label(text=f"With Images: {r['phones_with_images']}", font_size=sp(14), color=(0.3,0.3,0.3,1), size_hint_y=None, height=dp(22), text_size=(dp(280), None), halign="left"))
-        box.add_widget(Label(text=f"Total Spare Parts: {r['total_spares']}", font_size=sp(14), color=(0.3,0.3,0.3,1), size_hint_y=None, height=dp(22), text_size=(dp(280), None), halign="left"))
-        grid.add_widget(box)
-
-        # By working condition
-        section("By Working Condition")
-        for name, cnt in r.get("by_working", []):
-            stat(name, cnt)
-
-        # By appearance
-        section("By Appearance")
-        for name, cnt in r.get("by_appearance", []):
-            stat(name, cnt)
-
-        # Top models
-        section("Top 20 Models (by count)")
-        for name, cnt in r.get("by_model", []):
-            stat(name, cnt)
-
-        # By year
-        section("By Release Year")
-        for name, cnt in r.get("by_year", []):
-            stat(str(name), cnt)
-
-        grid.add_widget(Widget(size_hint_y=None, height=dp(30)))
-
+        g = self.ids.report_grid; g.clear_widgets()
+        try: r = app.db.get_report()
+        except: g.add_widget(Label(text="Error", size_hint_y=None, height=dp(30))); return
+        def sec(t):
+            g.add_widget(Label(text=t, font_size=sp(16), bold=True, color=(0,0.314,0.784,1), size_hint_y=None, height=dp(30), text_size=(dp(300),None), halign="left"))
+        def st(l, v):
+            row = BoxLayout(size_hint_y=None, height=dp(24), padding=(dp(8),dp(1)))
+            row.add_widget(Label(text=l, font_size=sp(12), color=(0.3,0.3,0.3,1), text_size=(dp(220),None), halign="left"))
+            row.add_widget(Label(text=str(v), font_size=sp(12), bold=True, color=(0.1,0.1,0.18,1), size_hint_x=None, width=dp(50), halign="right", text_size=(dp(50),None)))
+            g.add_widget(row)
+        sec("Overview")
+        bx = BoxLayout(orientation="vertical", size_hint_y=None, height=dp(100), padding=dp(12), spacing=dp(4))
+        with bx.canvas.before:
+            Color(1,1,1,1); bx._bg = RoundedRectangle(pos=bx.pos, size=bx.size, radius=[dp(10)])
+        bx.bind(pos=lambda w,v: setattr(w._bg,"pos",v), size=lambda w,v: setattr(w._bg,"size",v))
+        for t in [f"Total Phones: {r['total_phones']}", f"Unique Models: {r['unique_models']}",
+                  f"With Images: {r['phones_with_images']}", f"Total Spare Parts: {r['total_spares']}"]:
+            bx.add_widget(Label(text=t, font_size=sp(14), color=(0.1,0.1,0.18,1), size_hint_y=None, height=dp(20), text_size=(dp(280),None), halign="left"))
+        g.add_widget(bx)
+        sec("By Working Condition")
+        for n, c in r.get("by_working",[]): st(n, c)
+        sec("By Appearance")
+        for n, c in r.get("by_appearance",[]): st(n, c)
+        sec("Top 20 Models")
+        for n, c in r.get("by_model",[]): st(n, c)
+        g.add_widget(Widget(size_hint_y=None, height=dp(30)))
     def go_back(self):
         App.get_running_app().root.transition = SlideTransition(direction="right")
         App.get_running_app().root.current = "main"
@@ -2406,159 +1890,99 @@ class NokiaStorageApp(App):
     title = "Nokia Storage"
     db = ObjectProperty(None, allownone=True)
     pick_image_for = None
-    _last_back_time = 0
+    _last_back = 0
 
     def build(self):
         Window.clearcolor = (0.94, 0.96, 1, 1)
-        try:
-            self.db = NokiaDatabase(get_db_path())
-        except Exception as e:
-            print(f"DB Error: {e}")
-        try:
-            get_default_image()
-        except Exception:
-            pass
+        try: self.db = NokiaDatabase(get_db_path())
+        except Exception as e: print(f"DB: {e}")
         if platform == "android":
-            Clock.schedule_once(lambda dt: self._request_perms(), 1)
-        self._load_initial_data()
-        Window.bind(on_keyboard=self._on_keyboard)
+            Clock.schedule_once(lambda dt: self._perms(), 1)
+        self._load_initial()
+        Window.bind(on_keyboard=self._kb)
         return Builder.load_string(KV)
 
-    def _on_keyboard(self, window, key, *args):
-        if key == 27:  # Back / ESC
+    def _kb(self, win, key, *a):
+        if key == 27:
             if self.root and self.root.current != "main":
-                self.root.transition = SlideTransition(direction="right")
-                self.root.current = "main"
+                self.root.transition = SlideTransition(direction="right"); self.root.current = "main"
                 return True
-            # Double press to exit
             now = time.time()
-            if now - self._last_back_time < 2:
-                return False  # Exit
-            self._last_back_time = now
-            self.show_toast("Press back again to exit")
-            return True
+            if now - self._last_back < 2: return False
+            self._last_back = now; self.show_toast("Press back again to exit"); return True
         return False
 
-    def _request_perms(self):
+    def _perms(self):
         if platform == "android":
-            try:
-                request_permissions([Permission.CAMERA, Permission.READ_EXTERNAL_STORAGE, Permission.WRITE_EXTERNAL_STORAGE])
-            except Exception:
-                pass
+            try: request_permissions([Permission.CAMERA, Permission.READ_EXTERNAL_STORAGE, Permission.WRITE_EXTERNAL_STORAGE])
+            except: pass
 
-    def _load_initial_data(self):
-        if not self.db or self.db.get_phone_count() > 0:
-            return
+    def _load_initial(self):
+        if not self.db or self.db.get_phone_count() > 0: return
         try:
-            jp = os.path.join(os.path.dirname(os.path.abspath(__file__)), "initial_data.json")
-            if not os.path.exists(jp):
-                jp = os.path.join(get_app_path(), "initial_data.json")
-            if not os.path.exists(jp):
-                return
-            with open(jp, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            rows = []
-            for item in data:
-                code, model, year, appear, cond, comment = item
-                rows.append({"id": str(code), "name": str(model), "release_date": str(year),
-                             "appearance_condition": str(appear), "working_condition": str(cond),
-                             "remarks": str(comment) if comment else ""})
-            self.db.import_phones_from_rows(rows)
-        except Exception as e:
-            print(f"Initial data error: {e}")
+            for jp in [os.path.join(os.path.dirname(os.path.abspath(__file__)), "initial_data.json"),
+                       os.path.join(get_app_path(), "initial_data.json")]:
+                if os.path.exists(jp):
+                    with open(jp, "r", encoding="utf-8") as f: data = json.load(f)
+                    rows = [{"id":str(i[0]),"name":str(i[1]),"release_date":str(i[2]),
+                             "appearance_condition":str(i[3]),"working_condition":str(i[4]),
+                             "remarks":str(i[5]) if i[5] else ""} for i in data]
+                    self.db.import_phones_from_rows(rows); break
+        except Exception as e: print(f"Init: {e}")
 
     def show_toast(self, text):
         try:
-            popup = ModalView(size_hint=(0.8, None), height=dp(46), background_color=(0,0,0,0), pos_hint={"center_x": 0.5, "y": 0.05})
-            box = BoxLayout(padding=dp(10))
-            with box.canvas.before:
-                Color(0.15, 0.15, 0.15, 0.92)
-                box._bg = RoundedRectangle(pos=box.pos, size=box.size, radius=[dp(8)])
-            box.bind(pos=lambda w, v: setattr(w._bg, "pos", v), size=lambda w, v: setattr(w._bg, "size", v))
-            box.add_widget(Label(text=text, color=(1,1,1,1), font_size=sp(13)))
-            popup.add_widget(box)
-            popup.open()
-            Clock.schedule_once(lambda dt: popup.dismiss(), 2)
-        except Exception:
-            pass
+            p = ModalView(size_hint=(0.8,None), height=dp(46), background_color=(0,0,0,0), pos_hint={"center_x":0.5,"y":0.05})
+            bx = BoxLayout(padding=dp(10))
+            with bx.canvas.before:
+                Color(0.15,0.15,0.15,0.92); bx._bg = RoundedRectangle(pos=bx.pos, size=bx.size, radius=[dp(8)])
+            bx.bind(pos=lambda w,v: setattr(w._bg,"pos",v), size=lambda w,v: setattr(w._bg,"size",v))
+            bx.add_widget(Label(text=text, color=(1,1,1,1), font_size=sp(13)))
+            p.add_widget(bx); p.open(); Clock.schedule_once(lambda dt: p.dismiss(), 2)
+        except: pass
 
     def open_file_chooser(self, filters=None, multiple=False):
-        if platform == "android":
-            self._android_chooser(filters, multiple)
-        else:
-            self._desktop_chooser(filters, multiple)
+        if platform == "android": self._ac(filters, multiple)
+        else: self._dc(filters, multiple)
 
-    def _desktop_chooser(self, filters=None, multiple=False):
+    def _dc(self, filters=None, multiple=False):
         from kivy.uix.filechooser import FileChooserListView
-        fc = FileChooserListView(filters=filters or ["*.png","*.jpg","*.jpeg","*.bmp"], path=os.path.expanduser("~"), multiselect=multiple or False)
-        content = BoxLayout(orientation="vertical", spacing=dp(6))
-        content.add_widget(fc)
+        fc = FileChooserListView(filters=filters or ["*.png","*.jpg","*.jpeg"], path=os.path.expanduser("~"), multiselect=multiple or False)
+        c = BoxLayout(orientation="vertical", spacing=dp(6)); c.add_widget(fc)
         row = BoxLayout(size_hint_y=None, height=dp(40), spacing=dp(6))
-        popup = Popup(title="Select File", content=content, size_hint=(0.95, 0.85))
-        cb = ClickableBox(padding=(dp(6), dp(4)))
-        cb.add_widget(Label(text="Cancel", font_size=sp(13)))
+        popup = Popup(title="Select File", content=c, size_hint=(0.95, 0.85))
+        cb = ClickableBox(padding=(dp(6),dp(4))); cb.add_widget(Label(text="Cancel", font_size=sp(13)))
         cb.bind(on_release=lambda *a: popup.dismiss())
-        sb = ClickableBox(padding=(dp(6), dp(4)))
-        sb.add_widget(Label(text="Select", font_size=sp(13), bold=True))
-        sb.bind(on_release=lambda *a: self._on_file_selected(fc.selection, popup))
-        row.add_widget(cb)
-        row.add_widget(sb)
-        content.add_widget(row)
-        popup.open()
+        sb = ClickableBox(padding=(dp(6),dp(4))); sb.add_widget(Label(text="Select", font_size=sp(13), bold=True))
+        sb.bind(on_release=lambda *a: self._fsel(fc.selection, popup))
+        row.add_widget(cb); row.add_widget(sb); c.add_widget(row); popup.open()
 
-    def _android_chooser(self, filters=None, multiple=False):
+    def _ac(self, filters=None, multiple=False):
         try:
             from plyer import filechooser
             mime = ["image/*"]
-            if filters:
-                if "*.zip" in filters:
-                    mime = ["application/zip"]
-            filechooser.open_file(on_selection=lambda s: self._on_file_selected(s), multiple=multiple, filters=mime)
-        except Exception as e:
-            self.show_toast(f"File picker: {str(e)[:50]}")
+            if filters and "*.zip" in filters: mime = ["application/zip"]
+            filechooser.open_file(on_selection=lambda s: self._fsel(s), multiple=multiple, filters=mime)
+        except Exception as e: self.show_toast(f"Picker: {str(e)[:50]}")
 
-    def _on_file_selected(self, selection, popup=None):
-        if popup:
-            popup.dismiss()
-        if not selection or not self.pick_image_for:
-            return
-        tt, td = self.pick_image_for
-        self.pick_image_for = None
+    def _fsel(self, sel, popup=None):
+        if popup: popup.dismiss()
+        if not sel or not self.pick_image_for: return
+        tt, td = self.pick_image_for; self.pick_image_for = None
 
-        if tt == "add_phone_screen":
-            self.root.get_screen("add_phone").on_image_selected(selection[0])
-        elif tt == "add_spare_screen":
-            self.root.get_screen("add_spare").on_image_selected(selection[0])
-        elif tt == "phone":
-            self.db.update_phone(td, image_path=selection[0])
-            invalidate_image_cache("phone", td)
-            new_img = get_image_for_item("phone", td, self.db)
-            d = self.root.get_screen("phone_detail")
-            d.image_source = ""
-            Clock.schedule_once(lambda dt: setattr(d, "image_source", new_img), 0.15)
-            self.show_toast("Image updated!")
-        elif tt == "phone_gallery":
-            gdir = get_phone_gallery_path(td)
-            count = 0
-            for s in selection:
-                r = copy_image_to_storage(s, gdir)
-                if r:
-                    count += 1
-            self.show_toast(f"Added {count} gallery photos!")
-            d = self.root.get_screen("phone_detail")
-            Clock.schedule_once(lambda dt: d._load_gallery(), 0.3)
-        elif tt == "spare_direct":
-            self.db.update_spare_part(td, image_path=selection[0])
-            invalidate_image_cache("spare", td)
-            new_img = get_image_for_item("spare", td, self.db)
-            d = self.root.get_screen("spare_detail")
-            d.s_image = ""
-            Clock.schedule_once(lambda dt: setattr(d, "s_image", new_img), 0.15)
-            self.show_toast("Image updated!")
+        if tt in ("add_phone_screen", "add_spare_screen"):
+            # Read bytes immediately
+            img_bytes = read_file_bytes(sel[0])
+            if img_bytes:
+                img_bytes = NokiaDatabase.make_thumbnail(img_bytes, 400)
+            screen_name = "add_phone" if tt == "add_phone_screen" else "add_spare"
+            s = self.root.get_screen(screen_name)
+            if img_bytes:
+                s.on_image_selected(img_bytes)
+            else:
+                self.show_toast("Could not read image")
         elif tt == "restore_backup":
-            self.root.get_screen("backup").on_backup_selected(selection[0])
-        elif tt == "bulk_images":
-            self.root.get_screen("bulk_images").on_images_selected(selection)
+            self.root.get_screen("backup").on_backup_selected(sel[0])
 
     def take_camera_photo(self):
         if platform == "android":
@@ -2569,17 +1993,13 @@ class NokiaStorageApp(App):
                 PythonActivity = autoclass("org.kivy.android.PythonActivity")
                 intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
                 PythonActivity.mActivity.startActivityForResult(intent, 1002)
-            except Exception as e:
-                self.show_toast(f"Camera: {str(e)[:50]}")
-        else:
-            self.show_toast("Camera on Android only")
+            except Exception as e: self.show_toast(f"Camera: {str(e)[:50]}")
+        else: self.show_toast("Camera on Android only")
 
     def on_stop(self):
         if self.db:
-            try:
-                self.db.close()
-            except Exception:
-                pass
+            try: self.db.close()
+            except: pass
 
 
 if __name__ == "__main__":
