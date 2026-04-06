@@ -43,10 +43,22 @@ jobs:
 
       - name: Build debug APK
         run: |
-          cd $GITHUB_WORKSPACE
-          buildozer android debug
+          buildozer android debug 2>&1 | tee build_full.log
+          echo "BUILD_EXIT=$?" >> $GITHUB_ENV
+
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build_full.log
+
+      - name: Show last 100 lines on failure
+        if: failure()
+        run: tail -100 build_full.log
 
       - name: Upload APK artifact
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: nokia-storage-apk
