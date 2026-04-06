@@ -41,8 +41,32 @@ jobs:
           pip install --upgrade pip
           pip install buildozer==1.5.0 cython==0.29.36
 
-      - name: Build debug APK
+      - name: Build debug APK (attempt 1)
+        id: build1
+        continue-on-error: true
         run: |
+          set -o pipefail
+          buildozer android debug 2>&1 | tee build.log
+        shell: bash
+
+      - name: Retry build if failed (attempt 2)
+        id: build2
+        if: steps.build1.outcome == 'failure'
+        continue-on-error: true
+        run: |
+          echo "First attempt failed, retrying..."
+          sleep 30
+          set -o pipefail
+          buildozer android debug 2>&1 | tee build.log
+        shell: bash
+
+      - name: Retry build if failed (attempt 3)
+        id: build3
+        if: steps.build1.outcome == 'failure' && steps.build2.outcome == 'failure'
+        run: |
+          echo "Second attempt failed, retrying with clean..."
+          sleep 60
+          rm -rf .buildozer/android/platform/build-arm64-v8a/build/bootstrap_builds/sdl2/jni/SDL2_image/external/libjxl || true
           set -o pipefail
           buildozer android debug 2>&1 | tee build.log
         shell: bash
@@ -57,13 +81,13 @@ jobs:
       - name: Show error on failure
         if: failure()
         run: |
-          echo "=== LAST 150 LINES ==="
-          tail -150 build.log
-          echo "=== GREP ERRORS ==="
-          grep -i "error\|fatal\|failed\|exception" build.log | tail -30 || true
+          echo "=== LAST 100 LINES ==="
+          tail -100 build.log
+          echo "=== ERRORS ==="
+          grep -i "error\|fatal\|failed" build.log | grep -v "^#" | tail -20 || true
 
       - name: Upload APK
-        if: success()
+        if: steps.build1.outcome == 'success' || steps.build2.outcome == 'success' || steps.build3.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: nokia-storage-apk
