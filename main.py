@@ -1,11 +1,9 @@
 """
 Nokia Storage Manager - Android Application
-Images loaded via Kivy CoreImage from memory (no file path issues on Android).
+Images stored as BLOB in DB, displayed via cached files.
 """
 
-import base64
 import csv
-import io
 import json
 import os
 import shutil
@@ -16,7 +14,6 @@ from functools import partial
 
 from kivy.app import App
 from kivy.clock import Clock
-from kivy.core.image import Image as CoreImage
 from kivy.core.window import Window
 from kivy.graphics import Color, Rectangle, RoundedRectangle
 from kivy.lang import Builder
@@ -68,133 +65,27 @@ def get_downloads_path():
             pass
     return os.path.join(get_app_path(), "exports")
 
-def get_gallery_dir(phone_id):
-    p = os.path.join(get_app_path(), "gallery", phone_id)
-    os.makedirs(p, exist_ok=True)
-    return p
+# ── Image System: File-based via imghelper ──────────────────────
+from imghelper import (
+    get_default_image_path, blob_to_file, clear_cached_image,
+    read_image_from_path, get_cache_dir
+)
 
-# ── Image System: Memory-based using Kivy Texture ──────────────
-# Default 64x64 phone silhouette PNG embedded as base64
-_DEFAULT_B64 = "iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAZUlEQVR42u3aMQ0AIBAEwfcvABFowAI1DQJwAR4IDflJ1sC0l4u59tcFAABAYkBt41UAAAAAqQGl9rsAAAAAAAAAAAAAAAAAAAAAAAAAbKMAAAAAAAAAAAA/ARyeAAAAAAAAsgMOhD1uvqVIe0oAAAAASUVORK5CYII="
-_DEFAULT_BYTES = base64.b64decode(_DEFAULT_B64)
-_DEFAULT_TEXTURE = None
-_TEXTURE_CACHE = {}
-
-def get_default_texture():
-    """Get Kivy texture for default phone image. Created once, reused."""
-    global _DEFAULT_TEXTURE
-    if _DEFAULT_TEXTURE:
-        return _DEFAULT_TEXTURE
-    try:
-        _DEFAULT_TEXTURE = CoreImage(io.BytesIO(_DEFAULT_BYTES), ext="png").texture
-    except Exception:
-        pass
-    return _DEFAULT_TEXTURE
-
-def bytes_to_texture(img_bytes):
-    """Convert image bytes to Kivy Texture. Returns None on failure."""
-    if not img_bytes:
-        return None
-    try:
-        # Detect format
-        ext = "png"
-        if img_bytes[:2] == b'\xff\xd8':
-            ext = "jpg"
-        elif img_bytes[:4] == b'\x89PNG':
-            ext = "png"
-        return CoreImage(io.BytesIO(img_bytes), ext=ext).texture
-    except Exception:
-        return None
-
-def get_texture_for_phone(phone_id, db):
-    """Get texture for a phone - from cache, DB, or default."""
-    if phone_id in _TEXTURE_CACHE:
-        return _TEXTURE_CACHE[phone_id]
+def get_img_path_for_phone(phone_id, db):
+    """Get displayable image file path for a phone."""
+    app_path = get_app_path()
     img_data = db.get_phone_image(phone_id)
     if img_data:
-        tex = bytes_to_texture(img_data)
-        if tex:
-            _TEXTURE_CACHE[phone_id] = tex
-            return tex
-    return get_default_texture()
+        return blob_to_file(img_data, f"p_{phone_id}", app_path)
+    return get_default_image_path(app_path)
 
-def get_texture_for_spare(spare_id, db):
-    """Get texture for a spare part."""
-    key = f"s_{spare_id}"
-    if key in _TEXTURE_CACHE:
-        return _TEXTURE_CACHE[key]
+def get_img_path_for_spare(spare_id, db):
+    """Get displayable image file path for a spare part."""
+    app_path = get_app_path()
     img_data = db.get_spare_image(spare_id)
     if img_data:
-        tex = bytes_to_texture(img_data)
-        if tex:
-            _TEXTURE_CACHE[key] = tex
-            return tex
-    return get_default_texture()
-
-def invalidate_cache(key):
-    if key in _TEXTURE_CACHE:
-        del _TEXTURE_CACHE[key]
-
-def read_file_bytes(path):
-    """Read file bytes - handles regular paths AND Android content:// URIs."""
-    if not path:
-        return None
-    # Method 1: Regular file path
-    try:
-        if not path.startswith("content://") and os.path.exists(path):
-            with open(path, "rb") as f:
-                return f.read()
-    except Exception:
-        pass
-    # Method 2: Android content:// URI via ParcelFileDescriptor
-    if path.startswith("content://") and platform == "android":
-        try:
-            from jnius import autoclass
-            PythonActivity = autoclass("org.kivy.android.PythonActivity")
-            context = PythonActivity.mActivity
-            Uri = autoclass("android.net.Uri")
-            uri = Uri.parse(path)
-            # Get a native file descriptor from the content URI
-            pfd = context.getContentResolver().openFileDescriptor(uri, "r")
-            fd = pfd.detachFd()
-            # Read using Python's native file I/O - this ALWAYS works
-            with os.fdopen(fd, "rb") as f:
-                data = f.read()
-            return data
-        except Exception:
-            pass
-        # Fallback: try copying via InputStream to a temp file
-        try:
-            from jnius import autoclass
-            import tempfile
-            PythonActivity = autoclass("org.kivy.android.PythonActivity")
-            context = PythonActivity.mActivity
-            Uri = autoclass("android.net.Uri")
-            uri = Uri.parse(path)
-            inp = context.getContentResolver().openInputStream(uri)
-            # Write to temp file byte by byte via Java helper
-            tmp = os.path.join(get_app_path(), "_tmp_img.bin")
-            FileOutputStream = autoclass("java.io.FileOutputStream")
-            out = FileOutputStream(tmp)
-            buf = autoclass("java.lang.reflect.Array").newInstance(
-                autoclass("java.lang.Byte").TYPE, 8192)
-            while True:
-                n = inp.read(buf)
-                if n == -1:
-                    break
-                out.write(buf, 0, n)
-            inp.close()
-            out.close()
-            with open(tmp, "rb") as f:
-                data = f.read()
-            try:
-                os.remove(tmp)
-            except:
-                pass
-            return data
-        except Exception:
-            pass
-    return None
+        return blob_to_file(img_data, f"s_{spare_id}", app_path)
+    return get_default_image_path(app_path)
 
 
 # ── Custom Widgets ──────────────────────────────────────────────
@@ -210,11 +101,13 @@ class PhoneCard(ButtonBehavior, BoxLayout):
     phone_date = StringProperty("")
     phone_appear = StringProperty("")
     phone_working = StringProperty("")
+    phone_image = StringProperty("")
 
 class SpareCard(ButtonBehavior, BoxLayout):
     spare_id = NumericProperty(0)
     spare_name = StringProperty("")
     spare_desc = StringProperty("")
+    spare_image = StringProperty("")
 
 class SearchBar(BoxLayout):
     def on_search_enter(self, text):
@@ -247,7 +140,7 @@ KV = """
             size: self.size
             radius: [dp(10)]
     Image:
-        id: card_img
+        source: root.phone_image
         size_hint: None, None
         size: dp(64), dp(78)
         pos_hint: {'center_y': .5}
@@ -309,7 +202,7 @@ KV = """
             size: self.size
             radius: [dp(10)]
     Image:
-        id: card_img
+        source: root.spare_image
         size_hint: None, None
         size: dp(56), dp(60)
         pos_hint: {'center_y': .5}
@@ -1430,23 +1323,24 @@ class MainScreen(Screen):
         cp = self._current_page + 1
         lt = "found" if self._is_search else ("phones" if self.current_tab == "phones" else "parts")
         self.ids.count_label.text = f"{self._total_items} {lt} | {cp}/{tp}"
-        dtex = get_default_texture()
+        defimg = get_default_image_path(get_app_path())
 
         if self.current_tab == "phones":
             for p in items:
+                img = get_img_path_for_phone(p["id"], app.db) if p.get("has_image") else defimg
                 card = PhoneCard(phone_id=p["id"], phone_name=p["name"],
                     phone_date=p.get("release_date","") or "",
                     phone_appear=p.get("appearance_condition","") or "",
-                    phone_working=p.get("working_condition","") or "")
-                tex = get_texture_for_phone(p["id"], app.db) if p.get("has_image") else dtex
-                if tex: card.ids.card_img.texture = tex
+                    phone_working=p.get("working_condition","") or "",
+                    phone_image=img or defimg)
                 card.bind(on_release=partial(self._open_phone, p["id"]))
                 grid.add_widget(card)
         else:
             for s in items:
-                card = SpareCard(spare_id=s["id"], spare_name=s["name"], spare_desc=s.get("description","") or "")
-                tex = get_texture_for_spare(s["id"], app.db) if s.get("has_image") else dtex
-                if tex: card.ids.card_img.texture = tex
+                img = get_img_path_for_spare(s["id"], app.db) if s.get("has_image") else defimg
+                card = SpareCard(spare_id=s["id"], spare_name=s["name"],
+                    spare_desc=s.get("description","") or "",
+                    spare_image=img or defimg)
                 card.bind(on_release=partial(self._open_spare, s["id"]))
                 grid.add_widget(card)
 
@@ -1531,27 +1425,27 @@ class PhoneDetailScreen(Screen):
         self.p_appear = p.get("appearance_condition","") or ""
         self.p_working = p.get("working_condition","") or ""
         r = p.get("remarks","") or ""; self.p_remarks = "" if r in ("None","none") else r
-        tex = get_texture_for_phone(pid, app.db)
-        Clock.schedule_once(lambda dt: self._set_img(tex), 0.1)
+        img = get_img_path_for_phone(pid, app.db)
+        Clock.schedule_once(lambda dt: self._set_img(img), 0.1)
         Clock.schedule_once(lambda dt: self._load_spares(), 0.15)
 
-    def _set_img(self, tex):
+    def _set_img(self, path):
         try:
-            if tex: self.ids.detail_img.texture = tex
+            self.ids.detail_img.source = path or get_default_image_path(get_app_path())
         except: pass
 
     def _load_spares(self):
         app = App.get_running_app()
         grid = self.ids.spare_parts_grid; grid.clear_widgets()
         spares = app.db.get_spare_parts_for_phone(self.p_name)
-        dtex = get_default_texture()
+        defimg = get_default_image_path(get_app_path())
         if not spares:
             grid.add_widget(Label(text="No spare parts", font_size=sp(12), color=(0.5,0.5,0.5,1), size_hint_y=None, height=dp(24)))
             return
         for s in spares:
-            card = SpareCard(spare_id=s["id"], spare_name=s["name"], spare_desc=s.get("description","") or "")
-            tex = get_texture_for_spare(s["id"], app.db) if s.get("has_image") else dtex
-            if tex: card.ids.card_img.texture = tex
+            img = get_img_path_for_spare(s["id"], app.db) if s.get("has_image") else defimg
+            card = SpareCard(spare_id=s["id"], spare_name=s["name"],
+                spare_desc=s.get("description","") or "", spare_image=img or defimg)
             card.bind(on_release=partial(self._open_spare, s["id"]))
             grid.add_widget(card)
 
@@ -1612,12 +1506,12 @@ class SpareDetailScreen(Screen):
         self.s_id = s["id"]; self.s_id_str = str(s["id"]); self.s_name = s["name"]
         d = s.get("description","") or ""; self.s_desc = "" if d=="None" else d
         self.s_phone_id = s.get("phone_id","") or ""
-        tex = get_texture_for_spare(sid, app.db)
-        Clock.schedule_once(lambda dt: self._set_img(tex), 0.1)
+        img = get_img_path_for_spare(sid, app.db)
+        Clock.schedule_once(lambda dt: self._set_img(img), 0.1)
 
-    def _set_img(self, tex):
+    def _set_img(self, path):
         try:
-            if tex: self.ids.detail_img.texture = tex
+            self.ids.detail_img.source = path or get_default_image_path(get_app_path())
         except: pass
 
     def confirm_delete(self):
@@ -1662,7 +1556,7 @@ class AddPhoneScreen(Screen):
         try:
             for fid in ["input_id","input_name","input_date","input_appear","input_working","input_remarks"]:
                 self.ids[fid].text = ""
-            self.ids.preview_img.texture = get_default_texture()
+            self.ids.preview_img.source = get_default_image_path(get_app_path())
         except: pass
 
     def load_for_edit(self, pid):
@@ -1670,17 +1564,17 @@ class AddPhoneScreen(Screen):
         p = app.db.get_phone(pid)
         if not p: return
         self._image_bytes = app.db.get_phone_image(pid)
-        tex = bytes_to_texture(self._image_bytes) if self._image_bytes else get_default_texture()
-        Clock.schedule_once(partial(self._fill, p, tex), 0.1)
+        img = get_img_path_for_phone(pid, app.db)
+        Clock.schedule_once(partial(self._fill, p, img), 0.1)
 
-    def _fill(self, p, tex, *a):
+    def _fill(self, p, img_path, *a):
         try:
             self.ids.input_id.text = p["id"]; self.ids.input_name.text = p["name"]
             self.ids.input_date.text = p.get("release_date","") or ""
             self.ids.input_appear.text = p.get("appearance_condition","") or ""
             self.ids.input_working.text = p.get("working_condition","") or ""
             r = p.get("remarks","") or ""; self.ids.input_remarks.text = "" if r in ("None","none") else r
-            if tex: self.ids.preview_img.texture = tex
+            self.ids.preview_img.source = img_path or get_default_image_path(get_app_path())
         except: pass
 
     def pick_from_gallery(self):
@@ -1694,9 +1588,14 @@ class AddPhoneScreen(Screen):
     def on_image_selected(self, img_bytes):
         """Called with raw image bytes."""
         self._image_bytes = img_bytes
-        tex = bytes_to_texture(img_bytes)
-        if tex:
-            try: self.ids.preview_img.texture = tex
+        if img_bytes:
+            # Write to temp file for preview
+            tmp = os.path.join(get_cache_dir(get_app_path()), "_preview_phone.tmp")
+            try:
+                with open(tmp, "wb") as f:
+                    f.write(img_bytes)
+                self.ids.preview_img.source = ""  # force reload
+                Clock.schedule_once(lambda dt: setattr(self.ids.preview_img, "source", tmp), 0.1)
             except: pass
 
     def save_phone(self):
@@ -1711,7 +1610,7 @@ class AddPhoneScreen(Screen):
             working=self.ids.input_working.text.strip(),
             remarks=self.ids.input_remarks.text.strip(),
             image_bytes=self._image_bytes)
-        invalidate_cache(pid)
+        clear_cached_image(f"p_{pid}", get_app_path())
         app.root.get_screen("main")._data_loaded = False
         app.show_toast("Phone saved!"); self.go_back()
 
@@ -1731,7 +1630,7 @@ class AddSpareScreen(Screen):
         try:
             self.ids.spare_input_name.text = ""; self.ids.spare_input_desc.text = ""
             self.ids.spare_input_phone_id.text = ""
-            self.ids.preview_img.texture = get_default_texture()
+            self.ids.preview_img.source = get_default_image_path(get_app_path())
         except: pass
 
     def pick_from_gallery(self):
@@ -1744,9 +1643,13 @@ class AddSpareScreen(Screen):
 
     def on_image_selected(self, img_bytes):
         self._image_bytes = img_bytes
-        tex = bytes_to_texture(img_bytes)
-        if tex:
-            try: self.ids.preview_img.texture = tex
+        if img_bytes:
+            tmp = os.path.join(get_cache_dir(get_app_path()), "_preview_spare.tmp")
+            try:
+                with open(tmp, "wb") as f:
+                    f.write(img_bytes)
+                self.ids.preview_img.source = ""
+                Clock.schedule_once(lambda dt: setattr(self.ids.preview_img, "source", tmp), 0.1)
             except: pass
 
     def save_spare(self):
@@ -1817,7 +1720,13 @@ class BackupScreen(Screen):
             app.db.close()
             with zipfile.ZipFile(path, "r") as zf: zf.extractall(get_app_path())
             app.db = NokiaDatabase(get_db_path())
-            _TEXTURE_CACHE.clear()
+            # Clear image cache
+            try:
+                import shutil
+                cd = get_cache_dir(get_app_path())
+                if os.path.isdir(cd):
+                    shutil.rmtree(cd, ignore_errors=True)
+            except: pass
             self.ids.backup_status.text = "Restored!"; app.show_toast("Restored!")
         except Exception as e:
             app.db = NokiaDatabase(get_db_path())
@@ -1844,21 +1753,21 @@ class SearchAllScreen(Screen):
             grid.add_widget(Label(text="Type and press Enter", font_size=sp(13), color=(0.5,0.5,0.5,1), size_hint_y=None, height=dp(36)))
             return
         phones, spares = app.db.search_all(text)
-        dtex = get_default_texture()
+        defimg = get_default_image_path(get_app_path())
         if phones:
             grid.add_widget(Label(text=f"Phones ({len(phones)})", font_size=sp(14), bold=True, color=(0,0.314,0.784,1), size_hint_y=None, height=dp(26), text_size=(dp(300),None), halign="left"))
             for p in phones[:PAGE_SIZE]:
+                img = get_img_path_for_phone(p["id"], app.db) if p.get("has_image") else defimg
                 card = PhoneCard(phone_id=p["id"], phone_name=p["name"], phone_date=p.get("release_date","") or "",
-                    phone_appear=p.get("appearance_condition","") or "", phone_working=p.get("working_condition","") or "")
-                tex = get_texture_for_phone(p["id"], app.db) if p.get("has_image") else dtex
-                if tex: card.ids.card_img.texture = tex
+                    phone_appear=p.get("appearance_condition","") or "", phone_working=p.get("working_condition","") or "",
+                    phone_image=img or defimg)
                 card.bind(on_release=partial(self._op, p["id"])); grid.add_widget(card)
         if spares:
             grid.add_widget(Label(text=f"Spare Parts ({len(spares)})", font_size=sp(14), bold=True, color=(0,0.314,0.784,1), size_hint_y=None, height=dp(26), text_size=(dp(300),None), halign="left"))
             for s in spares[:PAGE_SIZE]:
-                card = SpareCard(spare_id=s["id"], spare_name=s["name"], spare_desc=s.get("description","") or "")
-                tex = get_texture_for_spare(s["id"], app.db) if s.get("has_image") else dtex
-                if tex: card.ids.card_img.texture = tex
+                img = get_img_path_for_spare(s["id"], app.db) if s.get("has_image") else defimg
+                card = SpareCard(spare_id=s["id"], spare_name=s["name"], spare_desc=s.get("description","") or "",
+                    spare_image=img or defimg)
                 card.bind(on_release=partial(self._os, s["id"])); grid.add_widget(card)
         if not phones and not spares:
             grid.add_widget(Label(text="No results", font_size=sp(13), color=(0.5,0.5,0.5,1), size_hint_y=None, height=dp(36)))
@@ -1999,8 +1908,8 @@ class NokiaStorageApp(App):
         tt, td = self.pick_image_for; self.pick_image_for = None
 
         if tt in ("add_phone_screen", "add_spare_screen"):
-            # Read bytes immediately
-            img_bytes = read_file_bytes(sel[0])
+            # Read bytes immediately from selected file
+            img_bytes = read_image_from_path(sel[0])
             if img_bytes:
                 img_bytes = NokiaDatabase.make_thumbnail(img_bytes, 400)
             screen_name = "add_phone" if tt == "add_phone_screen" else "add_spare"
