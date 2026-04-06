@@ -67,8 +67,8 @@ def get_downloads_path():
 
 # ── Image System: File-based via imghelper ──────────────────────
 from imghelper import (
-    get_default_image_path, blob_to_file, clear_cached_image,
-    read_image_from_path, get_cache_dir
+    get_default_image_path, write_blob_to_file, clear_item_cache,
+    smart_read, get_cache_dir
 )
 
 def get_img_path_for_phone(phone_id, db):
@@ -76,7 +76,7 @@ def get_img_path_for_phone(phone_id, db):
     app_path = get_app_path()
     img_data = db.get_phone_image(phone_id)
     if img_data:
-        return blob_to_file(img_data, f"p_{phone_id}", app_path)
+        return write_blob_to_file(img_data, f"p_{phone_id}", app_path)
     return get_default_image_path(app_path)
 
 def get_img_path_for_spare(spare_id, db):
@@ -84,7 +84,7 @@ def get_img_path_for_spare(spare_id, db):
     app_path = get_app_path()
     img_data = db.get_spare_image(spare_id)
     if img_data:
-        return blob_to_file(img_data, f"s_{spare_id}", app_path)
+        return write_blob_to_file(img_data, f"s_{spare_id}", app_path)
     return get_default_image_path(app_path)
 
 
@@ -1705,7 +1705,7 @@ class AddPhoneScreen(Screen):
             working=self.ids.input_working.text.strip(),
             remarks=self.ids.input_remarks.text.strip(),
             image_bytes=self._image_bytes)
-        clear_cached_image(f"p_{pid}", get_app_path())
+        clear_item_cache(f"p_{pid}", get_app_path())
         app.root.get_screen("main")._data_loaded = False
         app.show_toast("Phone saved!"); self.go_back()
 
@@ -2001,47 +2001,50 @@ class NokiaStorageApp(App):
         if popup: popup.dismiss()
         if not sel or not self.pick_image_for: return
         tt, td = self.pick_image_for; self.pick_image_for = None
+        selected_path = sel[0]
+
+        # DEBUG: show what plyer returned
+        self.show_toast(f"Selected: {selected_path[:60]}")
+
+        if tt == "restore_backup":
+            self.root.get_screen("backup").on_backup_selected(selected_path)
+            return
+
+        # Read image bytes from whatever path/URI plyer gave us
+        img_bytes = smart_read(selected_path)
+
+        if not img_bytes:
+            self.show_toast(f"Cannot read: {selected_path[:40]}")
+            return
+
+        self.show_toast(f"Read {len(img_bytes)} bytes OK")
+
+        # Limit size to 500KB
+        if len(img_bytes) > 500000:
+            img_bytes = img_bytes[:500000]
 
         if tt in ("add_phone_screen", "add_spare_screen"):
-            # Read bytes immediately from selected file
-            img_bytes = read_image_from_path(sel[0])
-            if img_bytes:
-                img_bytes = NokiaDatabase.make_thumbnail(img_bytes, 400)
             screen_name = "add_phone" if tt == "add_phone_screen" else "add_spare"
-            s = self.root.get_screen(screen_name)
-            if img_bytes:
-                s.on_image_selected(img_bytes)
-            else:
-                self.show_toast("Could not read image")
+            self.root.get_screen(screen_name).on_image_selected(img_bytes)
+
         elif tt == "phone_direct":
-            # Directly update phone image from detail page
-            img_bytes = read_image_from_path(sel[0])
-            if img_bytes:
-                self.db.update_phone(td, image_path=sel[0])
-                clear_cached_image(f"p_{td}", get_app_path())
-                new_img = get_img_path_for_phone(td, self.db)
-                d = self.root.get_screen("phone_detail")
-                d.ids.detail_img.source = ""
-                Clock.schedule_once(lambda dt: setattr(d.ids.detail_img, "source", new_img), 0.15)
-                self.root.get_screen("main")._data_loaded = False
-                self.show_toast("Image updated!")
-            else:
-                self.show_toast("Could not read image")
+            # Store bytes directly as BLOB
+            self.db.update_phone(td, image_data=img_bytes)
+            clear_item_cache(f"p_{td}", get_app_path())
+            new_img = get_img_path_for_phone(td, self.db)
+            d = self.root.get_screen("phone_detail")
+            d.ids.detail_img.source = new_img
+            d.ids.detail_img.reload()
+            self.root.get_screen("main")._data_loaded = False
+
         elif tt == "spare_direct":
-            img_bytes = read_image_from_path(sel[0])
-            if img_bytes:
-                self.db.update_spare_part(td, image_path=sel[0])
-                clear_cached_image(f"s_{td}", get_app_path())
-                new_img = get_img_path_for_spare(td, self.db)
-                d = self.root.get_screen("spare_detail")
-                d.ids.detail_img.source = ""
-                Clock.schedule_once(lambda dt: setattr(d.ids.detail_img, "source", new_img), 0.15)
-                self.root.get_screen("main")._data_loaded = False
-                self.show_toast("Image updated!")
-            else:
-                self.show_toast("Could not read image")
-        elif tt == "restore_backup":
-            self.root.get_screen("backup").on_backup_selected(sel[0])
+            self.db.update_spare_part(td, image_data=img_bytes)
+            clear_item_cache(f"s_{td}", get_app_path())
+            new_img = get_img_path_for_spare(td, self.db)
+            d = self.root.get_screen("spare_detail")
+            d.ids.detail_img.source = new_img
+            d.ids.detail_img.reload()
+            self.root.get_screen("main")._data_loaded = False
 
     def take_camera_photo(self):
         if platform == "android":

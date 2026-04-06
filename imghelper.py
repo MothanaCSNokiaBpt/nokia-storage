@@ -1,181 +1,150 @@
 """
-Image Helper - Bulletproof image handling for Android and Desktop.
-All images stored as BLOB in SQLite, displayed via temp files written
-to the same directory as the database (guaranteed writable).
+Image Helper - Simple, bulletproof image handling.
+Images stored as BLOB in SQLite. Written to temp file for Kivy display.
 """
-
 import os
 import struct
 import zlib
+import hashlib
+import glob
+
 
 _cache_dir = None
 _default_path = None
 
 
 def get_cache_dir(app_path):
-    """Get/create image cache directory next to the database."""
     global _cache_dir
     if _cache_dir and os.path.isdir(_cache_dir):
         return _cache_dir
-    _cache_dir = os.path.join(app_path, "imgcache")
+    _cache_dir = os.path.join(app_path, "ic")
     try:
         os.makedirs(_cache_dir, exist_ok=True)
     except Exception:
-        _cache_dir = app_path  # Fallback to app dir itself
+        _cache_dir = app_path
     return _cache_dir
 
 
 def create_default_png_bytes():
-    """Generate a 64x64 phone silhouette PNG as raw bytes. Pure Python, no dependencies."""
+    """64x64 phone silhouette PNG. Pure Python."""
     W, H = 64, 64
-    bg = (220, 232, 255)
-    body = (170, 188, 215)
-    screen = (150, 170, 205)
+    bg, body, scr = (220, 232, 255), (170, 188, 215), (150, 170, 205)
     raw = b''
     for y in range(H):
         raw += b'\x00'
         for x in range(W):
-            in_body = (20 <= x <= 44) and (6 <= y <= 52)
-            in_screen = (23 <= x <= 41) and (13 <= y <= 38)
-            in_btn = ((x - 32) ** 2 + (y - 45) ** 2) <= 16
-            if in_screen:
-                raw += bytes(screen)
-            elif in_body or in_btn:
-                raw += bytes(body)
-            else:
-                raw += bytes(bg)
-    compressed = zlib.compress(raw, 9)
-
-    def chunk(chunk_type, data):
-        c = chunk_type + data
-        crc = struct.pack('>I', zlib.crc32(c) & 0xFFFFFFFF)
-        return struct.pack('>I', len(data)) + c + crc
-
-    png = b'\x89PNG\r\n\x1a\n'
-    png += chunk(b'IHDR', struct.pack('>IIBBBBB', W, H, 8, 2, 0, 0, 0))
-    png += chunk(b'IDAT', compressed)
-    png += chunk(b'IEND', b'')
-    return png
+            ib = (20 <= x <= 44) and (6 <= y <= 52)
+            isc = (23 <= x <= 41) and (13 <= y <= 38)
+            ibtn = ((x-32)**2 + (y-45)**2) <= 16
+            if isc: raw += bytes(scr)
+            elif ib or ibtn: raw += bytes(body)
+            else: raw += bytes(bg)
+    comp = zlib.compress(raw, 9)
+    def ch(t, d):
+        c = t + d
+        return struct.pack('>I', len(d)) + c + struct.pack('>I', zlib.crc32(c) & 0xFFFFFFFF)
+    p = b'\x89PNG\r\n\x1a\n'
+    p += ch(b'IHDR', struct.pack('>IIBBBBB', W, H, 8, 2, 0, 0, 0))
+    p += ch(b'IDAT', comp)
+    p += ch(b'IEND', b'')
+    return p
 
 
 def get_default_image_path(app_path):
-    """Get path to default phone image. Creates it if needed."""
     global _default_path
     if _default_path and os.path.exists(_default_path):
         return _default_path
-    cache = get_cache_dir(app_path)
-    path = os.path.join(cache, "_default.png")
-    if not os.path.exists(path):
+    c = get_cache_dir(app_path)
+    p = os.path.join(c, "def.png")
+    if not os.path.exists(p):
         try:
-            data = create_default_png_bytes()
-            with open(path, 'wb') as f:
-                f.write(data)
-        except Exception:
+            with open(p, 'wb') as f:
+                f.write(create_default_png_bytes())
+        except:
             return ""
-    if os.path.exists(path):
-        _default_path = path
-        return path
-    return ""
+    if os.path.exists(p):
+        _default_path = p
+    return _default_path or ""
 
 
-def blob_to_file(blob_bytes, item_key, app_path):
-    """Write image BLOB to a unique cached file. Returns the file path.
-    Uses a hash-based filename to avoid Kivy Image cache issues."""
+def write_blob_to_file(blob_bytes, key, app_path):
+    """Write BLOB to uniquely-named file. Returns path or empty string."""
     if not blob_bytes:
         return ""
-    cache = get_cache_dir(app_path)
+    c = get_cache_dir(app_path)
     ext = ".png" if blob_bytes[:4] == b'\x89PNG' else ".jpg"
-    # Use data length + first bytes as simple hash for unique filename
-    # This ensures Kivy sees a NEW path when image data changes
-    import hashlib
-    h = hashlib.md5(blob_bytes[:1024]).hexdigest()[:8]
-    path = os.path.join(cache, f"{item_key}_{h}{ext}")
+    h = hashlib.md5(blob_bytes[:512]).hexdigest()[:6]
+    fname = f"{key}_{h}{ext}"
+    path = os.path.join(c, fname)
     if os.path.exists(path):
-        return path  # Already written with same content
-    # Clean old versions of this item
-    import glob
-    for old in glob.glob(os.path.join(cache, f"{item_key}_*")):
+        return path
+    # Remove old versions
+    for old in glob.glob(os.path.join(c, f"{key}_*")):
         try: os.remove(old)
         except: pass
     try:
         with open(path, 'wb') as f:
             f.write(blob_bytes)
         return path
-    except Exception:
+    except:
         return ""
 
 
-def clear_cached_image(item_key, app_path):
-    """Remove a cached image file so it gets recreated from DB."""
-    cache = get_cache_dir(app_path)
-    for ext in (".img", ".jpg", ".png"):
-        path = os.path.join(cache, f"{item_key}{ext}")
-        try:
-            if os.path.exists(path):
-                os.remove(path)
-        except Exception:
-            pass
+def clear_item_cache(key, app_path):
+    c = get_cache_dir(app_path)
+    for old in glob.glob(os.path.join(c, f"{key}_*")):
+        try: os.remove(old)
+        except: pass
 
 
-def read_image_from_path(path):
-    """Read image bytes from a file path or Android content:// URI."""
-    if not path:
+def read_bytes_from_path(filepath):
+    """Read image file bytes. Handles regular paths.
+    For Android content:// URIs, returns None (handled separately)."""
+    if not filepath:
         return None
-
-    # Regular file
-    if not path.startswith("content://"):
-        try:
-            if os.path.exists(path):
-                with open(path, "rb") as f:
-                    return f.read()
-        except Exception:
-            pass
-        return None
-
-    # Android content:// URI
     try:
-        from kivy.utils import platform
-        if platform != "android":
-            return None
-    except Exception:
-        return None
+        if os.path.isfile(filepath):
+            with open(filepath, "rb") as f:
+                data = f.read()
+            if data and len(data) > 100:
+                return data
+    except:
+        pass
+    return None
 
-    # Method 1: ParcelFileDescriptor -> Python fd (most reliable)
+
+def read_android_uri(uri_string):
+    """Read bytes from Android content:// URI using file descriptor."""
     try:
         from jnius import autoclass
         PythonActivity = autoclass("org.kivy.android.PythonActivity")
-        context = PythonActivity.mActivity
+        ctx = PythonActivity.mActivity
         Uri = autoclass("android.net.Uri")
-        uri = Uri.parse(path)
-        pfd = context.getContentResolver().openFileDescriptor(uri, "r")
+        uri = Uri.parse(uri_string)
+        # Method: ParcelFileDescriptor -> native Python fd
+        pfd = ctx.getContentResolver().openFileDescriptor(uri, "r")
         fd = pfd.detachFd()
         with os.fdopen(fd, "rb") as f:
             data = f.read()
-        if data and len(data) > 0:
+        if data and len(data) > 100:
             return data
-    except Exception:
+    except:
         pass
-
-    # Method 2: InputStream -> temp file via Java FileOutputStream
+    # Fallback: InputStream -> Java FileOutputStream -> read file
     try:
         from jnius import autoclass
         PythonActivity = autoclass("org.kivy.android.PythonActivity")
-        context = PythonActivity.mActivity
+        ctx = PythonActivity.mActivity
         Uri = autoclass("android.net.Uri")
-        uri = Uri.parse(path)
-        inp = context.getContentResolver().openInputStream(uri)
-        FileOutputStream = autoclass("java.io.FileOutputStream")
-        Array = autoclass("java.lang.reflect.Array")
+        uri = Uri.parse(uri_string)
+        inp = ctx.getContentResolver().openInputStream(uri)
+        Arr = autoclass("java.lang.reflect.Array")
         Byte = autoclass("java.lang.Byte")
-        tmp_path = os.path.join(os.path.dirname(path) if not path.startswith("content") else "/data/local/tmp", "_read_tmp.bin")
-        # Use app cache dir instead
-        try:
-            from android.storage import app_storage_path
-            tmp_path = os.path.join(app_storage_path(), "_read_tmp.bin")
-        except Exception:
-            tmp_path = "/data/local/tmp/_read_tmp.bin"
-        out = FileOutputStream(tmp_path)
-        jbuf = Array.newInstance(Byte.TYPE, 8192)
+        FOS = autoclass("java.io.FileOutputStream")
+        from android.storage import app_storage_path
+        tmp = os.path.join(app_storage_path(), "_tmp_read.bin")
+        out = FOS(tmp)
+        jbuf = Arr.newInstance(Byte.TYPE, 16384)
         while True:
             n = inp.read(jbuf)
             if n == -1:
@@ -183,15 +152,26 @@ def read_image_from_path(path):
             out.write(jbuf, 0, n)
         inp.close()
         out.close()
-        with open(tmp_path, "rb") as f:
+        with open(tmp, "rb") as f:
             data = f.read()
-        try:
-            os.remove(tmp_path)
-        except Exception:
-            pass
-        if data and len(data) > 0:
+        try: os.remove(tmp)
+        except: pass
+        if data and len(data) > 100:
             return data
-    except Exception:
+    except:
         pass
+    return None
 
+
+def smart_read(path_or_uri):
+    """Read image bytes from any source - file path or content:// URI."""
+    if not path_or_uri:
+        return None
+    # Try regular file first
+    data = read_bytes_from_path(path_or_uri)
+    if data:
+        return data
+    # Try as Android content URI
+    if path_or_uri.startswith("content://"):
+        return read_android_uri(path_or_uri)
     return None
