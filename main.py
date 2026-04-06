@@ -1752,8 +1752,32 @@ class PhoneDetailScreen(Screen):
 
     def change_image(self):
         app = App.get_running_app()
+        popup = ModalView(size_hint=(0.7, None), height=dp(120))
+        c = BoxLayout(orientation="vertical", spacing=dp(4), padding=dp(10))
+        with c.canvas.before:
+            Color(1,1,1,1)
+            c._bg = RoundedRectangle(pos=c.pos, size=c.size, radius=[dp(10)])
+        c.bind(pos=lambda w, v: setattr(w._bg, "pos", v), size=lambda w, v: setattr(w._bg, "size", v))
+        gb = ClickableBox(size_hint_y=None, height=dp(42), padding=(dp(10), dp(6)))
+        gb.add_widget(Label(text="Pick from Gallery", font_size=sp(14), color=(0.1,0.1,0.18,1)))
+        gb.bind(on_release=lambda *a: (popup.dismiss(), self._pick_image_gallery()))
+        cb = ClickableBox(size_hint_y=None, height=dp(42), padding=(dp(10), dp(6)))
+        cb.add_widget(Label(text="Take Photo", font_size=sp(14), color=(0.1,0.1,0.18,1)))
+        cb.bind(on_release=lambda *a: (popup.dismiss(), self._pick_image_camera()))
+        c.add_widget(gb)
+        c.add_widget(cb)
+        popup.add_widget(c)
+        popup.open()
+
+    def _pick_image_gallery(self):
+        app = App.get_running_app()
         app.pick_image_for = ("phone", self.p_id)
         app.open_file_chooser()
+
+    def _pick_image_camera(self):
+        app = App.get_running_app()
+        app.pick_image_for = ("phone", self.p_id)
+        app.take_camera_photo()
 
     def add_gallery_image(self):
         app = App.get_running_app()
@@ -1799,8 +1823,32 @@ class SpareDetailScreen(Screen):
 
     def change_image(self):
         app = App.get_running_app()
+        popup = ModalView(size_hint=(0.7, None), height=dp(120))
+        c = BoxLayout(orientation="vertical", spacing=dp(4), padding=dp(10))
+        with c.canvas.before:
+            Color(1,1,1,1)
+            c._bg = RoundedRectangle(pos=c.pos, size=c.size, radius=[dp(10)])
+        c.bind(pos=lambda w, v: setattr(w._bg, "pos", v), size=lambda w, v: setattr(w._bg, "size", v))
+        gb = ClickableBox(size_hint_y=None, height=dp(42), padding=(dp(10), dp(6)))
+        gb.add_widget(Label(text="Pick from Gallery", font_size=sp(14), color=(0.1,0.1,0.18,1)))
+        gb.bind(on_release=lambda *a: (popup.dismiss(), self._pick_gallery()))
+        cb = ClickableBox(size_hint_y=None, height=dp(42), padding=(dp(10), dp(6)))
+        cb.add_widget(Label(text="Take Photo", font_size=sp(14), color=(0.1,0.1,0.18,1)))
+        cb.bind(on_release=lambda *a: (popup.dismiss(), self._pick_camera()))
+        c.add_widget(gb)
+        c.add_widget(cb)
+        popup.add_widget(c)
+        popup.open()
+
+    def _pick_gallery(self):
+        app = App.get_running_app()
         app.pick_image_for = ("spare_direct", self.s_id)
         app.open_file_chooser()
+
+    def _pick_camera(self):
+        app = App.get_running_app()
+        app.pick_image_for = ("spare_direct", self.s_id)
+        app.take_camera_photo()
 
     def confirm_delete(self):
         popup = ModalView(size_hint=(0.78, None), height=dp(130))
@@ -1893,7 +1941,8 @@ class AddPhoneScreen(Screen):
 
     def on_image_selected(self, path):
         self._selected_image = path
-        self.image_preview = path
+        self.image_preview = ""
+        Clock.schedule_once(lambda dt: setattr(self, "image_preview", path), 0.1)
 
     def save_phone(self):
         app = App.get_running_app()
@@ -1954,7 +2003,8 @@ class AddSpareScreen(Screen):
 
     def on_image_selected(self, path):
         self._selected_image = path
-        self.image_preview = path
+        self.image_preview = ""
+        Clock.schedule_once(lambda dt: setattr(self, "image_preview", path), 0.1)
 
     def save_spare(self):
         app = App.get_running_app()
@@ -2384,21 +2434,26 @@ class NokiaStorageApp(App):
             if img:
                 self.db.update_phone(td, image_path=img)
                 d = self.root.get_screen("phone_detail")
-                d.image_source = img
+                d.image_source = ""
+                Clock.schedule_once(lambda dt: setattr(d, "image_source", img), 0.1)
                 self.show_toast("Image updated!")
         elif tt == "phone_gallery":
             gdir = get_phone_gallery_path(td)
+            count = 0
             for s in selection:
-                copy_image_to_storage(s, gdir)
-            self.show_toast(f"Added {len(selection)} gallery photos!")
+                r = copy_image_to_storage(s, gdir)
+                if r:
+                    count += 1
+            self.show_toast(f"Added {count} gallery photos!")
             d = self.root.get_screen("phone_detail")
-            d._load_gallery()
+            Clock.schedule_once(lambda dt: d._load_gallery(), 0.3)
         elif tt == "spare_direct":
             img = copy_image_to_storage(selection[0], get_spare_images_path())
             if img:
                 self.db.update_spare_part(td, image_path=img)
                 d = self.root.get_screen("spare_detail")
-                d.s_image = img
+                d.s_image = ""
+                Clock.schedule_once(lambda dt: setattr(d, "s_image", img), 0.1)
                 self.show_toast("Image updated!")
         elif tt == "restore_backup":
             self.root.get_screen("backup").on_backup_selected(selection[0])
