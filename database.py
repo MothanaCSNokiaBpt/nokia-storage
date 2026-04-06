@@ -107,21 +107,13 @@ class NokiaDatabase:
 
     @staticmethod
     def make_thumbnail(image_bytes, max_size=300):
-        """Resize image to thumbnail. Returns bytes or original."""
+        """Return image bytes as-is. Kivy handles display scaling."""
         if not image_bytes:
             return image_bytes
-        try:
-            from PIL import Image as PILImage
-            import io
-            img = PILImage.open(io.BytesIO(image_bytes))
-            img.thumbnail((max_size, max_size), PILImage.LANCZOS)
-            if img.mode == 'RGBA':
-                img = img.convert('RGB')
-            buf = io.BytesIO()
-            img.save(buf, format='JPEG', quality=75, optimize=True)
-            return buf.getvalue()
-        except Exception:
-            return image_bytes
+        # Limit to 500KB to keep DB reasonable
+        if len(image_bytes) > 500000:
+            return image_bytes[:500000]
+        return image_bytes
 
     # ── Phone CRUD ──────────────────────────────────────────────
 
