@@ -71,8 +71,9 @@ from imghelper import (
     smart_read, get_cache_dir
 )
 
-def _android_share(filepath, mime_type, subject):
-    """Share a file using Android's system share dialog."""
+def _android_share(filepaths, mime_type, subject):
+    """Share one or more files using Android's system share dialog.
+    filepaths: single string or list of strings."""
     if platform != "android":
         return
     try:
@@ -81,22 +82,40 @@ def _android_share(filepath, mime_type, subject):
         Intent = autoclass("android.content.Intent")
         Uri = autoclass("android.net.Uri")
         File = autoclass("java.io.File")
+        ArrayList = autoclass("java.util.ArrayList")
         # Disable strict mode for file URI
         StrictMode = autoclass("android.os.StrictMode")
         builder = autoclass("android.os.StrictMode$VmPolicy$Builder")()
         StrictMode.setVmPolicy(builder.build())
-        # Create share intent
         context = PythonActivity.mActivity
-        jfile = File(filepath)
-        uri = Uri.fromFile(jfile)
-        intent = Intent()
-        intent.setAction(Intent.ACTION_SEND)
-        intent.setType(mime_type)
-        intent.putExtra(Intent.EXTRA_STREAM, cast("android.os.Parcelable", uri))
-        intent.putExtra(Intent.EXTRA_SUBJECT, subject)
-        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        # Start chooser activity directly
-        context.startActivity(intent)
+
+        if isinstance(filepaths, str):
+            filepaths = [filepaths]
+
+        if len(filepaths) == 1:
+            # Single file share
+            jfile = File(filepaths[0])
+            uri = Uri.fromFile(jfile)
+            intent = Intent()
+            intent.setAction(Intent.ACTION_SEND)
+            intent.setType(mime_type)
+            intent.putExtra(Intent.EXTRA_STREAM, cast("android.os.Parcelable", uri))
+            intent.putExtra(Intent.EXTRA_SUBJECT, subject)
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            context.startActivity(intent)
+        else:
+            # Multiple files share
+            uris = ArrayList()
+            for fp in filepaths:
+                jfile = File(fp)
+                uris.add(cast("android.os.Parcelable", Uri.fromFile(jfile)))
+            intent = Intent()
+            intent.setAction(Intent.ACTION_SEND_MULTIPLE)
+            intent.setType(mime_type)
+            intent.putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
+            intent.putExtra(Intent.EXTRA_SUBJECT, subject)
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            context.startActivity(intent)
     except Exception as e:
         App.get_running_app().show_toast(f"Share error: {str(e)[:50]}")
 
@@ -2133,49 +2152,40 @@ class ExportScreen(Screen):
     def do_export(self):
         app = App.get_running_app()
         try:
-            # Save to app's own storage (always writable)
             od = os.path.join(get_app_path(), "exports")
             os.makedirs(od, exist_ok=True)
             ts = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-            # Create a single zip with both CSVs
-            zip_path = os.path.join(od, f"nokia_export_{ts}.zip")
-            import zipfile as zf
-            with zf.ZipFile(zip_path, "w") as z:
-                # Phones CSV
-                phones_csv = ""
-                phones = app.db.export_phones()
-                phones_csv += "ID,Name,Release Date,Appearance,Working,Remarks\n"
+            # Write phones CSV
+            fp1 = os.path.join(od, f"nokia_phones_{ts}.csv")
+            phones = app.db.export_phones()
+            with open(fp1, "w", encoding="utf-8") as f:
+                f.write("ID,Name,Release Date,Appearance,Working,Remarks\n")
                 for p in phones:
                     row = [p["id"],p["name"],p.get("release_date",""),
                            p.get("appearance_condition",""),p.get("working_condition",""),
                            p.get("remarks","")]
-                    phones_csv += ",".join(f'"{str(v)}"' for v in row) + "\n"
-                z.writestr(f"nokia_phones_{ts}.csv", phones_csv)
+                    f.write(",".join(f'"{str(v)}"' for v in row) + "\n")
 
-                # Spares CSV
-                spares_csv = ""
-                spares = app.db.export_spare_parts()
-                spares_csv += "ID,Name,Phone ID,Description\n"
+            # Write spares CSV
+            fp2 = os.path.join(od, f"nokia_spares_{ts}.csv")
+            spares = app.db.export_spare_parts()
+            with open(fp2, "w", encoding="utf-8") as f:
+                f.write("ID,Name,Phone ID,Description\n")
                 for s in spares:
                     row = [s["id"],s["name"],s.get("phone_id",""),s.get("description","")]
-                    spares_csv += ",".join(f'"{str(v)}"' for v in row) + "\n"
-                z.writestr(f"nokia_spares_{ts}.csv", spares_csv)
+                    f.write(",".join(f'"{str(v)}"' for v in row) + "\n")
 
-            self.ids.export_status.text = "Export ready! Tap Share to send."
+            self.ids.export_status.text = f"Exported {len(phones)} phones, {len(spares)} spares"
             self.ids.export_status.color = (0.26,0.63,0.28,1)
-            self._export_path = zip_path
-            app.show_toast("Export created!")
+            app.show_toast("Sharing...")
 
-            # Auto-share on Android
+            # Share CSV files directly (not zip)
             if platform == "android":
-                self._share_file(zip_path)
+                _android_share([fp1, fp2], "text/csv", "Nokia Storage Export")
         except Exception as e:
             self.ids.export_status.text = f"Error: {str(e)}"
             self.ids.export_status.color = (0.9,0.22,0.21,1)
-
-    def _share_file(self, filepath):
-        _android_share(filepath, "application/zip", "Nokia Storage Export")
 
     def go_back(self):
         App.get_running_app().root.transition = SlideTransition(direction="right")

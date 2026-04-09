@@ -22,8 +22,14 @@ android.accept_sdk_license = True
 android.archs = arm64-v8a
 android.allow_backup = True
 
+# White presplash - eliminates black flash on startup
 presplash.filename = %(source.dir)s/assets/presplash.png
+presplash.color = #FFFFFF
 icon.filename = %(source.dir)s/assets/icon.png
+
+# White activity theme to prevent black screen before presplash loads
+android.whitelist = android.app.NativeActivity
+android.manifest.theme = @android:style/Theme.Light.NoTitleBar
 
 [buildozer]
 log_level = 2
