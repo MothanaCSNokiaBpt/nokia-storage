@@ -1504,7 +1504,6 @@ class PhoneDetailScreen(Screen):
     def add_image(self):
         """Show popup with Gallery and Camera options."""
         app = App.get_running_app()
-        app.show_toast("BTN: Add More Images tapped")
         popup = ModalView(size_hint=(0.75, None), height=dp(130))
         c = BoxLayout(orientation="vertical", spacing=dp(4), padding=dp(10))
         with c.canvas.before:
@@ -1521,13 +1520,11 @@ class PhoneDetailScreen(Screen):
 
     def _do_gallery_add(self):
         app = App.get_running_app()
-        app.show_toast("GAL: setting phone_gallery target")
         app.pick_image_for = ("phone_gallery", self.p_id)
         app.open_file_chooser(multiple=True)
 
     def _do_camera_add(self):
         app = App.get_running_app()
-        app.show_toast("CAM: setting phone_gallery target")
         app.pick_image_for = ("phone_gallery", self.p_id)
         app._launch_camera()
 
@@ -1996,7 +1993,6 @@ class NokiaStorageApp(App):
         except: pass
 
     def open_file_chooser(self, filters=None, multiple=False):
-        self.show_toast("STEP 3: open_file_chooser")
         if platform == "android": self._ac(filters, multiple)
         else: self._dc(filters, multiple)
 
@@ -2029,16 +2025,13 @@ class NokiaStorageApp(App):
 
     def _process_activity_result(self, request_code, result_code, data):
         """Process activity result on main thread."""
-        self.show_toast(f"RES: rc={request_code} res={result_code}")
         if request_code == 42:
             self._process_picker(result_code, data)
         elif request_code == 43:
             self._process_camera(result_code, data)
 
     def _process_picker(self, result_code, data):
-        self.show_toast("PICK1")
         if result_code != -1 or not data:
-            self.show_toast("PICK: cancelled")
             return
         try:
             uris = []
@@ -2046,14 +2039,11 @@ class NokiaStorageApp(App):
             if clip:
                 for i in range(clip.getItemCount()):
                     uris.append(clip.getItemAt(i).getUri())
-                self.show_toast(f"PICK2: {len(uris)} clips")
             else:
                 single = data.getData()
                 if single:
                     uris.append(single)
-                    self.show_toast("PICK2: 1 single")
             if not uris:
-                self.show_toast("PICK2: no URIs")
                 return
             all_bytes = []
             for uri in uris:
@@ -2061,15 +2051,14 @@ class NokiaStorageApp(App):
                     b = self._read_uri_bytes(uri)
                     if b and len(b) > 100:
                         all_bytes.append(b)
-                except Exception as e:
-                    self.show_toast(f"PICK3-ERR: {str(e)[:30]}")
-            self.show_toast(f"PICK4: {len(all_bytes)} read OK")
+                except:
+                    pass
             if all_bytes:
                 self._handle_selected_images(all_bytes)
             else:
-                self.show_toast("PICK4: nothing read")
+                self.show_toast("Could not read images")
         except Exception as e:
-            self.show_toast(f"PICK-ERR: {str(e)[:40]}")
+            self.show_toast(f"Error: {str(e)[:40]}")
 
     def _process_camera(self, result_code, data):
         self.show_toast(f"CAM1: result={result_code}")
@@ -2098,7 +2087,6 @@ class NokiaStorageApp(App):
 
     def _ac(self, filters=None, multiple=False):
         """Android file chooser - just launch Intent, callback already bound."""
-        self.show_toast("AC1")
         try:
             from jnius import autoclass
             Intent = autoclass("android.content.Intent")
@@ -2111,11 +2099,9 @@ class NokiaStorageApp(App):
             intent.addCategory(Intent.CATEGORY_OPENABLE)
             if multiple:
                 intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, True)
-            self.show_toast("AC2")
             PythonActivity.mActivity.startActivityForResult(intent, 42)
-            self.show_toast("AC3")
         except Exception as e:
-            self.show_toast(f"AC-ERR: {str(e)[:50]}")
+            self.show_toast(f"Picker error: {str(e)[:50]}")
 
     _camera_temp_file = ""
 
@@ -2150,12 +2136,43 @@ class NokiaStorageApp(App):
         except Exception as e:
             self.show_toast(f"CAML-ERR: {str(e)[:50]}")
 
+    def _resize_image(self, img_bytes, max_dim=1200):
+        """Resize image to max_dim using Android Bitmap API. Returns valid JPEG."""
+        if not img_bytes or platform != "android":
+            return img_bytes
+        try:
+            from jnius import autoclass
+            BitmapFactory = autoclass("android.graphics.BitmapFactory")
+            Bitmap = autoclass("android.graphics.Bitmap")
+            BitmapCF = autoclass("android.graphics.Bitmap$CompressFormat")
+            BAOS = autoclass("java.io.ByteArrayOutputStream")
+            bitmap = BitmapFactory.decodeByteArray(img_bytes, 0, len(img_bytes))
+            if not bitmap:
+                return img_bytes
+            w, h = bitmap.getWidth(), bitmap.getHeight()
+            if w > max_dim or h > max_dim:
+                if w > h:
+                    nw, nh = max_dim, int(h * max_dim / w)
+                else:
+                    nh, nw = max_dim, int(w * max_dim / h)
+                bitmap = Bitmap.createScaledBitmap(bitmap, nw, nh, True)
+            baos = BAOS()
+            bitmap.compress(BitmapCF.JPEG, 85, baos)
+            result = bytes(bytearray(baos.toByteArray()))
+            baos.close()
+            return result
+        except:
+            return img_bytes
+
     def _handle_selected_images(self, images_bytes_list):
         """Handle one or more selected images."""
         if not self.pick_image_for:
             return
         tt, td = self.pick_image_for
         self.pick_image_for = None
+
+        # Resize all images for performance
+        images_bytes_list = [self._resize_image(b) for b in images_bytes_list]
 
         if tt in ("add_phone_screen", "add_spare_screen"):
             # For add/edit screens, use first image only
