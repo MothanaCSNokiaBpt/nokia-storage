@@ -65,6 +65,49 @@ def get_downloads_path():
             pass
     return os.path.join(get_app_path(), "exports")
 
+# -- Share helpers (proven working pattern from pyjnius docs) ------
+def _share_text_android(text):
+    """Share text via Android share dialog."""
+    if platform != "android":
+        App.get_running_app().show_toast("Share: desktop mode")
+        return
+    try:
+        from android import mActivity
+        from jnius import autoclass
+        Intent = autoclass("android.content.Intent")
+        JString = autoclass("java.lang.String")
+        send = Intent()
+        send.setAction(Intent.ACTION_SEND)
+        send.setType("text/plain")
+        send.putExtra(Intent.EXTRA_TEXT, JString(text))
+        mActivity.startActivity(Intent.createChooser(send, None))
+    except Exception as e:
+        App.get_running_app().show_toast(f"Share: {str(e)[:50]}")
+
+def _share_file_android(filepath, mime_type):
+    """Share a file via Android share dialog."""
+    if platform != "android":
+        return
+    try:
+        from android import mActivity
+        from jnius import autoclass, cast
+        Intent = autoclass("android.content.Intent")
+        Uri = autoclass("android.net.Uri")
+        File = autoclass("java.io.File")
+        StrictMode = autoclass("android.os.StrictMode")
+        builder = autoclass("android.os.StrictMode$VmPolicy$Builder")()
+        StrictMode.setVmPolicy(builder.build())
+        jfile = File(filepath)
+        uri = Uri.fromFile(jfile)
+        send = Intent()
+        send.setAction(Intent.ACTION_SEND)
+        send.setType(mime_type)
+        send.putExtra(Intent.EXTRA_STREAM, cast("android.os.Parcelable", uri))
+        send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        mActivity.startActivity(Intent.createChooser(send, None))
+    except Exception as e:
+        App.get_running_app().show_toast(f"Share: {str(e)[:50]}")
+
 # -- Image System: File-based via imghelper ------------------------
 from imghelper import (
     get_default_image_path, write_blob_to_file, clear_item_cache,
@@ -618,79 +661,53 @@ ScreenManager:
                     background_color: 0, 0.314, 0.784, 1
                     color: 1, 1, 1, 1
                     on_press: root.add_image()
-                # Action buttons row
-                BoxLayout:
+                # Action buttons - centered row
+                AnchorLayout:
+                    anchor_x: 'center'
                     size_hint_y: None
-                    height: dp(56)
-                    spacing: dp(10)
-                    padding: dp(20), dp(4)
-                    orientation: 'horizontal'
+                    height: dp(70)
                     BoxLayout:
                         size_hint: None, None
-                        size: dp(46), dp(46)
-                        canvas.before:
-                            Color:
-                                rgba: 0, 0.314, 0.784, 1
-                            Ellipse:
-                                pos: self.pos
-                                size: self.size
+                        size: dp(260), dp(62)
+                        spacing: dp(14)
                         Button:
                             text: 'Edit'
-                            font_size: sp(10)
+                            size_hint: None, None
+                            size: dp(52), dp(52)
+                            font_size: sp(11)
                             bold: True
-                            size_hint: 1, 1
-                            background_color: 0, 0, 0, 0
+                            background_normal: ''
+                            background_color: 0, 0.314, 0.784, 1
                             color: 1, 1, 1, 1
                             on_press: root.edit_phone()
-                    BoxLayout:
-                        size_hint: None, None
-                        size: dp(46), dp(46)
-                        canvas.before:
-                            Color:
-                                rgba: 0.3, 0.55, 0.25, 1
-                            Ellipse:
-                                pos: self.pos
-                                size: self.size
                         Button:
                             text: 'Info'
-                            font_size: sp(10)
+                            size_hint: None, None
+                            size: dp(52), dp(52)
+                            font_size: sp(11)
                             bold: True
-                            size_hint: 1, 1
-                            background_color: 0, 0, 0, 0
+                            background_normal: ''
+                            background_color: 0.2, 0.6, 0.3, 1
                             color: 1, 1, 1, 1
                             on_press: root.show_summary()
-                    BoxLayout:
-                        size_hint: None, None
-                        size: dp(46), dp(46)
-                        canvas.before:
-                            Color:
-                                rgba: 0.5, 0.3, 0.7, 1
-                            Ellipse:
-                                pos: self.pos
-                                size: self.size
                         Button:
                             text: 'Web'
-                            font_size: sp(10)
+                            size_hint: None, None
+                            size: dp(52), dp(52)
+                            font_size: sp(11)
                             bold: True
-                            size_hint: 1, 1
-                            background_color: 0, 0, 0, 0
+                            background_normal: ''
+                            background_color: 0.45, 0.25, 0.7, 1
                             color: 1, 1, 1, 1
                             on_press: root.google_search()
-                    BoxLayout:
-                        size_hint: None, None
-                        size: dp(46), dp(46)
-                        canvas.before:
-                            Color:
-                                rgba: 0.8, 0.2, 0.2, 1
-                            Ellipse:
-                                pos: self.pos
-                                size: self.size
                         Button:
                             text: 'Del'
-                            font_size: sp(10)
+                            size_hint: None, None
+                            size: dp(52), dp(52)
+                            font_size: sp(11)
                             bold: True
-                            size_hint: 1, 1
-                            background_color: 0, 0, 0, 0
+                            background_normal: ''
+                            background_color: 0.8, 0.15, 0.15, 1
                             color: 1, 1, 1, 1
                             on_press: root.confirm_delete()
                 # Info Card
@@ -904,45 +921,33 @@ ScreenManager:
                     background_color: 0, 0.314, 0.784, 1
                     color: 1, 1, 1, 1
                     on_press: root.add_image()
-                # Action buttons row
-                BoxLayout:
+                # Action buttons - centered
+                AnchorLayout:
+                    anchor_x: 'center'
                     size_hint_y: None
-                    height: dp(56)
-                    spacing: dp(16)
-                    padding: dp(40), dp(4)
-                    orientation: 'horizontal'
+                    height: dp(70)
                     BoxLayout:
                         size_hint: None, None
-                        size: dp(46), dp(46)
-                        canvas.before:
-                            Color:
-                                rgba: 0, 0.314, 0.784, 1
-                            Ellipse:
-                                pos: self.pos
-                                size: self.size
+                        size: dp(130), dp(62)
+                        spacing: dp(14)
                         Button:
                             text: 'Edit'
-                            font_size: sp(10)
+                            size_hint: None, None
+                            size: dp(52), dp(52)
+                            font_size: sp(11)
                             bold: True
-                            size_hint: 1, 1
-                            background_color: 0, 0, 0, 0
+                            background_normal: ''
+                            background_color: 0, 0.314, 0.784, 1
                             color: 1, 1, 1, 1
                             on_press: root.edit_spare()
-                    BoxLayout:
-                        size_hint: None, None
-                        size: dp(46), dp(46)
-                        canvas.before:
-                            Color:
-                                rgba: 0.8, 0.2, 0.2, 1
-                            Ellipse:
-                                pos: self.pos
-                                size: self.size
                         Button:
                             text: 'Del'
-                            font_size: sp(10)
+                            size_hint: None, None
+                            size: dp(52), dp(52)
+                            font_size: sp(11)
                             bold: True
-                            size_hint: 1, 1
-                            background_color: 0, 0, 0, 0
+                            background_normal: ''
+                            background_color: 0.8, 0.15, 0.15, 1
                             color: 1, 1, 1, 1
                             on_press: root.confirm_delete()
                 BoxLayout:
@@ -2000,21 +2005,7 @@ class PhoneDetailScreen(Screen):
         text = f"Nokia {self.p_name}\nID: {self.p_id}\nRelease: {self.p_date}\nAppearance: {self.p_appear}\nWorking: {self.p_working}"
         if self.p_remarks and self.p_remarks != '-':
             text += f"\nRemarks: {self.p_remarks}"
-        if platform == "android":
-            try:
-                from jnius import autoclass
-                Intent = autoclass("android.content.Intent")
-                String = autoclass("java.lang.String")
-                PythonActivity = autoclass("org.kivy.android.PythonActivity")
-                intent = Intent()
-                intent.setAction(Intent.ACTION_SEND)
-                intent.setType("text/plain")
-                intent.putExtra(Intent.EXTRA_TEXT, String(text))
-                PythonActivity.mActivity.startActivity(intent)
-            except Exception as e:
-                App.get_running_app().show_toast(f"Share: {str(e)[:40]}")
-        else:
-            App.get_running_app().show_toast("Share: text copied (desktop)")
+        _share_text_android(text)
 
     def google_search(self):
         """Open Google search for this phone model."""
@@ -2236,21 +2227,7 @@ class SpareDetailScreen(Screen):
     def share_spare(self):
         """Share spare part info as plain text via Android share."""
         text = f"Nokia Spare: {self.s_name}\nID: {self.s_id_str}\nLinked Phone: {self.s_phone_id or '-'}\nDescription: {self.s_desc or '-'}"
-        if platform == "android":
-            try:
-                from jnius import autoclass
-                Intent = autoclass("android.content.Intent")
-                String = autoclass("java.lang.String")
-                PythonActivity = autoclass("org.kivy.android.PythonActivity")
-                intent = Intent()
-                intent.setAction(Intent.ACTION_SEND)
-                intent.setType("text/plain")
-                intent.putExtra(Intent.EXTRA_TEXT, String(text))
-                PythonActivity.mActivity.startActivity(intent)
-            except Exception as e:
-                App.get_running_app().show_toast(f"Share: {str(e)[:40]}")
-        else:
-            App.get_running_app().show_toast("Share: text copied (desktop)")
+        _share_text_android(text)
 
     def confirm_delete(self):
         popup = ModalView(size_hint=(0.78, None), height=dp(130))
@@ -2499,28 +2476,7 @@ class ExportScreen(Screen):
             app.show_toast("Export saved!")
 
             # Share the file
-            if platform == "android":
-                try:
-                    from jnius import autoclass, cast
-                    StrictMode = autoclass("android.os.StrictMode")
-                    builder = autoclass("android.os.StrictMode$VmPolicy$Builder")()
-                    StrictMode.setVmPolicy(builder.build())
-                    Intent = autoclass("android.content.Intent")
-                    Uri = autoclass("android.net.Uri")
-                    File = autoclass("java.io.File")
-                    PythonActivity = autoclass("org.kivy.android.PythonActivity")
-                    jfile = File(filepath)
-                    uri = Uri.fromFile(jfile)
-                    intent = Intent()
-                    intent.setAction(Intent.ACTION_SEND)
-                    intent.setType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-                    intent.putExtra(Intent.EXTRA_STREAM, cast("android.os.Parcelable", uri))
-                    intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    PythonActivity.mActivity.startActivity(intent)
-                except Exception as e:
-                    app.show_toast(f"Share error: {str(e)[:40]}")
-            else:
-                app.show_toast(f"File at: {filepath}")
+            _share_file_android(filepath, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
         except Exception as e:
             self.ids.export_status.text = f"Error: {str(e)}"
             self.ids.export_status.color = (0.9,0.22,0.21,1)
@@ -2566,27 +2522,7 @@ class BackupScreen(Screen):
             self.ids.backup_status.color = (0.9,0.22,0.21,1)
 
     def _share_backup(self, filepath):
-        if platform == "android":
-            try:
-                from jnius import autoclass, cast
-                StrictMode = autoclass("android.os.StrictMode")
-                builder = autoclass("android.os.StrictMode$VmPolicy$Builder")()
-                StrictMode.setVmPolicy(builder.build())
-                Intent = autoclass("android.content.Intent")
-                Uri = autoclass("android.net.Uri")
-                File = autoclass("java.io.File")
-                PythonActivity = autoclass("org.kivy.android.PythonActivity")
-                jfile = File(filepath)
-                uri = Uri.fromFile(jfile)
-                intent = Intent()
-                intent.setAction(Intent.ACTION_SEND)
-                intent.setType("application/zip")
-                intent.putExtra(Intent.EXTRA_STREAM, cast("android.os.Parcelable", uri))
-                intent.putExtra(Intent.EXTRA_SUBJECT, "Nokia Storage Backup")
-                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                PythonActivity.mActivity.startActivity(intent)
-            except Exception as e:
-                App.get_running_app().show_toast(f"Share error: {str(e)[:50]}")
+        _share_file_android(filepath, "application/zip")
 
     def restore_backup(self):
         app = App.get_running_app()
