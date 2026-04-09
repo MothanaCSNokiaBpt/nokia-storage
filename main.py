@@ -29,6 +29,7 @@ from kivy.uix.modalview import ModalView
 from kivy.uix.popup import Popup
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.screenmanager import ScreenManager, Screen, SlideTransition
+from kivy.uix.spinner import Spinner, SpinnerOption
 from kivy.uix.textinput import TextInput
 from kivy.uix.widget import Widget
 from kivy.utils import platform
@@ -180,6 +181,9 @@ class ClickableBox(ButtonBehavior, BoxLayout):
 class ClickableLabel(ButtonBehavior, Label):
     pass
 
+class BlueSpinnerOption(SpinnerOption):
+    pass
+
 class PhoneCard(ButtonBehavior, BoxLayout):
     phone_id = StringProperty("")
     phone_name = StringProperty("")
@@ -210,6 +214,13 @@ KV = """
 
 <ClickableBox>:
 <ClickableLabel>:
+
+<BlueSpinnerOption>:
+    background_normal: ''
+    background_color: 0, 0.275, 0.69, 1
+    color: 1, 1, 1, 1
+    font_size: sp(13)
+    height: dp(40)
 
 <PhoneCard>:
     size_hint_y: None
@@ -357,8 +368,6 @@ KV = """
 
 ScreenManager:
     id: sm
-    SplashScreen:
-        name: 'splash'
     MainScreen:
         name: 'main'
     PhoneDetailScreen:
@@ -379,25 +388,6 @@ ScreenManager:
         name: 'report'
     PhotoGalleryScreen:
         name: 'photo_gallery'
-
-<SplashScreen>:
-    BoxLayout:
-        orientation: 'vertical'
-        canvas.before:
-            Color:
-                rgba: 1, 1, 1, 1
-            Rectangle:
-                pos: self.pos
-                size: self.size
-        Widget:
-        Label:
-            text: 'NOKIA'
-            font_size: sp(52)
-            bold: True
-            color: 0, 0.314, 0.784, 1
-            size_hint_y: None
-            height: dp(70)
-        Widget:
 
 <MainScreen>:
     BoxLayout:
@@ -424,28 +414,31 @@ ScreenManager:
             Button:
                 text: 'Home'
                 size_hint_x: None
-                width: dp(52)
-                font_size: sp(11)
+                width: dp(58)
+                font_size: sp(12)
                 bold: True
-                background_color: 0.1, 0.4, 0.9, 1
+                background_normal: ''
+                background_color: 0.15, 0.4, 0.85, 1
                 color: 1, 1, 1, 1
                 on_press: root.refresh_home()
             Button:
                 text: 'Gallery'
                 size_hint_x: None
-                width: dp(56)
-                font_size: sp(11)
+                width: dp(58)
+                font_size: sp(12)
                 bold: True
-                background_color: 0.1, 0.4, 0.9, 1
+                background_normal: ''
+                background_color: 0.15, 0.4, 0.85, 1
                 color: 1, 1, 1, 1
                 on_press: root.open_gallery()
             Button:
                 text: 'Menu'
                 size_hint_x: None
-                width: dp(50)
-                font_size: sp(11)
+                width: dp(58)
+                font_size: sp(12)
                 bold: True
-                background_color: 0.2, 0.2, 0.25, 1
+                background_normal: ''
+                background_color: 0.15, 0.4, 0.85, 1
                 color: 1, 1, 1, 1
                 on_press: root.show_menu()
         SearchBar:
@@ -471,6 +464,7 @@ ScreenManager:
                 font_size: sp(12)
                 background_color: 0, 0.314, 0.784, 1
                 color: 1, 1, 1, 1
+                option_cls: 'BlueSpinnerOption'
                 on_text: root.apply_sort_filter()
             Spinner:
                 id: filter_field
@@ -481,6 +475,7 @@ ScreenManager:
                 font_size: sp(12)
                 background_color: 0.2, 0.2, 0.25, 1
                 color: 1, 1, 1, 1
+                option_cls: 'BlueSpinnerOption'
                 on_text: root.on_filter_field_change()
             TextInput:
                 id: filter_value
@@ -616,12 +611,33 @@ ScreenManager:
                 halign: 'left'
                 valign: 'middle'
             Button:
+                text: 'Google'
+                size_hint_x: None
+                width: dp(50)
+                font_size: sp(11)
+                bold: True
+                background_normal: ''
+                background_color: 0.15, 0.4, 0.85, 1
+                color: 1, 1, 1, 1
+                on_press: root.google_search()
+            Button:
+                text: 'Summary'
+                size_hint_x: None
+                width: dp(56)
+                font_size: sp(11)
+                bold: True
+                background_normal: ''
+                background_color: 0.4, 0.3, 0.6, 1
+                color: 1, 1, 1, 1
+                on_press: root.show_summary()
+            Button:
                 text: 'Share'
                 size_hint_x: None
                 width: dp(50)
                 font_size: sp(12)
                 bold: True
-                background_color: 0.1, 0.4, 0.9, 1
+                background_normal: ''
+                background_color: 0.15, 0.4, 0.85, 1
                 color: 1, 1, 1, 1
                 on_press: root.share_phone()
             ClickableLabel:
@@ -856,7 +872,8 @@ ScreenManager:
                 width: dp(50)
                 font_size: sp(12)
                 bold: True
-                background_color: 0.1, 0.4, 0.9, 1
+                background_normal: ''
+                background_color: 0.15, 0.4, 0.85, 1
                 color: 1, 1, 1, 1
                 on_press: root.share_spare()
             ClickableLabel:
@@ -1336,6 +1353,26 @@ ScreenManager:
                     color: 1, 1, 1, 1
                     font_size: sp(15)
                     bold: True
+            ClickableBox:
+                id: share_export_btn
+                size_hint_y: None
+                height: dp(48)
+                padding: dp(14), dp(10)
+                opacity: 0
+                disabled: True
+                canvas.before:
+                    Color:
+                        rgba: 0.15, 0.4, 0.85, 1
+                    RoundedRectangle:
+                        pos: self.pos
+                        size: self.size
+                        radius: [dp(9)]
+                on_release: root.share_export()
+                Label:
+                    text: 'Share Exported File'
+                    color: 1, 1, 1, 1
+                    font_size: sp(15)
+                    bold: True
             Widget:
 
 <BackupScreen>:
@@ -1541,17 +1578,6 @@ ScreenManager:
 # ── Screen Classes ──────────────────────────────────────────────
 
 
-class SplashScreen(Screen):
-    def on_enter(self):
-        Clock.schedule_once(self._go_main, 2)
-
-    def _go_main(self, *a):
-        app = App.get_running_app()
-        if app.root:
-            app.root.transition = SlideTransition(direction="left")
-            app.root.current = "main"
-
-
 class MainScreen(Screen):
     current_tab = StringProperty("phones")
     _raw_items = []  # Original unfiltered/unsorted data
@@ -1560,6 +1586,8 @@ class MainScreen(Screen):
     _total_items = 0
     _is_search = False
     _data_loaded = False
+    _sort_ascending = True
+    _last_sort_text = ""
 
     def on_enter(self):
         if not self._data_loaded:
@@ -1599,6 +1627,16 @@ class MainScreen(Screen):
 
     def apply_sort_filter(self, *a):
         """Called from KV when sort/filter changes."""
+        # Toggle sort direction if same sort value selected again
+        try:
+            current_sort = self.ids.sort_spinner.text
+            if current_sort == self._last_sort_text:
+                self._sort_ascending = not self._sort_ascending
+            else:
+                self._sort_ascending = True
+                self._last_sort_text = current_sort
+        except:
+            pass
         self._current_page = 0
         self._apply_sort_filter_internal()
 
@@ -1632,13 +1670,13 @@ class MainScreen(Screen):
             sort_by = self.ids.sort_spinner.text.replace('Sort: ', '')
             if self.current_tab == "phones":
                 if sort_by == 'Name':
-                    items.sort(key=lambda x: (x.get('name', '') or '').lower())
+                    items.sort(key=lambda x: (x.get('name', '') or '').lower(), reverse=not self._sort_ascending)
                 elif sort_by == 'ID':
-                    items.sort(key=lambda x: x.get('id', '') or '')
+                    items.sort(key=lambda x: x.get('id', '') or '', reverse=not self._sort_ascending)
                 elif sort_by == 'Year':
-                    items.sort(key=lambda x: x.get('release_date', '') or '')
+                    items.sort(key=lambda x: x.get('release_date', '') or '', reverse=not self._sort_ascending)
             else:
-                items.sort(key=lambda x: (x.get('name', '') or '').lower())
+                items.sort(key=lambda x: (x.get('name', '') or '').lower(), reverse=not self._sort_ascending)
         except: pass
 
         self._all_items = items
@@ -1662,7 +1700,8 @@ class MainScreen(Screen):
         tp = max(1, (self._total_items + PAGE_SIZE - 1) // PAGE_SIZE)
         cp = self._current_page + 1
         lt = "found" if self._is_search else ("phones" if self.current_tab == "phones" else "parts")
-        self.ids.count_label.text = f"{self._total_items} {lt} | Page {cp}/{tp}"
+        sort_dir = "ASC" if self._sort_ascending else "DESC"
+        self.ids.count_label.text = f"{self._total_items} {lt} | Page {cp}/{tp} | {sort_dir}"
         defimg = get_default_image_path(get_app_path())
 
         if self.current_tab == "phones":
@@ -1686,7 +1725,6 @@ class MainScreen(Screen):
 
         # Pagination
         if self._total_items > PAGE_SIZE:
-            from kivy.uix.spinner import Spinner
             pg = BoxLayout(size_hint_y=None, height=dp(42), spacing=dp(4), padding=(dp(6),dp(4)))
 
             # Prev buttons
@@ -1700,7 +1738,8 @@ class MainScreen(Screen):
             page_values = [f"Page {i+1}" for i in range(tp)]
             page_spinner = Spinner(text=f"Page {cp}", values=page_values,
                 size_hint_x=None, width=dp(90), font_size=sp(12),
-                background_color=(0, 0.314, 0.784, 1), color=(1,1,1,1))
+                background_color=(0, 0.314, 0.784, 1), color=(1,1,1,1),
+                option_cls=BlueSpinnerOption)
             page_spinner.bind(text=lambda w, t: self._goto(int(t.replace('Page ',''))-1) if 'Page' in t else None)
             pg.add_widget(page_spinner)
             pg.add_widget(Label(text=f"of {tp}", font_size=sp(12), color=(0.4,0.4,0.4,1), size_hint_x=None, width=dp(36)))
@@ -1755,6 +1794,8 @@ class MainScreen(Screen):
         """Reset everything and go to main screen."""
         self._data_loaded = False
         self._current_page = 0
+        self._sort_ascending = True
+        self._last_sort_text = ""
         try:
             self.ids.search_bar.ids.search_input.text = ""
             self.ids.filter_value.text = ""
@@ -1943,34 +1984,75 @@ class PhoneDetailScreen(Screen):
         app._launch_camera()
 
     def share_phone(self):
-        """Share phone main image + text info via Android share."""
+        """Share phone info as plain text via Android share."""
         app = App.get_running_app()
-        # Build text info
-        info_lines = [
-            f"Name: {self.p_name}",
-            f"ID: {self.p_id}",
-            f"Release: {self.p_date}",
-            f"Appearance: {self.p_appear}",
-            f"Working: {self.p_working}",
-            f"Remarks: {self.p_remarks or '-'}",
-        ]
-        info_text = "\n".join(info_lines)
-        # Write text to a temp file
-        tmp_txt = os.path.join(get_cache_dir(get_app_path()), f"_share_phone_{self.p_id}.txt")
+        text = f"Nokia {self.p_name}\nID: {self.p_id}\nRelease: {self.p_date}\nAppearance: {self.p_appear}\nWorking: {self.p_working}\nRemarks: {self.p_remarks or '-'}"
+        if platform == "android":
+            try:
+                from jnius import autoclass
+                Intent = autoclass("android.content.Intent")
+                PythonActivity = autoclass("org.kivy.android.PythonActivity")
+                intent = Intent()
+                intent.setAction(Intent.ACTION_SEND)
+                intent.setType("text/plain")
+                intent.putExtra(Intent.EXTRA_TEXT, text)
+                PythonActivity.mActivity.startActivity(intent)
+            except Exception as e:
+                app.show_toast(f"Share error: {str(e)[:50]}")
+        else:
+            app.show_toast("Share: text copied (desktop)")
+
+    def google_search(self):
+        """Open Google search for this phone model."""
+        import webbrowser
+        webbrowser.open(f"https://www.google.com/search?q=Nokia+{self.p_name}")
+
+    def show_summary(self):
+        """Show a summary popup for this phone."""
+        app = App.get_running_app()
+        # Count phones with same name
+        same_name_count = 0
         try:
-            with open(tmp_txt, "w", encoding="utf-8") as f:
-                f.write(info_text)
+            all_phones = app.db.get_all_phones()
+            same_name_count = sum(1 for p in all_phones if (p.get('name', '') or '').lower() == self.p_name.lower())
         except:
             pass
-        files = []
-        if self._current_img_path and os.path.exists(self._current_img_path):
-            files.append(self._current_img_path)
-        if os.path.exists(tmp_txt):
-            files.append(tmp_txt)
-        if files:
-            _android_share(files, "*/*", f"Nokia Phone: {self.p_name}")
-        else:
-            app.show_toast("Nothing to share")
+        # Get related spare parts
+        spare_names = []
+        try:
+            spares = app.db.get_spare_parts_for_phone(self.p_name)
+            spare_names = [s.get('name', '') for s in spares if s.get('name')]
+        except:
+            pass
+        spare_text = ", ".join(spare_names) if spare_names else "None"
+
+        popup = ModalView(size_hint=(0.88, None), height=dp(320))
+        c = BoxLayout(orientation="vertical", spacing=dp(6), padding=dp(14))
+        with c.canvas.before:
+            Color(1,1,1,1)
+            c._bg = RoundedRectangle(pos=c.pos, size=c.size, radius=[dp(12)])
+        c.bind(pos=lambda w,v: setattr(w._bg,"pos",v), size=lambda w,v: setattr(w._bg,"size",v))
+        c.add_widget(Label(text="Phone Summary", font_size=sp(17), bold=True, color=(0,0.314,0.784,1),
+            size_hint_y=None, height=dp(28)))
+        lines = [
+            f"Name: {self.p_name}",
+            f"ID: {self.p_id}",
+            f"Release: {self.p_date or '-'}",
+            f"Appearance: {self.p_appear or '-'}",
+            f"Working: {self.p_working or '-'}",
+            f"Same model in DB: {same_name_count}",
+            f"Spare parts: {spare_text}",
+        ]
+        for line in lines:
+            c.add_widget(Label(text=line, font_size=sp(13), color=(0.15,0.15,0.15,1),
+                size_hint_y=None, height=dp(22), text_size=(dp(280), None), halign="left"))
+        from kivy.uix.button import Button as KBtn
+        close = KBtn(text="Close", size_hint_y=None, height=dp(40), font_size=sp(14),
+            background_color=(0,0.314,0.784,1), color=(1,1,1,1))
+        close.bind(on_press=lambda *a: popup.dismiss())
+        c.add_widget(close)
+        popup.add_widget(c)
+        popup.open()
 
     def go_back(self):
         app = App.get_running_app()
@@ -2111,30 +2193,23 @@ class SpareDetailScreen(Screen):
         app._launch_camera()
 
     def share_spare(self):
-        """Share spare part main image + text info via Android share."""
+        """Share spare part info as plain text via Android share."""
         app = App.get_running_app()
-        info_lines = [
-            f"Name: {self.s_name}",
-            f"ID: {self.s_id_str}",
-            f"Linked Phone: {self.s_phone_id or '-'}",
-            f"Description: {self.s_desc or '-'}",
-        ]
-        info_text = "\n".join(info_lines)
-        tmp_txt = os.path.join(get_cache_dir(get_app_path()), f"_share_spare_{self.s_id}.txt")
-        try:
-            with open(tmp_txt, "w", encoding="utf-8") as f:
-                f.write(info_text)
-        except:
-            pass
-        files = []
-        if self._current_img_path and os.path.exists(self._current_img_path):
-            files.append(self._current_img_path)
-        if os.path.exists(tmp_txt):
-            files.append(tmp_txt)
-        if files:
-            _android_share(files, "*/*", f"Nokia Spare: {self.s_name}")
+        text = f"Nokia Spare: {self.s_name}\nID: {self.s_id_str}\nLinked Phone: {self.s_phone_id or '-'}\nDescription: {self.s_desc or '-'}"
+        if platform == "android":
+            try:
+                from jnius import autoclass
+                Intent = autoclass("android.content.Intent")
+                PythonActivity = autoclass("org.kivy.android.PythonActivity")
+                intent = Intent()
+                intent.setAction(Intent.ACTION_SEND)
+                intent.setType("text/plain")
+                intent.putExtra(Intent.EXTRA_TEXT, text)
+                PythonActivity.mActivity.startActivity(intent)
+            except Exception as e:
+                app.show_toast(f"Share error: {str(e)[:50]}")
         else:
-            app.show_toast("Nothing to share")
+            app.show_toast("Share: text copied (desktop)")
 
     def confirm_delete(self):
         popup = ModalView(size_hint=(0.78, None), height=dp(130))
@@ -2331,6 +2406,8 @@ class AddSpareScreen(Screen):
 
 
 class ExportScreen(Screen):
+    _last_export_path = ""
+
     def do_export(self):
         app = App.get_running_app()
         try:
@@ -2364,16 +2441,32 @@ class ExportScreen(Screen):
             fp = os.path.join(od, f"nokia_export_{ts}.xlsx")
             create_xlsx(sheets, fp)
 
-            self.ids.export_status.text = f"Exported {len(phones)} phones, {len(spares)} spares"
+            self._last_export_path = fp
+            self.ids.export_status.text = f"Exported {len(phones)} phones, {len(spares)} spares\nFile: {fp}"
             self.ids.export_status.color = (0.26,0.63,0.28,1)
-            app.show_toast("Sharing...")
+            app.show_toast("Export saved!")
 
-            # Share XLSX file
-            if platform == "android":
-                _android_share(fp, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "Nokia Storage Export")
+            # Show share button
+            try:
+                self.ids.share_export_btn.opacity = 1
+                self.ids.share_export_btn.disabled = False
+            except:
+                pass
         except Exception as e:
             self.ids.export_status.text = f"Error: {str(e)}"
             self.ids.export_status.color = (0.9,0.22,0.21,1)
+
+    def share_export(self):
+        """Share the last exported file."""
+        if not self._last_export_path or not os.path.exists(self._last_export_path):
+            App.get_running_app().show_toast("No export file to share")
+            return
+        if platform == "android":
+            _android_share(self._last_export_path,
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                "Nokia Storage Export")
+        else:
+            App.get_running_app().show_toast(f"File at: {self._last_export_path}")
 
     def go_back(self):
         App.get_running_app().root.transition = SlideTransition(direction="right")
@@ -2536,52 +2629,45 @@ class ReportScreen(Screen):
                     break
         year_range = f"{min(years)} - {max(years)}" if years else "N/A"
 
-        # Helper to create a colored stat card
+        # Helper to create a colored stat card - single column, full width
         def stat_card(title, value, bg_color):
-            bx = BoxLayout(orientation="vertical", size_hint_y=None, height=dp(64),
-                padding=dp(12), spacing=dp(2))
+            bx = BoxLayout(orientation="horizontal", size_hint_y=None, height=dp(60),
+                padding=dp(12), spacing=dp(8))
             with bx.canvas.before:
                 Color(*bg_color)
                 bx._bg = RoundedRectangle(pos=bx.pos, size=bx.size, radius=[dp(10)])
             bx.bind(pos=lambda w,v: setattr(w._bg,"pos",v), size=lambda w,v: setattr(w._bg,"size",v))
             bx.add_widget(Label(text=str(value), font_size=sp(22), bold=True, color=(1,1,1,1),
-                size_hint_y=None, height=dp(30), text_size=(dp(260),None), halign="left"))
-            bx.add_widget(Label(text=title, font_size=sp(12), color=(1,1,1,0.85),
-                size_hint_y=None, height=dp(18), text_size=(dp(260),None), halign="left"))
+                size_hint_x=None, width=dp(80), text_size=(dp(80), None), halign="center", valign="middle"))
+            bx.add_widget(Label(text=title, font_size=sp(13), color=(1,1,1,0.9),
+                text_size=(self.width, None), halign="left", valign="middle"))
             return bx
 
         def sec(t):
             g.add_widget(Label(text=t, font_size=sp(16), bold=True, color=(0,0.314,0.784,1),
                 size_hint_y=None, height=dp(30), text_size=(dp(300),None), halign="left"))
 
-        # Key stat cards in a grid
+        # Key stat cards - single column (full width each)
         sec("Overview")
-        row1 = BoxLayout(size_hint_y=None, height=dp(68), spacing=dp(8))
-        row1.add_widget(stat_card("Total Phones", total_phones, (0, 0.314, 0.784, 1)))
-        row1.add_widget(stat_card("With Images", with_images, (0.26, 0.63, 0.28, 1)))
-        g.add_widget(row1)
-
-        row2 = BoxLayout(size_hint_y=None, height=dp(68), spacing=dp(8))
-        row2.add_widget(stat_card("Without Images", without_images, (0.85, 0.4, 0.1, 1)))
-        row2.add_widget(stat_card("Unique Models", unique_models, (0.4, 0.3, 0.6, 1)))
-        g.add_widget(row2)
-
-        row3 = BoxLayout(size_hint_y=None, height=dp(68), spacing=dp(8))
-        row3.add_widget(stat_card("Spare Parts", total_spares, (0.2, 0.2, 0.25, 1)))
-        row3.add_widget(stat_card("Year Range", year_range, (0.6, 0.2, 0.4, 1)))
-        g.add_widget(row3)
+        g.add_widget(stat_card("Total Phones", total_phones, (0, 0.314, 0.784, 1)))
+        g.add_widget(stat_card("With Images", with_images, (0.26, 0.63, 0.28, 1)))
+        g.add_widget(stat_card("Without Images", without_images, (0.85, 0.4, 0.1, 1)))
+        g.add_widget(stat_card("Unique Models", unique_models, (0.4, 0.3, 0.6, 1)))
+        g.add_widget(stat_card("Spare Parts", total_spares, (0.2, 0.2, 0.25, 1)))
+        g.add_widget(stat_card("Year Range", year_range, (0.6, 0.2, 0.4, 1)))
 
         # Most common model card
-        mc_bx = BoxLayout(orientation="vertical", size_hint_y=None, height=dp(64),
-            padding=dp(12), spacing=dp(2))
+        mc_bx = BoxLayout(orientation="horizontal", size_hint_y=None, height=dp(60),
+            padding=dp(12), spacing=dp(8))
         with mc_bx.canvas.before:
             Color(0, 0.44, 1, 1)
             mc_bx._bg = RoundedRectangle(pos=mc_bx.pos, size=mc_bx.size, radius=[dp(10)])
         mc_bx.bind(pos=lambda w,v: setattr(w._bg,"pos",v), size=lambda w,v: setattr(w._bg,"size",v))
-        mc_bx.add_widget(Label(text=f"{most_common[0]} ({most_common[1]})", font_size=sp(18), bold=True, color=(1,1,1,1),
-            size_hint_y=None, height=dp(28), text_size=(dp(300),None), halign="left"))
-        mc_bx.add_widget(Label(text="Most Common Model", font_size=sp(12), color=(1,1,1,0.85),
-            size_hint_y=None, height=dp(18), text_size=(dp(300),None), halign="left"))
+        mc_bx.add_widget(Label(text=f"{most_common[0]} ({most_common[1]})", font_size=sp(16), bold=True, color=(1,1,1,1),
+            text_size=(dp(280),None), halign="left", valign="middle"))
+        lbl = Label(text="Most Common", font_size=sp(11), color=(1,1,1,0.85),
+            size_hint_x=None, width=dp(80), text_size=(dp(80),None), halign="right", valign="middle")
+        mc_bx.add_widget(lbl)
         g.add_widget(mc_bx)
 
         # Condition breakdown with percentages
@@ -2604,6 +2690,26 @@ class ReportScreen(Screen):
 
         condition_section("By Working Condition", r.get("by_working",[]), (0, 0.314, 0.784))
         condition_section("By Appearance", r.get("by_appearance",[]), (0.26, 0.63, 0.28))
+
+        # Spare parts breakdown by name (top 10)
+        try:
+            all_spares = app.db.get_all_spare_parts()
+            spare_counts = {}
+            for sp_item in all_spares:
+                sname = sp_item.get('name', '') or 'Unknown'
+                spare_counts[sname] = spare_counts.get(sname, 0) + 1
+            sorted_spares = sorted(spare_counts.items(), key=lambda x: x[1], reverse=True)[:10]
+            if sorted_spares:
+                sec("Top Spare Parts")
+                for sname, scount in sorted_spares:
+                    row = BoxLayout(size_hint_y=None, height=dp(24), padding=(dp(8),dp(1)))
+                    row.add_widget(Label(text=str(sname), font_size=sp(12), color=(0.3,0.3,0.3,1),
+                        text_size=(dp(220),None), halign="left"))
+                    row.add_widget(Label(text=str(scount), font_size=sp(12), bold=True, color=(0.1,0.1,0.18,1),
+                        size_hint_x=None, width=dp(50), halign="right", text_size=(dp(50),None)))
+                    g.add_widget(row)
+        except:
+            pass
 
         sec("Top 20 Models")
         for n, c in r.get("by_model",[]):
@@ -2774,7 +2880,7 @@ class NokiaStorageApp(App):
 
     def _kb(self, win, key, *a):
         if key == 27:
-            if self.root and self.root.current not in ("main", "splash"):
+            if self.root and self.root.current not in ("main",):
                 self.root.transition = SlideTransition(direction="right"); self.root.current = "main"
                 return True
             now = time.time()

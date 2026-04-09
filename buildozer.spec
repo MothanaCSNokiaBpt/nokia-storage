@@ -22,11 +22,10 @@ android.accept_sdk_license = True
 android.archs = arm64-v8a
 android.allow_backup = True
 
-# No presplash - app shows white SplashScreen directly
+# White presplash to prevent black screen
+presplash.filename = %(source.dir)s/assets/presplash.png
+presplash.color = #FFFFFF
 icon.filename = %(source.dir)s/assets/icon.png
-
-# White theme to prevent black flash
-android.manifest.theme = @android:style/Theme.Light.NoTitleBar
 
 [buildozer]
 log_level = 2
