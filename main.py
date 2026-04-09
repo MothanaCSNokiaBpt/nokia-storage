@@ -2072,30 +2072,27 @@ class NokiaStorageApp(App):
             self.show_toast(f"PICK-ERR: {str(e)[:40]}")
 
     def _process_camera(self, result_code, data):
-        self.show_toast("CAM1")
-        if result_code != -1 or not data:
+        self.show_toast(f"CAM1: result={result_code}")
+        if result_code != -1:
             self.show_toast("CAM: cancelled")
             return
+        # Read from temp file (camera wrote the full image there)
         try:
-            from jnius import autoclass
-            extras = data.getExtras()
-            if not extras:
-                self.show_toast("CAM2: no extras")
-                return
-            bitmap = extras.getParcelable("data")
-            if not bitmap:
-                self.show_toast("CAM2: no bitmap")
-                return
-            self.show_toast("CAM3: compressing")
-            BitmapCF = autoclass("android.graphics.Bitmap$CompressFormat")
-            BAOS = autoclass("java.io.ByteArrayOutputStream")
-            baos = BAOS()
-            bitmap.compress(BitmapCF.JPEG, 90, baos)
-            img_bytes = bytes(bytearray(baos.toByteArray()))
-            baos.close()
-            self.show_toast(f"CAM4: {len(img_bytes)} bytes")
-            if img_bytes and len(img_bytes) > 100:
-                self._handle_selected_images([img_bytes])
+            path = self._camera_temp_file
+            self.show_toast(f"CAM2: reading {path[-30:]}")
+            if path and os.path.exists(path):
+                with open(path, "rb") as f:
+                    img_bytes = f.read()
+                self.show_toast(f"CAM3: {len(img_bytes)} bytes")
+                if img_bytes and len(img_bytes) > 100:
+                    self._handle_selected_images([img_bytes])
+                    # Clean up temp file
+                    try:
+                        os.remove(path)
+                    except:
+                        pass
+                    return
+            self.show_toast("CAM2: file not found or empty")
         except Exception as e:
             self.show_toast(f"CAM-ERR: {str(e)[:40]}")
 
@@ -2120,16 +2117,35 @@ class NokiaStorageApp(App):
         except Exception as e:
             self.show_toast(f"AC-ERR: {str(e)[:50]}")
 
+    _camera_temp_file = ""
+
     def _launch_camera(self):
-        """Launch camera Intent - callback already bound at startup."""
+        """Launch camera with temp file output (official Kivy pattern)."""
         self.show_toast("CAML1")
         try:
-            from jnius import autoclass
+            from jnius import autoclass, cast
             Intent = autoclass("android.content.Intent")
             MediaStore = autoclass("android.provider.MediaStore")
             PythonActivity = autoclass("org.kivy.android.PythonActivity")
+            Uri = autoclass("android.net.Uri")
+            File = autoclass("java.io.File")
+            Environment = autoclass("android.os.Environment")
+
+            # Create temp file for camera to write to
+            pic_dir = Environment.getExternalStoragePublicDirectory(
+                Environment.DIRECTORY_PICTURES)
+            if not pic_dir.exists():
+                pic_dir.mkdirs()
+            temp_name = f"nokia_cam_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
+            temp_file = File(pic_dir, temp_name)
+            self._camera_temp_file = temp_file.getAbsolutePath()
+            self.show_toast(f"CAML2: {self._camera_temp_file[-30:]}")
+
             intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
-            self.show_toast("CAML2")
+            uri = Uri.fromFile(temp_file)
+            intent.putExtra(MediaStore.EXTRA_OUTPUT, cast('android.os.Parcelable', uri))
+
+            self.show_toast("CAML3: launching")
             PythonActivity.mActivity.startActivityForResult(intent, 43)
         except Exception as e:
             self.show_toast(f"CAML-ERR: {str(e)[:50]}")
