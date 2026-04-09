@@ -272,8 +272,6 @@ KV = """
 
 ScreenManager:
     id: sm
-    SplashScreen:
-        name: 'splash'
     MainScreen:
         name: 'main'
     PhoneDetailScreen:
@@ -295,21 +293,6 @@ ScreenManager:
     PhotoGalleryScreen:
         name: 'photo_gallery'
 
-<SplashScreen>:
-    BoxLayout:
-        canvas.before:
-            Color:
-                rgba: 1, 1, 1, 1
-            Rectangle:
-                pos: self.pos
-                size: self.size
-        Label:
-            text: 'NOKIA'
-            font_size: sp(50)
-            bold: True
-            color: 0, 0.314, 0.784, 1
-            halign: 'center'
-            valign: 'middle'
 
 <MainScreen>:
     BoxLayout:
@@ -1421,13 +1404,6 @@ ScreenManager:
 
 # ── Screen Classes ──────────────────────────────────────────────
 
-class SplashScreen(Screen):
-    def on_enter(self):
-        Clock.schedule_once(lambda dt: self._go_main(), 2)
-    def _go_main(self):
-        app = App.get_running_app()
-        app.root.transition = SlideTransition(direction="left")
-        app.root.current = "main"
 
 class MainScreen(Screen):
     current_tab = StringProperty("phones")
@@ -2109,35 +2085,69 @@ class ExportScreen(Screen):
     def do_export(self):
         app = App.get_running_app()
         try:
-            # Try Downloads first, fallback to app storage
-            od = get_downloads_path()
-            try:
-                os.makedirs(od, exist_ok=True)
-                # Test write
-                test = os.path.join(od, "_test.tmp")
-                with open(test, "w") as f: f.write("test")
-                os.remove(test)
-            except:
-                od = get_app_path()  # Fallback
+            # Save to app's own storage (always writable)
+            od = os.path.join(get_app_path(), "exports")
+            os.makedirs(od, exist_ok=True)
             ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-            fp = os.path.join(od, f"nokia_phones_{ts}.csv")
-            phones = app.db.export_phones()
-            with open(fp, "w", newline="", encoding="utf-8") as f:
-                w = csv.writer(f)
-                w.writerow(["ID","Name","Release Date","Appearance","Working","Remarks"])
+
+            # Create a single zip with both CSVs
+            zip_path = os.path.join(od, f"nokia_export_{ts}.zip")
+            import zipfile as zf
+            with zf.ZipFile(zip_path, "w") as z:
+                # Phones CSV
+                phones_csv = ""
+                phones = app.db.export_phones()
+                phones_csv += "ID,Name,Release Date,Appearance,Working,Remarks\n"
                 for p in phones:
-                    w.writerow([p["id"],p["name"],p.get("release_date",""),p.get("appearance_condition",""),p.get("working_condition",""),p.get("remarks","")])
-            sp2 = os.path.join(od, f"nokia_spares_{ts}.csv")
-            spares = app.db.export_spare_parts()
-            with open(sp2, "w", newline="", encoding="utf-8") as f:
-                w = csv.writer(f)
-                w.writerow(["ID","Name","Phone ID","Description"])
-                for s in spares: w.writerow([s["id"],s["name"],s.get("phone_id",""),s.get("description","")])
-            self.ids.export_status.text = f"Saved to:\n{od}"; self.ids.export_status.color = (0.26,0.63,0.28,1)
-            app.show_toast(f"Exported to {od[-30:]}")
+                    row = [p["id"],p["name"],p.get("release_date",""),
+                           p.get("appearance_condition",""),p.get("working_condition",""),
+                           p.get("remarks","")]
+                    phones_csv += ",".join(f'"{str(v)}"' for v in row) + "\n"
+                z.writestr(f"nokia_phones_{ts}.csv", phones_csv)
+
+                # Spares CSV
+                spares_csv = ""
+                spares = app.db.export_spare_parts()
+                spares_csv += "ID,Name,Phone ID,Description\n"
+                for s in spares:
+                    row = [s["id"],s["name"],s.get("phone_id",""),s.get("description","")]
+                    spares_csv += ",".join(f'"{str(v)}"' for v in row) + "\n"
+                z.writestr(f"nokia_spares_{ts}.csv", spares_csv)
+
+            self.ids.export_status.text = "Export ready! Tap Share to send."
+            self.ids.export_status.color = (0.26,0.63,0.28,1)
+            self._export_path = zip_path
+            app.show_toast("Export created!")
+
+            # Auto-share on Android
+            if platform == "android":
+                self._share_file(zip_path)
         except Exception as e:
-            self.ids.export_status.text = f"Error: {str(e)}"; self.ids.export_status.color = (0.9,0.22,0.21,1)
-            app.show_toast(f"Export failed: {str(e)[:50]}")
+            self.ids.export_status.text = f"Error: {str(e)}"
+            self.ids.export_status.color = (0.9,0.22,0.21,1)
+
+    def _share_file(self, filepath):
+        try:
+            from jnius import autoclass, cast
+            PythonActivity = autoclass("org.kivy.android.PythonActivity")
+            Intent = autoclass("android.content.Intent")
+            Uri = autoclass("android.net.Uri")
+            File = autoclass("java.io.File")
+            context = PythonActivity.mActivity
+            # Use FileProvider for sharing
+            StrictMode = autoclass("android.os.StrictMode")
+            StrictMode.disableDeathOnFileUriExposure()
+            jfile = File(filepath)
+            uri = Uri.fromFile(jfile)
+            intent = Intent(Intent.ACTION_SEND)
+            intent.setType("application/zip")
+            intent.putExtra(Intent.EXTRA_STREAM, cast("android.os.Parcelable", uri))
+            intent.putExtra(Intent.EXTRA_SUBJECT, "Nokia Storage Export")
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            chooser = Intent.createChooser(intent, "Share Export")
+            context.startActivity(chooser)
+        except Exception as e:
+            App.get_running_app().show_toast(f"Share: {str(e)[:50]}")
 
     def go_back(self):
         App.get_running_app().root.transition = SlideTransition(direction="right")
@@ -2148,37 +2158,91 @@ class BackupScreen(Screen):
     def create_backup(self):
         app = App.get_running_app()
         try:
-            od = get_downloads_path(); os.makedirs(od, exist_ok=True)
+            # Save to app storage (always writable)
+            od = os.path.join(get_app_path(), "backups")
+            os.makedirs(od, exist_ok=True)
             bf = os.path.join(od, f"nokia_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip")
+            # DB contains ALL data: phones, spares, images (BLOBs), gallery
             with zipfile.ZipFile(bf, "w", zipfile.ZIP_DEFLATED) as zf:
                 dbp = get_db_path()
-                if os.path.exists(dbp): zf.write(dbp, "nokia_storage.db")
-            self.ids.backup_status.text = f"Saved to Downloads!"; self.ids.backup_status.color = (0.26,0.63,0.28,1)
-            app.show_toast("Backup created!")
+                if os.path.exists(dbp):
+                    zf.write(dbp, "nokia_storage.db")
+            fsize = os.path.getsize(bf) // 1024
+            self.ids.backup_status.text = f"Backup created ({fsize}KB)\nTap Share to save/send"
+            self.ids.backup_status.color = (0.26,0.63,0.28,1)
+            self._backup_path = bf
+            app.show_toast(f"Backup: {fsize}KB")
+            # Auto-share on Android
+            if platform == "android":
+                self._share_backup(bf)
         except Exception as e:
-            self.ids.backup_status.text = f"Error: {str(e)[:80]}"; self.ids.backup_status.color = (0.9,0.22,0.21,1)
+            self.ids.backup_status.text = f"Error: {str(e)}"
+            self.ids.backup_status.color = (0.9,0.22,0.21,1)
+
+    def _share_backup(self, filepath):
+        try:
+            from jnius import autoclass, cast
+            PythonActivity = autoclass("org.kivy.android.PythonActivity")
+            Intent = autoclass("android.content.Intent")
+            Uri = autoclass("android.net.Uri")
+            File = autoclass("java.io.File")
+            StrictMode = autoclass("android.os.StrictMode")
+            StrictMode.disableDeathOnFileUriExposure()
+            context = PythonActivity.mActivity
+            jfile = File(filepath)
+            uri = Uri.fromFile(jfile)
+            intent = Intent(Intent.ACTION_SEND)
+            intent.setType("application/zip")
+            intent.putExtra(Intent.EXTRA_STREAM, cast("android.os.Parcelable", uri))
+            intent.putExtra(Intent.EXTRA_SUBJECT, "Nokia Storage Backup")
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            chooser = Intent.createChooser(intent, "Save/Share Backup")
+            context.startActivity(chooser)
+        except Exception as e:
+            App.get_running_app().show_toast(f"Share: {str(e)[:50]}")
 
     def restore_backup(self):
         app = App.get_running_app()
-        app.pick_image_for = ("restore_backup", None); app.open_file_chooser(filters=["*.zip"])
+        app.pick_image_for = ("restore_backup", None)
+        app.open_file_chooser(filters=["*.zip"])
 
     def on_backup_selected(self, path):
+        """Restore: read zip, extract DB, reopen. All images are inside the DB as BLOBs."""
         app = App.get_running_app()
         try:
+            # Read the zip (might be a content:// URI on Android)
+            from imghelper import smart_read
+            zip_bytes = smart_read(path)
+            if not zip_bytes:
+                app.show_toast("Cannot read backup file")
+                return
+            # Write to temp location
+            tmp_zip = os.path.join(get_app_path(), "_restore_tmp.zip")
+            with open(tmp_zip, "wb") as f:
+                f.write(zip_bytes)
+            # Close DB, extract, reopen
             app.db.close()
-            with zipfile.ZipFile(path, "r") as zf: zf.extractall(get_app_path())
+            with zipfile.ZipFile(tmp_zip, "r") as zf:
+                zf.extractall(get_app_path())
+            try: os.remove(tmp_zip)
+            except: pass
             app.db = NokiaDatabase(get_db_path())
-            # Clear image cache
+            # Clear image cache so images reload from new DB
             try:
                 import shutil
                 cd = get_cache_dir(get_app_path())
                 if os.path.isdir(cd):
                     shutil.rmtree(cd, ignore_errors=True)
             except: pass
-            self.ids.backup_status.text = "Restored!"; app.show_toast("Restored!")
+            app.root.get_screen("main")._data_loaded = False
+            cnt = app.db.get_phone_count()
+            self.ids.backup_status.text = f"Restored! {cnt} phones loaded."
+            self.ids.backup_status.color = (0.26,0.63,0.28,1)
+            app.show_toast(f"Restored {cnt} phones!")
         except Exception as e:
             app.db = NokiaDatabase(get_db_path())
-            self.ids.backup_status.text = f"Error: {str(e)[:80]}"
+            self.ids.backup_status.text = f"Error: {str(e)}"
+            self.ids.backup_status.color = (0.9,0.22,0.21,1)
 
     def go_back(self):
         App.get_running_app().root.transition = SlideTransition(direction="right")
@@ -2270,6 +2334,8 @@ class ReportScreen(Screen):
 
 
 class PhotoGalleryScreen(Screen):
+    _image_paths = []  # List of (gal_id, img_path) for navigation
+
     def on_enter(self):
         Clock.schedule_once(lambda dt: self._load(), 0.2)
 
@@ -2278,37 +2344,93 @@ class PhotoGalleryScreen(Screen):
         grid = self.ids.gallery_grid
         grid.clear_widgets()
         images = app.db.get_general_gallery()
+        self._image_paths = []
         if not images:
-            grid.add_widget(Label(text="No photos yet. Tap '+ Add Photos' to start.",
-                font_size=sp(13), color=(0.5,0.5,0.5,1), size_hint_y=None, height=dp(40)))
+            grid.add_widget(Label(text="No photos yet.\nTap '+ Add Photos' to start.",
+                font_size=sp(14), color=(0.5,0.5,0.5,1), size_hint_y=None, height=dp(60),
+                halign="center"))
             return
         for gal_id, img_data, caption in images:
             img_path = write_blob_to_file(img_data, f"gg_{gal_id}", get_app_path())
             if img_path:
-                box = BoxLayout(orientation="vertical", size_hint_y=None, height=dp(180), padding=dp(3))
+                self._image_paths.append((gal_id, img_path))
+                idx = len(self._image_paths) - 1
+                box = BoxLayout(orientation="vertical", size_hint_y=None, height=dp(190), padding=dp(3))
                 with box.canvas.before:
                     Color(1,1,1,1)
                     box._bg = RoundedRectangle(pos=box.pos, size=box.size, radius=[dp(8)])
                 box.bind(pos=lambda w,v: setattr(w._bg,"pos",v), size=lambda w,v: setattr(w._bg,"size",v))
+                # Image - tappable
                 img_btn = ClickableBox(size_hint_y=None, height=dp(155))
                 img_widget = Image(source=img_path, nocache=True, allow_stretch=True, keep_ratio=True)
                 img_btn.add_widget(img_widget)
-                img_btn.bind(on_release=partial(self._view_full, img_path))
+                img_btn.bind(on_release=partial(self._open_viewer, idx))
                 box.add_widget(img_btn)
-                if caption:
-                    box.add_widget(Label(text=caption, font_size=sp(10), color=(0.4,0.4,0.4,1),
-                        size_hint_y=None, height=dp(18), text_size=(dp(150),None), halign="center"))
+                # Delete button
+                from kivy.uix.button import Button as KBtn
+                del_btn = KBtn(text="Delete", size_hint_y=None, height=dp(28),
+                    font_size=sp(11), background_color=(0.85,0.2,0.2,1), color=(1,1,1,1))
+                del_btn.bind(on_press=partial(self._delete_photo, gal_id))
+                box.add_widget(del_btn)
                 grid.add_widget(box)
 
-    def _view_full(self, img_path, *a):
+    def _delete_photo(self, gal_id, *a):
+        app = App.get_running_app()
+        app.db.delete_general_gallery(gal_id)
+        clear_item_cache(f"gg_{gal_id}", get_app_path())
+        app.show_toast("Photo deleted")
+        self._load()
+
+    def _open_viewer(self, index, *a):
+        """Open full-screen image viewer with left/right navigation."""
+        if not self._image_paths:
+            return
+        self._viewer_index = index
+        self._show_viewer()
+
+    def _show_viewer(self):
         from kivy.uix.button import Button as KBtn
-        popup = ModalView(size_hint=(1, 1), background_color=(0, 0, 0, 0.95))
-        c = BoxLayout(orientation="vertical", padding=dp(4))
+        if hasattr(self, '_viewer_popup') and self._viewer_popup:
+            try: self._viewer_popup.dismiss()
+            except: pass
+
+        idx = self._viewer_index
+        if idx < 0 or idx >= len(self._image_paths):
+            return
+        gal_id, img_path = self._image_paths[idx]
+        total = len(self._image_paths)
+
+        self._viewer_popup = ModalView(size_hint=(1, 1), background_color=(0, 0, 0, 0.95))
+        c = BoxLayout(orientation="vertical", padding=dp(4), spacing=dp(4))
+
+        # Counter
+        c.add_widget(Label(text=f"{idx+1} / {total}", font_size=sp(14), color=(1,1,1,1),
+            size_hint_y=None, height=dp(28)))
+
+        # Image
         c.add_widget(Image(source=img_path, nocache=True, allow_stretch=True, keep_ratio=True))
-        cb = KBtn(text="Close", size_hint_y=None, height=dp(44), font_size=sp(14), background_color=(0.3,0.3,0.3,1))
-        cb.bind(on_press=lambda *a: popup.dismiss())
-        c.add_widget(cb)
-        popup.add_widget(c); popup.open()
+
+        # Navigation buttons
+        nav = BoxLayout(size_hint_y=None, height=dp(46), spacing=dp(6))
+        prev_btn = KBtn(text="< Prev", font_size=sp(14), background_color=(0.3,0.3,0.3,1),
+            disabled=(idx == 0))
+        prev_btn.bind(on_press=lambda *a: self._nav_viewer(-1))
+        close_btn = KBtn(text="Close", font_size=sp(14), background_color=(0.5,0.1,0.1,1))
+        close_btn.bind(on_press=lambda *a: self._viewer_popup.dismiss())
+        next_btn = KBtn(text="Next >", font_size=sp(14), background_color=(0.3,0.3,0.3,1),
+            disabled=(idx >= total - 1))
+        next_btn.bind(on_press=lambda *a: self._nav_viewer(1))
+        nav.add_widget(prev_btn); nav.add_widget(close_btn); nav.add_widget(next_btn)
+        c.add_widget(nav)
+
+        self._viewer_popup.add_widget(c)
+        self._viewer_popup.open()
+
+    def _nav_viewer(self, direction):
+        self._viewer_index += direction
+        self._viewer_index = max(0, min(self._viewer_index, len(self._image_paths) - 1))
+        self._viewer_popup.dismiss()
+        Clock.schedule_once(lambda dt: self._show_viewer(), 0.1)
 
     def add_photos(self):
         app = App.get_running_app()
@@ -2342,13 +2464,11 @@ class NokiaStorageApp(App):
                 print(f"Activity bind error: {e}")
         self._load_initial()
         Window.bind(on_keyboard=self._kb)
-        root = Builder.load_string(KV)
-        root.current = "splash"
-        return root
+        return Builder.load_string(KV)
 
     def _kb(self, win, key, *a):
         if key == 27:
-            if self.root and self.root.current not in ("main", "splash"):
+            if self.root and self.root.current != "main":
                 self.root.transition = SlideTransition(direction="right"); self.root.current = "main"
                 return True
             now = time.time()
