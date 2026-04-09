@@ -621,57 +621,78 @@ ScreenManager:
                 # Action buttons row
                 BoxLayout:
                     size_hint_y: None
-                    height: dp(58)
-                    spacing: dp(12)
-                    padding: dp(10), dp(4)
+                    height: dp(56)
+                    spacing: dp(10)
+                    padding: dp(20), dp(4)
                     orientation: 'horizontal'
-                    Widget:
-                    Button:
-                        text: '\\u270e'
+                    BoxLayout:
                         size_hint: None, None
-                        size: dp(48), dp(48)
-                        font_size: sp(20)
-                        background_normal: ''
-                        background_color: 0, 0.314, 0.784, 1
-                        color: 1, 1, 1, 1
-                        on_press: root.edit_phone()
-                    Button:
-                        text: '\\u2197'
+                        size: dp(46), dp(46)
+                        canvas.before:
+                            Color:
+                                rgba: 0, 0.314, 0.784, 1
+                            Ellipse:
+                                pos: self.pos
+                                size: self.size
+                        Button:
+                            text: 'Edit'
+                            font_size: sp(10)
+                            bold: True
+                            size_hint: 1, 1
+                            background_color: 0, 0, 0, 0
+                            color: 1, 1, 1, 1
+                            on_press: root.edit_phone()
+                    BoxLayout:
                         size_hint: None, None
-                        size: dp(48), dp(48)
-                        font_size: sp(20)
-                        background_normal: ''
-                        background_color: 0, 0.314, 0.784, 1
-                        color: 1, 1, 1, 1
-                        on_press: root.share_phone()
-                    Button:
-                        text: '\\U0001f4ca'
+                        size: dp(46), dp(46)
+                        canvas.before:
+                            Color:
+                                rgba: 0.3, 0.55, 0.25, 1
+                            Ellipse:
+                                pos: self.pos
+                                size: self.size
+                        Button:
+                            text: 'Info'
+                            font_size: sp(10)
+                            bold: True
+                            size_hint: 1, 1
+                            background_color: 0, 0, 0, 0
+                            color: 1, 1, 1, 1
+                            on_press: root.show_summary()
+                    BoxLayout:
                         size_hint: None, None
-                        size: dp(48), dp(48)
-                        font_size: sp(20)
-                        background_normal: ''
-                        background_color: 0, 0.314, 0.784, 1
-                        color: 1, 1, 1, 1
-                        on_press: root.show_summary()
-                    Button:
-                        text: '\\U0001f50d'
+                        size: dp(46), dp(46)
+                        canvas.before:
+                            Color:
+                                rgba: 0.5, 0.3, 0.7, 1
+                            Ellipse:
+                                pos: self.pos
+                                size: self.size
+                        Button:
+                            text: 'Web'
+                            font_size: sp(10)
+                            bold: True
+                            size_hint: 1, 1
+                            background_color: 0, 0, 0, 0
+                            color: 1, 1, 1, 1
+                            on_press: root.google_search()
+                    BoxLayout:
                         size_hint: None, None
-                        size: dp(48), dp(48)
-                        font_size: sp(20)
-                        background_normal: ''
-                        background_color: 0, 0.314, 0.784, 1
-                        color: 1, 1, 1, 1
-                        on_press: root.google_search()
-                    Button:
-                        text: '\\U0001f5d1'
-                        size_hint: None, None
-                        size: dp(48), dp(48)
-                        font_size: sp(20)
-                        background_normal: ''
-                        background_color: 0.85, 0.2, 0.2, 1
-                        color: 1, 1, 1, 1
-                        on_press: root.confirm_delete()
-                    Widget:
+                        size: dp(46), dp(46)
+                        canvas.before:
+                            Color:
+                                rgba: 0.8, 0.2, 0.2, 1
+                            Ellipse:
+                                pos: self.pos
+                                size: self.size
+                        Button:
+                            text: 'Del'
+                            font_size: sp(10)
+                            bold: True
+                            size_hint: 1, 1
+                            background_color: 0, 0, 0, 0
+                            color: 1, 1, 1, 1
+                            on_press: root.confirm_delete()
                 # Info Card
                 BoxLayout:
                     orientation: 'vertical'
@@ -886,39 +907,44 @@ ScreenManager:
                 # Action buttons row
                 BoxLayout:
                     size_hint_y: None
-                    height: dp(58)
-                    spacing: dp(12)
-                    padding: dp(10), dp(4)
+                    height: dp(56)
+                    spacing: dp(16)
+                    padding: dp(40), dp(4)
                     orientation: 'horizontal'
-                    Widget:
-                    Button:
-                        text: '\\u270e'
+                    BoxLayout:
                         size_hint: None, None
-                        size: dp(48), dp(48)
-                        font_size: sp(20)
-                        background_normal: ''
-                        background_color: 0, 0.314, 0.784, 1
-                        color: 1, 1, 1, 1
-                        on_press: root.edit_spare()
-                    Button:
-                        text: '\\u2197'
+                        size: dp(46), dp(46)
+                        canvas.before:
+                            Color:
+                                rgba: 0, 0.314, 0.784, 1
+                            Ellipse:
+                                pos: self.pos
+                                size: self.size
+                        Button:
+                            text: 'Edit'
+                            font_size: sp(10)
+                            bold: True
+                            size_hint: 1, 1
+                            background_color: 0, 0, 0, 0
+                            color: 1, 1, 1, 1
+                            on_press: root.edit_spare()
+                    BoxLayout:
                         size_hint: None, None
-                        size: dp(48), dp(48)
-                        font_size: sp(20)
-                        background_normal: ''
-                        background_color: 0, 0.314, 0.784, 1
-                        color: 1, 1, 1, 1
-                        on_press: root.share_spare()
-                    Button:
-                        text: '\\U0001f5d1'
-                        size_hint: None, None
-                        size: dp(48), dp(48)
-                        font_size: sp(20)
-                        background_normal: ''
-                        background_color: 0.85, 0.2, 0.2, 1
-                        color: 1, 1, 1, 1
-                        on_press: root.confirm_delete()
-                    Widget:
+                        size: dp(46), dp(46)
+                        canvas.before:
+                            Color:
+                                rgba: 0.8, 0.2, 0.2, 1
+                            Ellipse:
+                                pos: self.pos
+                                size: self.size
+                        Button:
+                            text: 'Del'
+                            font_size: sp(10)
+                            bold: True
+                            size_hint: 1, 1
+                            background_color: 0, 0, 0, 0
+                            color: 1, 1, 1, 1
+                            on_press: root.confirm_delete()
                 BoxLayout:
                     orientation: 'vertical'
                     size_hint_y: None
