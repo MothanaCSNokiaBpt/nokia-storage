@@ -469,11 +469,12 @@ ScreenManager:
                 height: self.minimum_height
                 padding: dp(14)
                 spacing: dp(10)
-                # Phone Image - using Image widget, texture set from Python
-                BoxLayout:
+                # Phone Image - tap to view full size
+                ClickableBox:
                     size_hint_y: None
                     height: dp(220)
                     padding: dp(16)
+                    on_release: root.view_main_image()
                     canvas.before:
                         Color:
                             rgba: 0.94, 0.96, 1, 1
@@ -687,10 +688,11 @@ ScreenManager:
                 height: self.minimum_height
                 padding: dp(14)
                 spacing: dp(10)
-                BoxLayout:
+                ClickableBox:
                     size_hint_y: None
                     height: dp(220)
                     padding: dp(16)
+                    on_release: root.view_main_image()
                     canvas.before:
                         Color:
                             rgba: 0.94, 0.96, 1, 1
@@ -1454,12 +1456,20 @@ class PhoneDetailScreen(Screen):
         Clock.schedule_once(lambda dt: self._load_gallery(), 0.15)
         Clock.schedule_once(lambda dt: self._load_spares(), 0.2)
 
+    _current_img_path = ""
+
     def _set_img(self, path):
         try:
             src = path or get_default_image_path(get_app_path())
+            self._current_img_path = src
             self.ids.detail_img.source = src
             self.ids.detail_img.reload()
         except: pass
+
+    def view_main_image(self):
+        """Open main phone image in full screen."""
+        if self._current_img_path:
+            self._show_fullscreen(self._current_img_path)
 
     def _load_gallery(self):
         """Load gallery images from phone_gallery table."""
@@ -1472,14 +1482,28 @@ class PhoneDetailScreen(Screen):
                 color=(0.5,0.5,0.5,1), size_hint_y=None, height=dp(24)))
             return
         for gal_id, img_data in images:
-            # Write BLOB to cache file for display
             img_path = write_blob_to_file(img_data, f"gal_{gal_id}", get_app_path())
             if img_path:
-                box = BoxLayout(size_hint_y=None, height=dp(200), padding=dp(2))
+                btn = ClickableBox(size_hint_y=None, height=dp(200), padding=dp(2))
                 img_widget = Image(source=img_path, nocache=True,
                     allow_stretch=True, keep_ratio=True)
-                box.add_widget(img_widget)
-                grid.add_widget(box)
+                btn.add_widget(img_widget)
+                btn.bind(on_release=partial(self._show_fullscreen, img_path))
+                grid.add_widget(btn)
+
+    def _show_fullscreen(self, img_path, *args):
+        """Show image in full-screen overlay."""
+        from kivy.uix.button import Button as KButton
+        popup = ModalView(size_hint=(1, 1), background_color=(0, 0, 0, 0.95))
+        content = BoxLayout(orientation="vertical", padding=dp(4))
+        img = Image(source=img_path, nocache=True, allow_stretch=True, keep_ratio=True)
+        content.add_widget(img)
+        close_btn = KButton(text="Close", size_hint_y=None, height=dp(44),
+            font_size=sp(14), background_color=(0.3, 0.3, 0.3, 1))
+        close_btn.bind(on_press=lambda *a: popup.dismiss())
+        content.add_widget(close_btn)
+        popup.add_widget(content)
+        popup.open()
 
     def _load_spares(self):
         app = App.get_running_app()
@@ -1583,12 +1607,32 @@ class SpareDetailScreen(Screen):
         img = get_img_path_for_spare(sid, app.db)
         Clock.schedule_once(lambda dt: self._set_img(img), 0.1)
 
+    _current_img_path = ""
+
     def _set_img(self, path):
         try:
             src = path or get_default_image_path(get_app_path())
+            self._current_img_path = src
             self.ids.detail_img.source = src
             self.ids.detail_img.reload()
         except: pass
+
+    def view_main_image(self):
+        if self._current_img_path:
+            self._show_fullscreen(self._current_img_path)
+
+    def _show_fullscreen(self, img_path, *args):
+        from kivy.uix.button import Button as KButton
+        popup = ModalView(size_hint=(1, 1), background_color=(0, 0, 0, 0.95))
+        content = BoxLayout(orientation="vertical", padding=dp(4))
+        img = Image(source=img_path, nocache=True, allow_stretch=True, keep_ratio=True)
+        content.add_widget(img)
+        close_btn = KButton(text="Close", size_hint_y=None, height=dp(44),
+            font_size=sp(14), background_color=(0.3, 0.3, 0.3, 1))
+        close_btn.bind(on_press=lambda *a: popup.dismiss())
+        content.add_widget(close_btn)
+        popup.add_widget(content)
+        popup.open()
 
     def add_image(self):
         """Show popup with Gallery and Camera for spare part."""
@@ -2061,29 +2105,37 @@ class NokiaStorageApp(App):
             self.show_toast(f"Error: {str(e)[:40]}")
 
     def _process_camera(self, result_code, data):
-        self.show_toast(f"CAM1: result={result_code}")
         if result_code != -1:
-            self.show_toast("CAM: cancelled")
             return
-        # Read from temp file (camera wrote the full image there)
+        if not data:
+            self.show_toast("Camera: no data returned")
+            return
         try:
-            path = self._camera_temp_file
-            self.show_toast(f"CAM2: reading {path[-30:]}")
-            if path and os.path.exists(path):
-                with open(path, "rb") as f:
-                    img_bytes = f.read()
-                self.show_toast(f"CAM3: {len(img_bytes)} bytes")
-                if img_bytes and len(img_bytes) > 100:
-                    self._handle_selected_images([img_bytes])
-                    # Clean up temp file
-                    try:
-                        os.remove(path)
-                    except:
-                        pass
-                    return
-            self.show_toast("CAM2: file not found or empty")
+            from jnius import autoclass
+            # Get thumbnail bitmap from Intent extras
+            extras = data.getExtras()
+            if not extras:
+                self.show_toast("Camera: no extras")
+                return
+            # getParcelable returns the Bitmap thumbnail
+            bitmap = extras.getParcelable("data")
+            if not bitmap:
+                self.show_toast("Camera: no bitmap in extras")
+                return
+            # Compress bitmap to JPEG bytes
+            BitmapCF = autoclass("android.graphics.Bitmap$CompressFormat")
+            BAOS = autoclass("java.io.ByteArrayOutputStream")
+            baos = BAOS()
+            bitmap.compress(BitmapCF.JPEG, 95, baos)
+            img_bytes = bytes(bytearray(baos.toByteArray()))
+            baos.close()
+            if img_bytes and len(img_bytes) > 100:
+                self.show_toast(f"Camera: {len(img_bytes)} bytes")
+                self._handle_selected_images([img_bytes])
+            else:
+                self.show_toast("Camera: empty image")
         except Exception as e:
-            self.show_toast(f"CAM-ERR: {str(e)[:40]}")
+            self.show_toast(f"Camera error: {str(e)[:50]}")
 
     def _ac(self, filters=None, multiple=False):
         """Android file chooser - just launch Intent, callback already bound."""
@@ -2106,35 +2158,17 @@ class NokiaStorageApp(App):
     _camera_temp_file = ""
 
     def _launch_camera(self):
-        """Launch camera with temp file output (official Kivy pattern)."""
-        self.show_toast("CAML1")
+        """Launch camera - no EXTRA_OUTPUT, get thumbnail from extras.
+        This is the simplest approach that works on all Android versions."""
         try:
-            from jnius import autoclass, cast
+            from jnius import autoclass
             Intent = autoclass("android.content.Intent")
             MediaStore = autoclass("android.provider.MediaStore")
             PythonActivity = autoclass("org.kivy.android.PythonActivity")
-            Uri = autoclass("android.net.Uri")
-            File = autoclass("java.io.File")
-            Environment = autoclass("android.os.Environment")
-
-            # Create temp file for camera to write to
-            pic_dir = Environment.getExternalStoragePublicDirectory(
-                Environment.DIRECTORY_PICTURES)
-            if not pic_dir.exists():
-                pic_dir.mkdirs()
-            temp_name = f"nokia_cam_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
-            temp_file = File(pic_dir, temp_name)
-            self._camera_temp_file = temp_file.getAbsolutePath()
-            self.show_toast(f"CAML2: {self._camera_temp_file[-30:]}")
-
             intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
-            uri = Uri.fromFile(temp_file)
-            intent.putExtra(MediaStore.EXTRA_OUTPUT, cast('android.os.Parcelable', uri))
-
-            self.show_toast("CAML3: launching")
             PythonActivity.mActivity.startActivityForResult(intent, 43)
         except Exception as e:
-            self.show_toast(f"CAML-ERR: {str(e)[:50]}")
+            self.show_toast(f"Camera error: {str(e)[:50]}")
 
     def _resize_image(self, img_bytes, max_dim=1200):
         """Resize image to max_dim using Android Bitmap API. Returns valid JPEG."""
