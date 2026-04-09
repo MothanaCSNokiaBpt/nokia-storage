@@ -856,7 +856,22 @@ ScreenManager:
                                 radius: [dp(7)]
                         on_release: root.pick_from_gallery()
                         Label:
-                            text: 'Select Image'
+                            text: 'Gallery'
+                            color: 0, 0.314, 0.784, 1
+                            font_size: sp(12)
+                            bold: True
+                    ClickableBox:
+                        padding: dp(6), dp(5)
+                        canvas.before:
+                            Color:
+                                rgba: 0, 0.314, 0.784, 0.12
+                            RoundedRectangle:
+                                pos: self.pos
+                                size: self.size
+                                radius: [dp(7)]
+                        on_release: root.take_camera()
+                        Label:
+                            text: 'Camera'
                             color: 0, 0.314, 0.784, 1
                             font_size: sp(12)
                             bold: True
@@ -998,7 +1013,22 @@ ScreenManager:
                                 radius: [dp(7)]
                         on_release: root.pick_from_gallery()
                         Label:
-                            text: 'Select Image'
+                            text: 'Gallery'
+                            color: 0, 0.314, 0.784, 1
+                            font_size: sp(12)
+                            bold: True
+                    ClickableBox:
+                        padding: dp(6), dp(5)
+                        canvas.before:
+                            Color:
+                                rgba: 0, 0.314, 0.784, 0.12
+                            RoundedRectangle:
+                                pos: self.pos
+                                size: self.size
+                                radius: [dp(7)]
+                        on_release: root.take_camera()
+                        Label:
+                            text: 'Camera'
                             color: 0, 0.314, 0.784, 1
                             font_size: sp(12)
                             bold: True
@@ -1488,10 +1518,34 @@ class PhoneDetailScreen(Screen):
         app.root.transition = SlideTransition(direction="left"); app.root.current = "spare_detail"
 
     def add_image(self):
-        """Open gallery to add more images for this phone."""
+        """Show popup with Gallery and Camera options."""
         app = App.get_running_app()
+        app.show_toast("BTN: Add More Images tapped")
+        popup = ModalView(size_hint=(0.75, None), height=dp(130))
+        c = BoxLayout(orientation="vertical", spacing=dp(4), padding=dp(10))
+        with c.canvas.before:
+            Color(1,1,1,1); c._bg = RoundedRectangle(pos=c.pos, size=c.size, radius=[dp(10)])
+        c.bind(pos=lambda w,v: setattr(w._bg,"pos",v), size=lambda w,v: setattr(w._bg,"size",v))
+        gb = ClickableBox(size_hint_y=None, height=dp(44), padding=(dp(10),dp(6)))
+        gb.add_widget(Label(text="Pick from Gallery", font_size=sp(14), color=(0.1,0.1,0.18,1)))
+        gb.bind(on_release=lambda *a: (popup.dismiss(), self._do_gallery_add()))
+        cb = ClickableBox(size_hint_y=None, height=dp(44), padding=(dp(10),dp(6)))
+        cb.add_widget(Label(text="Take Photo", font_size=sp(14), color=(0.1,0.1,0.18,1)))
+        cb.bind(on_release=lambda *a: (popup.dismiss(), self._do_camera_add()))
+        c.add_widget(gb); c.add_widget(cb)
+        popup.add_widget(c); popup.open()
+
+    def _do_gallery_add(self):
+        app = App.get_running_app()
+        app.show_toast("GAL: setting phone_gallery target")
         app.pick_image_for = ("phone_gallery", self.p_id)
         app.open_file_chooser(multiple=True)
+
+    def _do_camera_add(self):
+        app = App.get_running_app()
+        app.show_toast("CAM: setting phone_gallery target")
+        app.pick_image_for = ("phone_gallery", self.p_id)
+        app._launch_camera()
 
     def go_back(self):
         app = App.get_running_app()
@@ -1556,10 +1610,31 @@ class SpareDetailScreen(Screen):
         except: pass
 
     def add_image(self):
-        """Open gallery to add/change spare part image."""
+        """Show popup with Gallery and Camera for spare part."""
+        app = App.get_running_app()
+        popup = ModalView(size_hint=(0.75, None), height=dp(130))
+        c = BoxLayout(orientation="vertical", spacing=dp(4), padding=dp(10))
+        with c.canvas.before:
+            Color(1,1,1,1); c._bg = RoundedRectangle(pos=c.pos, size=c.size, radius=[dp(10)])
+        c.bind(pos=lambda w,v: setattr(w._bg,"pos",v), size=lambda w,v: setattr(w._bg,"size",v))
+        gb = ClickableBox(size_hint_y=None, height=dp(44), padding=(dp(10),dp(6)))
+        gb.add_widget(Label(text="Pick from Gallery", font_size=sp(14), color=(0.1,0.1,0.18,1)))
+        gb.bind(on_release=lambda *a: (popup.dismiss(), self._do_gallery()))
+        cb = ClickableBox(size_hint_y=None, height=dp(44), padding=(dp(10),dp(6)))
+        cb.add_widget(Label(text="Take Photo", font_size=sp(14), color=(0.1,0.1,0.18,1)))
+        cb.bind(on_release=lambda *a: (popup.dismiss(), self._do_camera()))
+        c.add_widget(gb); c.add_widget(cb)
+        popup.add_widget(c); popup.open()
+
+    def _do_gallery(self):
         app = App.get_running_app()
         app.pick_image_for = ("spare_direct", self.s_id)
         app.open_file_chooser()
+
+    def _do_camera(self):
+        app = App.get_running_app()
+        app.pick_image_for = ("spare_direct", self.s_id)
+        app._launch_camera()
 
     def confirm_delete(self):
         popup = ModalView(size_hint=(0.78, None), height=dp(130))
@@ -1628,6 +1703,10 @@ class AddPhoneScreen(Screen):
         app = App.get_running_app()
         app.pick_image_for = ("add_phone_screen", None); app.open_file_chooser()
 
+    def take_camera(self):
+        app = App.get_running_app()
+        app.pick_image_for = ("add_phone_screen", None); app._launch_camera()
+
     def on_image_selected(self, img_bytes):
         """Called with raw image bytes."""
         self._image_bytes = img_bytes
@@ -1682,6 +1761,9 @@ class AddSpareScreen(Screen):
         app = App.get_running_app()
         app.pick_image_for = ("add_spare_screen", None); app.open_file_chooser()
 
+    def take_camera(self):
+        app = App.get_running_app()
+        app.pick_image_for = ("add_spare_screen", None); app._launch_camera()
 
 
     def on_image_selected(self, img_bytes):
@@ -1950,8 +2032,92 @@ class NokiaStorageApp(App):
         with os.fdopen(fd, "rb") as f:
             return f.read()
 
+    def _on_android_activity_result(self, request_code, result_code, data):
+        """Class-level activity result handler - survives garbage collection."""
+        self.show_toast(f"H1: result rc={request_code} res={result_code}")
+        if request_code == 42:
+            self._handle_picker_result(result_code, data)
+        elif request_code == 43:
+            self._handle_camera_result(result_code, data)
+
+    def _handle_picker_result(self, result_code, data):
+        """Process file picker result."""
+        self.show_toast("H2: picker result")
+        if result_code != -1 or not data:
+            self.show_toast("H2: cancelled or no data")
+            return
+        try:
+            uris = []
+            clip = data.getClipData()
+            if clip:
+                cnt = clip.getItemCount()
+                self.show_toast(f"H3: clip with {cnt} items")
+                for i in range(cnt):
+                    uris.append(clip.getItemAt(i).getUri())
+            else:
+                single = data.getData()
+                if single:
+                    uris.append(single)
+                    self.show_toast("H3: single URI")
+
+            if not uris:
+                self.show_toast("H3: no URIs found")
+                return
+
+            self.show_toast(f"H4: reading {len(uris)} URIs")
+            all_bytes = []
+            for uri in uris:
+                try:
+                    img_bytes = self._read_uri_bytes(uri)
+                    if img_bytes and len(img_bytes) > 100:
+                        all_bytes.append(img_bytes)
+                        self.show_toast(f"H5: read {len(img_bytes)} bytes")
+                except Exception as e:
+                    self.show_toast(f"H5-ERR: {str(e)[:40]}")
+
+            if all_bytes:
+                self.show_toast(f"H6: handling {len(all_bytes)} images")
+                self._handle_selected_images(all_bytes)
+            else:
+                self.show_toast("H6: no bytes read")
+        except Exception as e:
+            self.show_toast(f"H2-ERR: {str(e)[:40]}")
+
+    def _handle_camera_result(self, result_code, data):
+        """Process camera result."""
+        self.show_toast("CAM1: camera result")
+        if result_code != -1 or not data:
+            self.show_toast("CAM1: cancelled")
+            return
+        try:
+            from jnius import autoclass
+            extras = data.getExtras()
+            if not extras:
+                self.show_toast("CAM2: no extras")
+                return
+            bitmap = extras.getParcelable("data")
+            if not bitmap:
+                self.show_toast("CAM2: no bitmap")
+                return
+            self.show_toast("CAM3: got bitmap, compressing")
+            BitmapCF = autoclass("android.graphics.Bitmap$CompressFormat")
+            ByteArrayOutputStream = autoclass("java.io.ByteArrayOutputStream")
+            baos = ByteArrayOutputStream()
+            bitmap.compress(BitmapCF.JPEG, 90, baos)
+            java_bytes = baos.toByteArray()
+            img_bytes = bytes(bytearray(java_bytes))
+            baos.close()
+            self.show_toast(f"CAM4: {len(img_bytes)} bytes")
+            if img_bytes and len(img_bytes) > 100:
+                self._handle_selected_images([img_bytes])
+            else:
+                self.show_toast("CAM4: empty result")
+        except Exception as e:
+            self.show_toast(f"CAM-ERR: {str(e)[:50]}")
+
     def _ac(self, filters=None, multiple=False):
-        """Android file chooser using direct Intent + activity result binding."""
+        """Android file chooser using direct Intent."""
+        self.show_toast("AC1: starting picker")
         try:
             from jnius import autoclass
             from android import activity as android_activity
@@ -1969,49 +2135,42 @@ class NokiaStorageApp(App):
             if multiple:
                 intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, True)
 
-            def on_result(request_code, result_code, data):
-                if request_code != 42:
-                    return
-                try:
-                    android_activity.unbind(on_activity_result=on_result)
-                except:
-                    pass
-                if result_code != -1 or not data:
-                    return
+            # Unbind any old handler, rebind fresh
+            try:
+                android_activity.unbind(on_activity_result=self._on_android_activity_result)
+            except:
+                pass
+            android_activity.bind(on_activity_result=self._on_android_activity_result)
 
-                # Collect all URIs (single or multiple selection)
-                uris = []
-                clip = data.getClipData()
-                if clip:
-                    for i in range(clip.getItemCount()):
-                        uris.append(clip.getItemAt(i).getUri())
-                else:
-                    single = data.getData()
-                    if single:
-                        uris.append(single)
-
-                if not uris:
-                    return
-
-                # Read bytes from each URI and handle
-                all_bytes = []
-                for uri in uris:
-                    try:
-                        img_bytes = self._read_uri_bytes(uri)
-                        if img_bytes and len(img_bytes) > 100:
-                            all_bytes.append(img_bytes)
-                    except:
-                        pass
-
-                if all_bytes:
-                    self._handle_selected_images(all_bytes)
-                else:
-                    self.show_toast("Could not read images")
-
-            android_activity.bind(on_activity_result=on_result)
+            self.show_toast("AC2: launching intent")
             PythonActivity.mActivity.startActivityForResult(intent, 42)
+            self.show_toast("AC3: intent launched")
         except Exception as e:
-            self.show_toast(f"Picker: {str(e)[:50]}")
+            self.show_toast(f"AC-ERR: {str(e)[:50]}")
+
+    def _launch_camera(self):
+        """Launch camera using Android Intent."""
+        self.show_toast("CAM-LAUNCH1: starting")
+        try:
+            from jnius import autoclass
+            from android import activity as android_activity
+
+            Intent = autoclass("android.content.Intent")
+            MediaStore = autoclass("android.provider.MediaStore")
+            PythonActivity = autoclass("org.kivy.android.PythonActivity")
+
+            intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
+
+            try:
+                android_activity.unbind(on_activity_result=self._on_android_activity_result)
+            except:
+                pass
+            android_activity.bind(on_activity_result=self._on_android_activity_result)
+
+            self.show_toast("CAM-LAUNCH2: launching")
+            PythonActivity.mActivity.startActivityForResult(intent, 43)
+        except Exception as e:
+            self.show_toast(f"CAM-LAUNCH-ERR: {str(e)[:50]}")
 
     def _handle_selected_images(self, images_bytes_list):
         """Handle one or more selected images."""
