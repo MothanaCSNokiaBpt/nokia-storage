@@ -2426,7 +2426,18 @@ class ExportScreen(Screen):
     def do_export(self):
         app = App.get_running_app()
         try:
-            od = os.path.join(get_app_path(), "exports")
+            # Use external files dir so other apps (WhatsApp etc) can access it
+            if platform == "android":
+                try:
+                    from jnius import autoclass
+                    PythonActivity = autoclass("org.kivy.android.PythonActivity")
+                    context = PythonActivity.mActivity
+                    ext_dir = context.getExternalFilesDir(None)
+                    od = ext_dir.getAbsolutePath()
+                except:
+                    od = os.path.join(get_app_path(), "exports")
+            else:
+                od = os.path.join(get_app_path(), "exports")
             os.makedirs(od, exist_ok=True)
             ts = datetime.now().strftime("%Y%m%d_%H%M%S")
 
@@ -2497,8 +2508,18 @@ class BackupScreen(Screen):
     def create_backup(self):
         app = App.get_running_app()
         try:
-            # Save to app storage (always writable)
-            od = os.path.join(get_app_path(), "backups")
+            # Use external dir so sharing works
+            if platform == "android":
+                try:
+                    from jnius import autoclass
+                    PythonActivity = autoclass("org.kivy.android.PythonActivity")
+                    context = PythonActivity.mActivity
+                    ext_dir = context.getExternalFilesDir(None)
+                    od = ext_dir.getAbsolutePath()
+                except:
+                    od = os.path.join(get_app_path(), "backups")
+            else:
+                od = os.path.join(get_app_path(), "backups")
             os.makedirs(od, exist_ok=True)
             bf = os.path.join(od, f"nokia_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip")
             # DB contains ALL data: phones, spares, images (BLOBs), gallery
