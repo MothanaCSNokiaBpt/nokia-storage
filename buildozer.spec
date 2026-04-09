@@ -3,7 +3,7 @@ title = Nokia Storage
 package.name = nokiastorage
 package.domain = com.ict18.nokia
 source.dir = .
-source.include_exts = py,kv,json,png,jpg,jpeg,atlas,xml,mp4
+source.include_exts = py,kv,json,png,jpg,jpeg,atlas,xml,gif
 source.include_patterns = assets/*
 version = 1.0.0
 
