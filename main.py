@@ -71,6 +71,35 @@ from imghelper import (
     smart_read, get_cache_dir
 )
 
+def _android_share(filepath, mime_type, subject):
+    """Share a file using Android's system share dialog."""
+    if platform != "android":
+        return
+    try:
+        from jnius import autoclass, cast
+        PythonActivity = autoclass("org.kivy.android.PythonActivity")
+        Intent = autoclass("android.content.Intent")
+        Uri = autoclass("android.net.Uri")
+        File = autoclass("java.io.File")
+        # Disable strict mode for file URI
+        StrictMode = autoclass("android.os.StrictMode")
+        builder = autoclass("android.os.StrictMode$VmPolicy$Builder")()
+        StrictMode.setVmPolicy(builder.build())
+        # Create share intent
+        context = PythonActivity.mActivity
+        jfile = File(filepath)
+        uri = Uri.fromFile(jfile)
+        intent = Intent()
+        intent.setAction(Intent.ACTION_SEND)
+        intent.setType(mime_type)
+        intent.putExtra(Intent.EXTRA_STREAM, cast("android.os.Parcelable", uri))
+        intent.putExtra(Intent.EXTRA_SUBJECT, subject)
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        # Start chooser activity directly
+        context.startActivity(intent)
+    except Exception as e:
+        App.get_running_app().show_toast(f"Share error: {str(e)[:50]}")
+
 def get_img_path_for_phone(phone_id, db):
     """Get displayable image file path for a phone."""
     app_path = get_app_path()
@@ -317,16 +346,23 @@ ScreenManager:
                 halign: 'left'
                 valign: 'middle'
             ClickableLabel:
+                text: 'Home'
+                size_hint_x: None
+                width: dp(40)
+                font_size: sp(11)
+                color: 1, 1, 1, 1
+                on_release: root.refresh_home()
+            ClickableLabel:
                 text: 'Gallery'
                 size_hint_x: None
-                width: dp(50)
+                width: dp(46)
                 font_size: sp(11)
                 color: 1, 1, 1, 1
                 on_release: root.open_gallery()
             ClickableLabel:
                 text: 'Menu'
                 size_hint_x: None
-                width: dp(42)
+                width: dp(38)
                 font_size: sp(11)
                 color: 1, 1, 1, 1
                 on_release: root.show_menu()
@@ -1604,6 +1640,18 @@ class MainScreen(Screen):
         app.root.transition = SlideTransition(direction="left")
         app.root.current = "search_all"
 
+    def refresh_home(self):
+        """Reset everything and go to main screen."""
+        self._data_loaded = False
+        self._current_page = 0
+        try:
+            self.ids.search_bar.ids.search_input.text = ""
+            self.ids.filter_value.text = ""
+            self.ids.filter_field.text = "Filter: All"
+            self.ids.sort_spinner.text = "Sort: Name"
+        except: pass
+        self.refresh_list()
+
     def open_gallery(self):
         app = App.get_running_app()
         app.root.transition = SlideTransition(direction="left")
@@ -2127,27 +2175,7 @@ class ExportScreen(Screen):
             self.ids.export_status.color = (0.9,0.22,0.21,1)
 
     def _share_file(self, filepath):
-        try:
-            from jnius import autoclass, cast
-            PythonActivity = autoclass("org.kivy.android.PythonActivity")
-            Intent = autoclass("android.content.Intent")
-            Uri = autoclass("android.net.Uri")
-            File = autoclass("java.io.File")
-            context = PythonActivity.mActivity
-            # Use FileProvider for sharing
-            StrictMode = autoclass("android.os.StrictMode")
-            StrictMode.disableDeathOnFileUriExposure()
-            jfile = File(filepath)
-            uri = Uri.fromFile(jfile)
-            intent = Intent(Intent.ACTION_SEND)
-            intent.setType("application/zip")
-            intent.putExtra(Intent.EXTRA_STREAM, cast("android.os.Parcelable", uri))
-            intent.putExtra(Intent.EXTRA_SUBJECT, "Nokia Storage Export")
-            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            chooser = Intent.createChooser(intent, "Share Export")
-            context.startActivity(chooser)
-        except Exception as e:
-            App.get_running_app().show_toast(f"Share: {str(e)[:50]}")
+        _android_share(filepath, "application/zip", "Nokia Storage Export")
 
     def go_back(self):
         App.get_running_app().root.transition = SlideTransition(direction="right")
@@ -2180,26 +2208,7 @@ class BackupScreen(Screen):
             self.ids.backup_status.color = (0.9,0.22,0.21,1)
 
     def _share_backup(self, filepath):
-        try:
-            from jnius import autoclass, cast
-            PythonActivity = autoclass("org.kivy.android.PythonActivity")
-            Intent = autoclass("android.content.Intent")
-            Uri = autoclass("android.net.Uri")
-            File = autoclass("java.io.File")
-            StrictMode = autoclass("android.os.StrictMode")
-            StrictMode.disableDeathOnFileUriExposure()
-            context = PythonActivity.mActivity
-            jfile = File(filepath)
-            uri = Uri.fromFile(jfile)
-            intent = Intent(Intent.ACTION_SEND)
-            intent.setType("application/zip")
-            intent.putExtra(Intent.EXTRA_STREAM, cast("android.os.Parcelable", uri))
-            intent.putExtra(Intent.EXTRA_SUBJECT, "Nokia Storage Backup")
-            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            chooser = Intent.createChooser(intent, "Save/Share Backup")
-            context.startActivity(chooser)
-        except Exception as e:
-            App.get_running_app().show_toast(f"Share: {str(e)[:50]}")
+        _android_share(filepath, "application/zip", "Nokia Storage Backup")
 
     def restore_backup(self):
         app = App.get_running_app()
@@ -2375,9 +2384,29 @@ class PhotoGalleryScreen(Screen):
                 grid.add_widget(box)
 
     def _delete_photo(self, gal_id, *a):
+        """Show confirmation before deleting."""
+        from kivy.uix.button import Button as KBtn
+        popup = ModalView(size_hint=(0.78, None), height=dp(130))
+        c = BoxLayout(orientation="vertical", spacing=dp(10), padding=dp(14))
+        with c.canvas.before:
+            Color(1,1,1,1); c._bg = RoundedRectangle(pos=c.pos, size=c.size, radius=[dp(10)])
+        c.bind(pos=lambda w,v: setattr(w._bg,"pos",v), size=lambda w,v: setattr(w._bg,"size",v))
+        c.add_widget(Label(text="Delete this photo?", font_size=sp(15), color=(0.1,0.1,0.18,1),
+            size_hint_y=None, height=dp(28)))
+        row = BoxLayout(spacing=dp(8), size_hint_y=None, height=dp(42))
+        cancel = KBtn(text="Cancel", font_size=sp(13), background_color=(0.7,0.7,0.7,1))
+        cancel.bind(on_press=lambda *a: popup.dismiss())
+        delete = KBtn(text="Delete", font_size=sp(13), background_color=(0.85,0.2,0.2,1), color=(1,1,1,1))
+        delete.bind(on_press=lambda *a: self._confirm_delete(gal_id, popup))
+        row.add_widget(cancel); row.add_widget(delete)
+        c.add_widget(row)
+        popup.add_widget(c); popup.open()
+
+    def _confirm_delete(self, gal_id, popup):
         app = App.get_running_app()
         app.db.delete_general_gallery(gal_id)
         clear_item_cache(f"gg_{gal_id}", get_app_path())
+        popup.dismiss()
         app.show_toast("Photo deleted")
         self._load()
 
