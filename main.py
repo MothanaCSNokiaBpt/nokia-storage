@@ -322,6 +322,54 @@ ScreenManager:
                 on_release: root.show_menu()
         SearchBar:
             id: search_bar
+        # Sort & Filter bar
+        BoxLayout:
+            size_hint_y: None
+            height: dp(34)
+            padding: dp(6), dp(2)
+            spacing: dp(4)
+            canvas.before:
+                Color:
+                    rgba: 0.96, 0.96, 0.98, 1
+                Rectangle:
+                    pos: self.pos
+                    size: self.size
+            Label:
+                text: 'Sort:'
+                size_hint_x: None
+                width: dp(30)
+                font_size: sp(11)
+                color: 0.4, 0.4, 0.4, 1
+            Spinner:
+                id: sort_spinner
+                text: 'Name'
+                values: ['Name', 'ID', 'Year']
+                size_hint_x: None
+                width: dp(70)
+                font_size: sp(11)
+                on_text: root.apply_sort_filter()
+            Label:
+                text: 'Filter:'
+                size_hint_x: None
+                width: dp(34)
+                font_size: sp(11)
+                color: 0.4, 0.4, 0.4, 1
+            Spinner:
+                id: filter_field
+                text: 'All'
+                values: ['All', 'Name', 'Year', 'Appearance', 'Working']
+                size_hint_x: None
+                width: dp(80)
+                font_size: sp(11)
+                on_text: root.on_filter_field_change()
+            TextInput:
+                id: filter_value
+                hint_text: 'value...'
+                multiline: False
+                font_size: sp(11)
+                padding: dp(4), dp(5)
+                on_text_validate: root.apply_sort_filter()
+        # Tabs
         BoxLayout:
             size_hint_y: None
             height: dp(40)
@@ -1307,7 +1355,8 @@ ScreenManager:
 
 class MainScreen(Screen):
     current_tab = StringProperty("phones")
-    _all_items = []
+    _raw_items = []  # Original unfiltered/unsorted data
+    _all_items = []  # After sort/filter applied
     _current_page = 0
     _total_items = 0
     _is_search = False
@@ -1332,11 +1381,10 @@ class MainScreen(Screen):
         app = App.get_running_app()
         if not app.db: return
         self._current_page = 0
-        self._all_items = app.db.get_all_phones() if self.current_tab == "phones" else app.db.get_all_spare_parts()
-        self._total_items = len(self._all_items)
+        self._raw_items = app.db.get_all_phones() if self.current_tab == "phones" else app.db.get_all_spare_parts()
         self._is_search = False
         self._data_loaded = True
-        self._render_page()
+        self._apply_sort_filter_internal()
 
     def do_search(self, text):
         app = App.get_running_app()
@@ -1345,20 +1393,67 @@ class MainScreen(Screen):
             self.refresh_list()
             return
         self._current_page = 0
-        self._all_items = app.db.search_phones(text) if self.current_tab == "phones" else app.db.search_spare_parts(text)
-        self._total_items = len(self._all_items)
+        self._raw_items = app.db.search_phones(text) if self.current_tab == "phones" else app.db.search_spare_parts(text)
         self._is_search = True
         self._data_loaded = True
+        self._apply_sort_filter_internal()
+
+    def apply_sort_filter(self, *a):
+        """Called from KV when sort/filter changes."""
+        self._current_page = 0
+        self._apply_sort_filter_internal()
+
+    def on_filter_field_change(self, *a):
+        """Reset filter value when field changes."""
+        try:
+            field = self.ids.filter_field.text
+            if field == 'All':
+                self.ids.filter_value.text = ""
+                self.apply_sort_filter()
+            else:
+                # Show hint for selected field
+                hints = {'Name': 'e.g. 3310', 'Year': 'e.g. 2003', 'Appearance': 'e.g. Excellent', 'Working': 'e.g. Fully'}
+                self.ids.filter_value.hint_text = hints.get(field, 'value...')
+        except: pass
+
+    def _apply_sort_filter_internal(self):
+        """Apply current sort and filter to _raw_items."""
+        items = list(self._raw_items)
+
+        # Apply filter
+        try:
+            field = self.ids.filter_field.text
+            val = self.ids.filter_value.text.strip().lower()
+            if field != 'All' and val and self.current_tab == "phones":
+                key_map = {'Name': 'name', 'Year': 'release_date', 'Appearance': 'appearance_condition', 'Working': 'working_condition'}
+                key = key_map.get(field, '')
+                if key:
+                    items = [i for i in items if val in (i.get(key, '') or '').lower()]
+        except: pass
+
+        # Apply sort
+        try:
+            sort_by = self.ids.sort_spinner.text
+            if self.current_tab == "phones":
+                if sort_by == 'Name':
+                    items.sort(key=lambda x: (x.get('name', '') or '').lower())
+                elif sort_by == 'ID':
+                    items.sort(key=lambda x: x.get('id', '') or '')
+                elif sort_by == 'Year':
+                    items.sort(key=lambda x: x.get('release_date', '') or '')
+            else:
+                items.sort(key=lambda x: (x.get('name', '') or '').lower())
+        except: pass
+
+        self._all_items = items
+        self._total_items = len(items)
         self._render_page()
 
     def _pgbtn(self, text, cb):
-        b = ClickableBox(padding=(dp(6), dp(3)), size_hint_x=None, width=dp(50))
-        with b.canvas.before:
-            Color(0, 0.314, 0.784, 1)
-            b._bg = RoundedRectangle(pos=b.pos, size=b.size, radius=[dp(6)])
-        b.bind(pos=lambda w, v: setattr(w._bg, "pos", v), size=lambda w, v: setattr(w._bg, "size", v))
-        b.add_widget(Label(text=text, color=(1,1,1,1), font_size=sp(11), bold=True))
-        b.bind(on_release=cb)
+        from kivy.uix.button import Button as KBtn
+        b = KBtn(text=text, size_hint_x=None, width=dp(56), font_size=sp(11),
+            bold=True, background_color=(0, 0.314, 0.784, 1), color=(1,1,1,1))
+        b.bind(on_press=cb)
         return b
 
     def _render_page(self):
@@ -1371,7 +1466,7 @@ class MainScreen(Screen):
         tp = max(1, (self._total_items + PAGE_SIZE - 1) // PAGE_SIZE)
         cp = self._current_page + 1
         lt = "found" if self._is_search else ("phones" if self.current_tab == "phones" else "parts")
-        self.ids.count_label.text = f"{self._total_items} {lt} | {cp}/{tp}"
+        self.ids.count_label.text = f"{self._total_items} {lt} | Page {cp}/{tp}"
         defimg = get_default_image_path(get_app_path())
 
         if self.current_tab == "phones":
@@ -1393,23 +1488,42 @@ class MainScreen(Screen):
                 card.bind(on_release=partial(self._open_spare, s["id"]))
                 grid.add_widget(card)
 
+        # Pagination with dropdown in center
         if self._total_items > PAGE_SIZE:
-            pg = BoxLayout(size_hint_y=None, height=dp(36), spacing=dp(3), padding=(dp(2),dp(2)))
-            if self._current_page > 1: pg.add_widget(self._pgbtn("|<", lambda *a: self._goto(0)))
-            if self._current_page > 0: pg.add_widget(self._pgbtn("< Prev", lambda *a: self._goto(self._current_page-1)))
-            pi = TextInput(text=str(cp), multiline=False, size_hint_x=None, width=dp(40),
-                font_size=sp(11), halign="center", padding=(dp(3),dp(5)), input_filter="int")
-            pi.bind(on_text_validate=lambda w: self._goto(max(0, min(tp-1, int(w.text)-1)) if w.text.isdigit() else 0))
-            pg.add_widget(pi)
-            pg.add_widget(Label(text=f"/{tp}", font_size=sp(11), color=(0.4,0.4,0.4,1), size_hint_x=None, width=dp(30)))
-            if end < self._total_items: pg.add_widget(self._pgbtn("Next >", lambda *a: self._goto(self._current_page+1)))
-            if self._current_page < tp-2: pg.add_widget(self._pgbtn(">|", lambda *a: self._goto(tp-1)))
+            from kivy.uix.spinner import Spinner
+            pg = BoxLayout(size_hint_y=None, height=dp(40), spacing=dp(4), padding=(dp(4),dp(3)))
+
+            if self._current_page > 0:
+                pg.add_widget(self._pgbtn("|<", lambda *a: self._goto(0)))
+                pg.add_widget(self._pgbtn("< Prev", lambda *a: self._goto(self._current_page-1)))
+            else:
+                pg.add_widget(Widget(size_hint_x=None, width=dp(56)))
+                pg.add_widget(Widget(size_hint_x=None, width=dp(56)))
+
+            # Page dropdown in center
+            page_values = [str(i+1) for i in range(tp)]
+            page_spinner = Spinner(text=str(cp), values=page_values,
+                size_hint_x=None, width=dp(60), font_size=sp(12))
+            page_spinner.bind(text=lambda w, t: self._goto(int(t)-1) if t.isdigit() else None)
+            pg.add_widget(Widget())  # spacer
+            pg.add_widget(page_spinner)
+            pg.add_widget(Label(text=f"/ {tp}", font_size=sp(12), color=(0.4,0.4,0.4,1), size_hint_x=None, width=dp(30)))
+            pg.add_widget(Widget())  # spacer
+
+            if end < self._total_items:
+                pg.add_widget(self._pgbtn("Next >", lambda *a: self._goto(self._current_page+1)))
+                pg.add_widget(self._pgbtn(">|", lambda *a: self._goto(tp-1)))
+            else:
+                pg.add_widget(Widget(size_hint_x=None, width=dp(56)))
+                pg.add_widget(Widget(size_hint_x=None, width=dp(56)))
+
             grid.add_widget(pg)
+
         try: self.ids.scroll_view.scroll_y = 1
         except: pass
 
     def _goto(self, p):
-        self._current_page = p
+        self._current_page = max(0, min(p, (self._total_items + PAGE_SIZE - 1) // PAGE_SIZE - 1))
         self._render_page()
 
     def _open_phone(self, pid, *a):
@@ -2083,46 +2197,7 @@ class NokiaStorageApp(App):
                 print(f"Activity bind error: {e}")
         self._load_initial()
         Window.bind(on_keyboard=self._kb)
-        root = Builder.load_string(KV)
-        # Show intro video on startup
-        Clock.schedule_once(lambda dt: self._play_intro(), 0.5)
-        return root
-
-    def _play_intro(self):
-        """Show animated GIF intro once on startup."""
-        try:
-            intro_path = None
-            for p in [os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "intro.gif"),
-                       os.path.join(get_app_path(), "assets", "intro.gif")]:
-                if os.path.exists(p):
-                    intro_path = p
-                    break
-            if not intro_path:
-                try:
-                    from kivy.resources import resource_find
-                    r = resource_find("assets/intro.gif")
-                    if r: intro_path = r
-                except: pass
-            if not intro_path:
-                return
-
-            self._intro_popup = ModalView(size_hint=(1, 1), background_color=(0, 0, 0, 1),
-                auto_dismiss=True)
-            gif = Image(source=intro_path, anim_delay=0.05, allow_stretch=True, keep_ratio=True)
-            self._intro_popup.add_widget(gif)
-            self._intro_popup.open()
-
-            # Auto-close after 5 seconds
-            Clock.schedule_once(lambda dt: self._close_intro(), 5)
-        except Exception:
-            pass
-
-    def _close_intro(self):
-        try:
-            if hasattr(self, '_intro_popup') and self._intro_popup:
-                self._intro_popup.dismiss()
-                self._intro_popup = None
-        except: pass
+        return Builder.load_string(KV)
 
     def _kb(self, win, key, *a):
         if key == 27:
