@@ -1481,11 +1481,6 @@ class MainScreen(Screen):
         if self._total_items > PAGE_SIZE:
             from kivy.uix.spinner import Spinner
             pg = BoxLayout(size_hint_y=None, height=dp(42), spacing=dp(4), padding=(dp(6),dp(4)))
-            pg.canvas.before.clear()
-            with pg.canvas.before:
-                Color(0.94, 0.95, 0.98, 1)
-                pg._bg = RoundedRectangle(pos=pg.pos, size=pg.size, radius=[dp(8)])
-            pg.bind(pos=lambda w,v: setattr(w._bg,"pos",v), size=lambda w,v: setattr(w._bg,"size",v))
 
             # Prev buttons
             if self._current_page > 0:
@@ -1498,8 +1493,7 @@ class MainScreen(Screen):
             page_values = [f"Page {i+1}" for i in range(tp)]
             page_spinner = Spinner(text=f"Page {cp}", values=page_values,
                 size_hint_x=None, width=dp(90), font_size=sp(12),
-                background_color=(0, 0.314, 0.784, 1), color=(1,1,1,1),
-                dropdown_cls__max_height=dp(250))
+                background_color=(0, 0.314, 0.784, 1), color=(1,1,1,1))
             page_spinner.bind(text=lambda w, t: self._goto(int(t.replace('Page ',''))-1) if 'Page' in t else None)
             pg.add_widget(page_spinner)
             pg.add_widget(Label(text=f"of {tp}", font_size=sp(12), color=(0.4,0.4,0.4,1), size_hint_x=None, width=dp(36)))
