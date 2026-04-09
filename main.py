@@ -3,7 +3,6 @@ Nokia Storage Manager - Android Application
 Images stored as BLOB in DB, displayed via cached files.
 """
 
-import csv
 import json
 import os
 import shutil
@@ -134,6 +133,44 @@ def get_img_path_for_spare(spare_id, db):
     if img_data:
         return write_blob_to_file(img_data, f"s_{spare_id}", app_path)
     return get_default_image_path(app_path)
+
+
+# ── XLSX Creator (pure Python, no openpyxl) ────────────────────
+def create_xlsx(sheets_data, filepath):
+    import zipfile as zf_mod
+    with zf_mod.ZipFile(filepath, 'w', zf_mod.ZIP_DEFLATED) as zf:
+        ct = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        ct += '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+        ct += '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+        ct += '<Default Extension="xml" ContentType="application/xml"/>'
+        for i in range(len(sheets_data)):
+            ct += f'<Override PartName="/xl/worksheets/sheet{i+1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+        ct += '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
+        ct += '</Types>'
+        zf.writestr('[Content_Types].xml', ct)
+        rels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>'
+        zf.writestr('_rels/.rels', rels)
+        wb_rels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        for i in range(len(sheets_data)):
+            wb_rels += f'<Relationship Id="rId{i+1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet{i+1}.xml"/>'
+        wb_rels += '</Relationships>'
+        zf.writestr('xl/_rels/workbook.xml.rels', wb_rels)
+        wb = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>'
+        for i, name in enumerate(sheets_data.keys(), 1):
+            wb += f'<sheet name="{name}" sheetId="{i}" r:id="rId{i}"/>'
+        wb += '</sheets></workbook>'
+        zf.writestr('xl/workbook.xml', wb)
+        def esc(s): return str(s).replace('&','&amp;').replace('<','&lt;').replace('>','&gt;')
+        for i, (name, rows) in enumerate(sheets_data.items(), 1):
+            ws = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>'
+            for r, row in enumerate(rows, 1):
+                ws += f'<row r="{r}">'
+                for c, val in enumerate(row):
+                    col = chr(65+c) if c < 26 else chr(64+c//26)+chr(65+c%26)
+                    ws += f'<c r="{col}{r}" t="inlineStr"><is><t>{esc(val)}</t></is></c>'
+                ws += '</row>'
+            ws += '</sheetData></worksheet>'
+            zf.writestr(f'xl/worksheets/sheet{i}.xml', ws)
 
 
 # ── Custom Widgets ──────────────────────────────────────────────
@@ -320,6 +357,8 @@ KV = """
 
 ScreenManager:
     id: sm
+    SplashScreen:
+        name: 'splash'
     MainScreen:
         name: 'main'
     PhoneDetailScreen:
@@ -341,6 +380,24 @@ ScreenManager:
     PhotoGalleryScreen:
         name: 'photo_gallery'
 
+<SplashScreen>:
+    BoxLayout:
+        orientation: 'vertical'
+        canvas.before:
+            Color:
+                rgba: 1, 1, 1, 1
+            Rectangle:
+                pos: self.pos
+                size: self.size
+        Widget:
+        Label:
+            text: 'NOKIA'
+            font_size: sp(52)
+            bold: True
+            color: 0, 0.314, 0.784, 1
+            size_hint_y: None
+            height: dp(70)
+        Widget:
 
 <MainScreen>:
     BoxLayout:
@@ -348,8 +405,8 @@ ScreenManager:
         BoxLayout:
             size_hint_y: None
             height: dp(52)
-            padding: dp(14), dp(8)
-            spacing: dp(8)
+            padding: dp(10), dp(6)
+            spacing: dp(6)
             canvas.before:
                 Color:
                     rgba: 0, 0.314, 0.784, 1
@@ -364,27 +421,33 @@ ScreenManager:
                 text_size: self.size
                 halign: 'left'
                 valign: 'middle'
-            ClickableLabel:
+            Button:
                 text: 'Home'
                 size_hint_x: None
-                width: dp(40)
+                width: dp(52)
                 font_size: sp(11)
+                bold: True
+                background_color: 0.1, 0.4, 0.9, 1
                 color: 1, 1, 1, 1
-                on_release: root.refresh_home()
-            ClickableLabel:
+                on_press: root.refresh_home()
+            Button:
                 text: 'Gallery'
                 size_hint_x: None
-                width: dp(46)
+                width: dp(56)
                 font_size: sp(11)
+                bold: True
+                background_color: 0.1, 0.4, 0.9, 1
                 color: 1, 1, 1, 1
-                on_release: root.open_gallery()
-            ClickableLabel:
+                on_press: root.open_gallery()
+            Button:
                 text: 'Menu'
                 size_hint_x: None
-                width: dp(38)
+                width: dp(50)
                 font_size: sp(11)
+                bold: True
+                background_color: 0.2, 0.2, 0.25, 1
                 color: 1, 1, 1, 1
-                on_release: root.show_menu()
+                on_press: root.show_menu()
         SearchBar:
             id: search_bar
         # Sort & Filter bar
@@ -416,7 +479,7 @@ ScreenManager:
                 size_hint_x: None
                 width: dp(120)
                 font_size: sp(12)
-                background_color: 0.3, 0.3, 0.35, 1
+                background_color: 0.2, 0.2, 0.25, 1
                 color: 1, 1, 1, 1
                 on_text: root.on_filter_field_change()
             TextInput:
@@ -552,6 +615,15 @@ ScreenManager:
                 text_size: self.size
                 halign: 'left'
                 valign: 'middle'
+            Button:
+                text: 'Share'
+                size_hint_x: None
+                width: dp(50)
+                font_size: sp(12)
+                bold: True
+                background_color: 0.1, 0.4, 0.9, 1
+                color: 1, 1, 1, 1
+                on_press: root.share_phone()
             ClickableLabel:
                 size_hint_x: None
                 width: dp(44)
@@ -778,6 +850,15 @@ ScreenManager:
                 text_size: self.size
                 halign: 'left'
                 valign: 'middle'
+            Button:
+                text: 'Share'
+                size_hint_x: None
+                width: dp(50)
+                font_size: sp(12)
+                bold: True
+                background_color: 0.1, 0.4, 0.9, 1
+                color: 1, 1, 1, 1
+                on_press: root.share_spare()
             ClickableLabel:
                 size_hint_x: None
                 width: dp(40)
@@ -1222,7 +1303,7 @@ ScreenManager:
             padding: dp(18)
             spacing: dp(14)
             Label:
-                text: 'Export all data as CSV to Downloads.'
+                text: 'Export all data as XLSX to Downloads.'
                 font_size: sp(14)
                 color: 0.3, 0.3, 0.3, 1
                 size_hint_y: None
@@ -1251,7 +1332,7 @@ ScreenManager:
                         radius: [dp(9)]
                 on_release: root.do_export()
                 Label:
-                    text: 'Export to CSV'
+                    text: 'Export to XLSX'
                     color: 1, 1, 1, 1
                     font_size: sp(15)
                     bold: True
@@ -1458,6 +1539,17 @@ ScreenManager:
 
 
 # ── Screen Classes ──────────────────────────────────────────────
+
+
+class SplashScreen(Screen):
+    def on_enter(self):
+        Clock.schedule_once(self._go_main, 2)
+
+    def _go_main(self, *a):
+        app = App.get_running_app()
+        if app.root:
+            app.root.transition = SlideTransition(direction="left")
+            app.root.current = "main"
 
 
 class MainScreen(Screen):
@@ -1736,7 +1828,7 @@ class PhoneDetailScreen(Screen):
             self._show_fullscreen(self._current_img_path)
 
     def _load_gallery(self):
-        """Load gallery images from phone_gallery table."""
+        """Load gallery images from phone_gallery table with delete buttons."""
         app = App.get_running_app()
         grid = self.ids.gallery_grid
         grid.clear_widgets()
@@ -1745,15 +1837,49 @@ class PhoneDetailScreen(Screen):
             grid.add_widget(Label(text="No gallery photos", font_size=sp(12),
                 color=(0.5,0.5,0.5,1), size_hint_y=None, height=dp(24)))
             return
+        from kivy.uix.button import Button as KBtn
         for gal_id, img_data in images:
             img_path = write_blob_to_file(img_data, f"gal_{gal_id}", get_app_path())
             if img_path:
-                btn = ClickableBox(size_hint_y=None, height=dp(200), padding=dp(2))
+                box = BoxLayout(orientation="vertical", size_hint_y=None, height=dp(230), padding=dp(2))
+                img_btn = ClickableBox(size_hint_y=None, height=dp(200))
                 img_widget = Image(source=img_path, nocache=True,
                     allow_stretch=True, keep_ratio=True)
-                btn.add_widget(img_widget)
-                btn.bind(on_release=partial(self._show_fullscreen, img_path))
-                grid.add_widget(btn)
+                img_btn.add_widget(img_widget)
+                img_btn.bind(on_release=partial(self._show_fullscreen, img_path))
+                box.add_widget(img_btn)
+                del_btn = KBtn(text="Delete", size_hint_y=None, height=dp(26),
+                    font_size=sp(10), background_color=(0.85, 0.2, 0.2, 1), color=(1,1,1,1))
+                del_btn.bind(on_press=partial(self._confirm_gallery_delete, gal_id))
+                box.add_widget(del_btn)
+                grid.add_widget(box)
+
+    def _confirm_gallery_delete(self, gal_id, *a):
+        """Show confirmation before deleting a gallery image."""
+        from kivy.uix.button import Button as KBtn
+        popup = ModalView(size_hint=(0.78, None), height=dp(130))
+        c = BoxLayout(orientation="vertical", spacing=dp(10), padding=dp(14))
+        with c.canvas.before:
+            Color(1,1,1,1); c._bg = RoundedRectangle(pos=c.pos, size=c.size, radius=[dp(10)])
+        c.bind(pos=lambda w,v: setattr(w._bg,"pos",v), size=lambda w,v: setattr(w._bg,"size",v))
+        c.add_widget(Label(text="Delete this photo?", font_size=sp(15), color=(0.1,0.1,0.18,1),
+            size_hint_y=None, height=dp(28)))
+        row = BoxLayout(spacing=dp(8), size_hint_y=None, height=dp(42))
+        cancel = KBtn(text="Cancel", font_size=sp(13), background_color=(0.7,0.7,0.7,1))
+        cancel.bind(on_press=lambda *a: popup.dismiss())
+        delete = KBtn(text="Delete", font_size=sp(13), background_color=(0.85,0.2,0.2,1), color=(1,1,1,1))
+        delete.bind(on_press=lambda *a: self._do_gallery_delete(gal_id, popup))
+        row.add_widget(cancel); row.add_widget(delete)
+        c.add_widget(row)
+        popup.add_widget(c); popup.open()
+
+    def _do_gallery_delete(self, gal_id, popup):
+        app = App.get_running_app()
+        app.db.delete_gallery_image(gal_id)
+        clear_item_cache(f"gal_{gal_id}", get_app_path())
+        popup.dismiss()
+        app.show_toast("Photo deleted")
+        self._load_gallery()
 
     def _show_fullscreen(self, img_path, *args):
         """Show image in full-screen overlay."""
@@ -1815,6 +1941,36 @@ class PhoneDetailScreen(Screen):
         app = App.get_running_app()
         app.pick_image_for = ("phone_gallery", self.p_id)
         app._launch_camera()
+
+    def share_phone(self):
+        """Share phone main image + text info via Android share."""
+        app = App.get_running_app()
+        # Build text info
+        info_lines = [
+            f"Name: {self.p_name}",
+            f"ID: {self.p_id}",
+            f"Release: {self.p_date}",
+            f"Appearance: {self.p_appear}",
+            f"Working: {self.p_working}",
+            f"Remarks: {self.p_remarks or '-'}",
+        ]
+        info_text = "\n".join(info_lines)
+        # Write text to a temp file
+        tmp_txt = os.path.join(get_cache_dir(get_app_path()), f"_share_phone_{self.p_id}.txt")
+        try:
+            with open(tmp_txt, "w", encoding="utf-8") as f:
+                f.write(info_text)
+        except:
+            pass
+        files = []
+        if self._current_img_path and os.path.exists(self._current_img_path):
+            files.append(self._current_img_path)
+        if os.path.exists(tmp_txt):
+            files.append(tmp_txt)
+        if files:
+            _android_share(files, "*/*", f"Nokia Phone: {self.p_name}")
+        else:
+            app.show_toast("Nothing to share")
 
     def go_back(self):
         app = App.get_running_app()
@@ -1953,6 +2109,32 @@ class SpareDetailScreen(Screen):
         app = App.get_running_app()
         app.pick_image_for = ("spare_gallery", self.s_id)
         app._launch_camera()
+
+    def share_spare(self):
+        """Share spare part main image + text info via Android share."""
+        app = App.get_running_app()
+        info_lines = [
+            f"Name: {self.s_name}",
+            f"ID: {self.s_id_str}",
+            f"Linked Phone: {self.s_phone_id or '-'}",
+            f"Description: {self.s_desc or '-'}",
+        ]
+        info_text = "\n".join(info_lines)
+        tmp_txt = os.path.join(get_cache_dir(get_app_path()), f"_share_spare_{self.s_id}.txt")
+        try:
+            with open(tmp_txt, "w", encoding="utf-8") as f:
+                f.write(info_text)
+        except:
+            pass
+        files = []
+        if self._current_img_path and os.path.exists(self._current_img_path):
+            files.append(self._current_img_path)
+        if os.path.exists(tmp_txt):
+            files.append(tmp_txt)
+        if files:
+            _android_share(files, "*/*", f"Nokia Spare: {self.s_name}")
+        else:
+            app.show_toast("Nothing to share")
 
     def confirm_delete(self):
         popup = ModalView(size_hint=(0.78, None), height=dp(130))
@@ -2156,33 +2338,39 @@ class ExportScreen(Screen):
             os.makedirs(od, exist_ok=True)
             ts = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-            # Write phones CSV
-            fp1 = os.path.join(od, f"nokia_phones_{ts}.csv")
             phones = app.db.export_phones()
-            with open(fp1, "w", encoding="utf-8") as f:
-                f.write("ID,Name,Release Date,Appearance,Working,Remarks\n")
-                for p in phones:
-                    row = [p["id"],p["name"],p.get("release_date",""),
-                           p.get("appearance_condition",""),p.get("working_condition",""),
-                           p.get("remarks","")]
-                    f.write(",".join(f'"{str(v)}"' for v in row) + "\n")
-
-            # Write spares CSV
-            fp2 = os.path.join(od, f"nokia_spares_{ts}.csv")
             spares = app.db.export_spare_parts()
-            with open(fp2, "w", encoding="utf-8") as f:
-                f.write("ID,Name,Phone ID,Description\n")
-                for s in spares:
-                    row = [s["id"],s["name"],s.get("phone_id",""),s.get("description","")]
-                    f.write(",".join(f'"{str(v)}"' for v in row) + "\n")
+
+            # Build XLSX data
+            phone_rows = [["ID", "Name", "Release Date", "Appearance", "Working", "Remarks"]]
+            for p in phones:
+                phone_rows.append([
+                    str(p["id"]), str(p["name"]),
+                    str(p.get("release_date","") or ""),
+                    str(p.get("appearance_condition","") or ""),
+                    str(p.get("working_condition","") or ""),
+                    str(p.get("remarks","") or "")
+                ])
+
+            spare_rows = [["ID", "Name", "Phone ID", "Description"]]
+            for s in spares:
+                spare_rows.append([
+                    str(s["id"]), str(s["name"]),
+                    str(s.get("phone_id","") or ""),
+                    str(s.get("description","") or "")
+                ])
+
+            sheets = {"Phones": phone_rows, "Spare Parts": spare_rows}
+            fp = os.path.join(od, f"nokia_export_{ts}.xlsx")
+            create_xlsx(sheets, fp)
 
             self.ids.export_status.text = f"Exported {len(phones)} phones, {len(spares)} spares"
             self.ids.export_status.color = (0.26,0.63,0.28,1)
             app.show_toast("Sharing...")
 
-            # Share CSV files directly (not zip)
+            # Share XLSX file
             if platform == "android":
-                _android_share([fp1, fp2], "text/csv", "Nokia Storage Export")
+                _android_share(fp, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "Nokia Storage Export")
         except Exception as e:
             self.ids.export_status.text = f"Error: {str(e)}"
             self.ids.export_status.color = (0.9,0.22,0.21,1)
@@ -2319,34 +2507,113 @@ class SearchAllScreen(Screen):
 class ReportScreen(Screen):
     def on_enter(self):
         Clock.schedule_once(lambda dt: self._load(), 0.2)
+
     def _load(self):
         app = App.get_running_app()
         g = self.ids.report_grid; g.clear_widgets()
         try: r = app.db.get_report()
         except: g.add_widget(Label(text="Error", size_hint_y=None, height=dp(30))); return
+
+        total_phones = r.get('total_phones', 0)
+        with_images = r.get('phones_with_images', 0)
+        without_images = total_phones - with_images
+        unique_models = r.get('unique_models', 0)
+        total_spares = r.get('total_spares', 0)
+
+        # Find most common model
+        by_model = r.get('by_model', [])
+        most_common = by_model[0] if by_model else ("N/A", 0)
+
+        # Year range
+        all_phones = app.db.get_all_phones() if app.db else []
+        years = []
+        for p in all_phones:
+            rd = p.get('release_date', '') or ''
+            # Try to extract a 4-digit year
+            for part in rd.replace('-', ' ').replace('/', ' ').split():
+                if len(part) == 4 and part.isdigit():
+                    years.append(int(part))
+                    break
+        year_range = f"{min(years)} - {max(years)}" if years else "N/A"
+
+        # Helper to create a colored stat card
+        def stat_card(title, value, bg_color):
+            bx = BoxLayout(orientation="vertical", size_hint_y=None, height=dp(64),
+                padding=dp(12), spacing=dp(2))
+            with bx.canvas.before:
+                Color(*bg_color)
+                bx._bg = RoundedRectangle(pos=bx.pos, size=bx.size, radius=[dp(10)])
+            bx.bind(pos=lambda w,v: setattr(w._bg,"pos",v), size=lambda w,v: setattr(w._bg,"size",v))
+            bx.add_widget(Label(text=str(value), font_size=sp(22), bold=True, color=(1,1,1,1),
+                size_hint_y=None, height=dp(30), text_size=(dp(260),None), halign="left"))
+            bx.add_widget(Label(text=title, font_size=sp(12), color=(1,1,1,0.85),
+                size_hint_y=None, height=dp(18), text_size=(dp(260),None), halign="left"))
+            return bx
+
         def sec(t):
-            g.add_widget(Label(text=t, font_size=sp(16), bold=True, color=(0,0.314,0.784,1), size_hint_y=None, height=dp(30), text_size=(dp(300),None), halign="left"))
-        def st(l, v):
-            row = BoxLayout(size_hint_y=None, height=dp(24), padding=(dp(8),dp(1)))
-            row.add_widget(Label(text=l, font_size=sp(12), color=(0.3,0.3,0.3,1), text_size=(dp(220),None), halign="left"))
-            row.add_widget(Label(text=str(v), font_size=sp(12), bold=True, color=(0.1,0.1,0.18,1), size_hint_x=None, width=dp(50), halign="right", text_size=(dp(50),None)))
-            g.add_widget(row)
+            g.add_widget(Label(text=t, font_size=sp(16), bold=True, color=(0,0.314,0.784,1),
+                size_hint_y=None, height=dp(30), text_size=(dp(300),None), halign="left"))
+
+        # Key stat cards in a grid
         sec("Overview")
-        bx = BoxLayout(orientation="vertical", size_hint_y=None, height=dp(100), padding=dp(12), spacing=dp(4))
-        with bx.canvas.before:
-            Color(1,1,1,1); bx._bg = RoundedRectangle(pos=bx.pos, size=bx.size, radius=[dp(10)])
-        bx.bind(pos=lambda w,v: setattr(w._bg,"pos",v), size=lambda w,v: setattr(w._bg,"size",v))
-        for t in [f"Total Phones: {r['total_phones']}", f"Unique Models: {r['unique_models']}",
-                  f"With Images: {r['phones_with_images']}", f"Total Spare Parts: {r['total_spares']}"]:
-            bx.add_widget(Label(text=t, font_size=sp(14), color=(0.1,0.1,0.18,1), size_hint_y=None, height=dp(20), text_size=(dp(280),None), halign="left"))
-        g.add_widget(bx)
-        sec("By Working Condition")
-        for n, c in r.get("by_working",[]): st(n, c)
-        sec("By Appearance")
-        for n, c in r.get("by_appearance",[]): st(n, c)
+        row1 = BoxLayout(size_hint_y=None, height=dp(68), spacing=dp(8))
+        row1.add_widget(stat_card("Total Phones", total_phones, (0, 0.314, 0.784, 1)))
+        row1.add_widget(stat_card("With Images", with_images, (0.26, 0.63, 0.28, 1)))
+        g.add_widget(row1)
+
+        row2 = BoxLayout(size_hint_y=None, height=dp(68), spacing=dp(8))
+        row2.add_widget(stat_card("Without Images", without_images, (0.85, 0.4, 0.1, 1)))
+        row2.add_widget(stat_card("Unique Models", unique_models, (0.4, 0.3, 0.6, 1)))
+        g.add_widget(row2)
+
+        row3 = BoxLayout(size_hint_y=None, height=dp(68), spacing=dp(8))
+        row3.add_widget(stat_card("Spare Parts", total_spares, (0.2, 0.2, 0.25, 1)))
+        row3.add_widget(stat_card("Year Range", year_range, (0.6, 0.2, 0.4, 1)))
+        g.add_widget(row3)
+
+        # Most common model card
+        mc_bx = BoxLayout(orientation="vertical", size_hint_y=None, height=dp(64),
+            padding=dp(12), spacing=dp(2))
+        with mc_bx.canvas.before:
+            Color(0, 0.44, 1, 1)
+            mc_bx._bg = RoundedRectangle(pos=mc_bx.pos, size=mc_bx.size, radius=[dp(10)])
+        mc_bx.bind(pos=lambda w,v: setattr(w._bg,"pos",v), size=lambda w,v: setattr(w._bg,"size",v))
+        mc_bx.add_widget(Label(text=f"{most_common[0]} ({most_common[1]})", font_size=sp(18), bold=True, color=(1,1,1,1),
+            size_hint_y=None, height=dp(28), text_size=(dp(300),None), halign="left"))
+        mc_bx.add_widget(Label(text="Most Common Model", font_size=sp(12), color=(1,1,1,0.85),
+            size_hint_y=None, height=dp(18), text_size=(dp(300),None), halign="left"))
+        g.add_widget(mc_bx)
+
+        # Condition breakdown with percentages
+        def condition_section(title, data, color_base):
+            sec(title)
+            for n, c in data:
+                pct = (c / total_phones * 100) if total_phones > 0 else 0
+                row = BoxLayout(size_hint_y=None, height=dp(28), padding=(dp(8),dp(2)), spacing=dp(4))
+                with row.canvas.before:
+                    Color(*color_base, 0.1)
+                    row._bg = RoundedRectangle(pos=row.pos, size=row.size, radius=[dp(5)])
+                row.bind(pos=lambda w,v: setattr(w._bg,"pos",v), size=lambda w,v: setattr(w._bg,"size",v))
+                row.add_widget(Label(text=str(n or "Unknown"), font_size=sp(12), color=(0.15,0.15,0.15,1),
+                    text_size=(dp(180),None), halign="left"))
+                row.add_widget(Label(text=f"{c}", font_size=sp(12), bold=True, color=(0.1,0.1,0.18,1),
+                    size_hint_x=None, width=dp(36), halign="right", text_size=(dp(36),None)))
+                row.add_widget(Label(text=f"({pct:.1f}%)", font_size=sp(11), color=(0.4,0.4,0.4,1),
+                    size_hint_x=None, width=dp(56), halign="right", text_size=(dp(56),None)))
+                g.add_widget(row)
+
+        condition_section("By Working Condition", r.get("by_working",[]), (0, 0.314, 0.784))
+        condition_section("By Appearance", r.get("by_appearance",[]), (0.26, 0.63, 0.28))
+
         sec("Top 20 Models")
-        for n, c in r.get("by_model",[]): st(n, c)
+        for n, c in r.get("by_model",[]):
+            row = BoxLayout(size_hint_y=None, height=dp(24), padding=(dp(8),dp(1)))
+            row.add_widget(Label(text=str(n), font_size=sp(12), color=(0.3,0.3,0.3,1), text_size=(dp(220),None), halign="left"))
+            row.add_widget(Label(text=str(c), font_size=sp(12), bold=True, color=(0.1,0.1,0.18,1), size_hint_x=None, width=dp(50), halign="right", text_size=(dp(50),None)))
+            g.add_widget(row)
+
         g.add_widget(Widget(size_hint_y=None, height=dp(30)))
+
     def go_back(self):
         App.get_running_app().root.transition = SlideTransition(direction="right")
         App.get_running_app().root.current = "main"
@@ -2490,7 +2757,7 @@ class NokiaStorageApp(App):
     _last_back = 0
 
     def build(self):
-        Window.clearcolor = (0.94, 0.96, 1, 1)
+        Window.clearcolor = (1, 1, 1, 1)
         try: self.db = NokiaDatabase(get_db_path())
         except Exception as e: print(f"DB: {e}")
         if platform == "android":
@@ -2507,7 +2774,7 @@ class NokiaStorageApp(App):
 
     def _kb(self, win, key, *a):
         if key == 27:
-            if self.root and self.root.current != "main":
+            if self.root and self.root.current not in ("main", "splash"):
                 self.root.transition = SlideTransition(direction="right"); self.root.current = "main"
                 return True
             now = time.time()
