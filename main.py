@@ -67,44 +67,25 @@ def get_downloads_path():
 
 # -- Share helpers (proven working pattern from pyjnius docs) ------
 def _share_text_android(text):
-    """Share text via Android share dialog."""
     if platform != "android":
-        App.get_running_app().show_toast("Share: desktop mode")
         return
     try:
-        from android import mActivity
-        from jnius import autoclass
-        Intent = autoclass("android.content.Intent")
-        JString = autoclass("java.lang.String")
-        send = Intent()
-        send.setAction(Intent.ACTION_SEND)
-        send.setType("text/plain")
-        send.putExtra(Intent.EXTRA_TEXT, JString(text))
-        mActivity.startActivity(Intent.createChooser(send, None))
+        from androidstorage4kivy import ShareSheet
+        ShareSheet().share_plain_text(text)
     except Exception as e:
         App.get_running_app().show_toast(f"Share: {str(e)[:50]}")
 
-def _share_file_android(filepath, mime_type):
-    """Share a file via Android share dialog."""
+def _share_file_android(filepath, mime_type="*/*"):
     if platform != "android":
         return
     try:
-        from android import mActivity
-        from jnius import autoclass, cast
-        Intent = autoclass("android.content.Intent")
-        Uri = autoclass("android.net.Uri")
-        File = autoclass("java.io.File")
-        StrictMode = autoclass("android.os.StrictMode")
-        builder = autoclass("android.os.StrictMode$VmPolicy$Builder")()
-        StrictMode.setVmPolicy(builder.build())
-        jfile = File(filepath)
-        uri = Uri.fromFile(jfile)
-        send = Intent()
-        send.setAction(Intent.ACTION_SEND)
-        send.setType(mime_type)
-        send.putExtra(Intent.EXTRA_STREAM, cast("android.os.Parcelable", uri))
-        send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        mActivity.startActivity(Intent.createChooser(send, None))
+        from androidstorage4kivy import SharedStorage, ShareSheet
+        # Copy to shared storage first so other apps can access it
+        shared_path = SharedStorage().copy_to_shared(filepath)
+        if shared_path:
+            ShareSheet().share_file(shared_path)
+        else:
+            App.get_running_app().show_toast("Could not share file")
     except Exception as e:
         App.get_running_app().show_toast(f"Share: {str(e)[:50]}")
 
@@ -668,47 +649,79 @@ ScreenManager:
                     height: dp(70)
                     BoxLayout:
                         size_hint: None, None
-                        size: dp(260), dp(62)
-                        spacing: dp(14)
+                        size: dp(270), dp(56)
+                        spacing: dp(12)
                         Button:
                             text: 'Edit'
                             size_hint: None, None
-                            size: dp(52), dp(52)
+                            size: dp(56), dp(56)
                             font_size: sp(11)
                             bold: True
                             background_normal: ''
-                            background_color: 0, 0.314, 0.784, 1
+                            background_down: ''
+                            background_color: 0, 0, 0, 0
                             color: 1, 1, 1, 1
+                            canvas.before:
+                                Color:
+                                    rgba: 0, 0.314, 0.784, 1
+                                RoundedRectangle:
+                                    pos: self.pos
+                                    size: self.size
+                                    radius: [100]
                             on_press: root.edit_phone()
                         Button:
                             text: 'Info'
                             size_hint: None, None
-                            size: dp(52), dp(52)
+                            size: dp(56), dp(56)
                             font_size: sp(11)
                             bold: True
                             background_normal: ''
-                            background_color: 0.2, 0.6, 0.3, 1
+                            background_down: ''
+                            background_color: 0, 0, 0, 0
                             color: 1, 1, 1, 1
+                            canvas.before:
+                                Color:
+                                    rgba: 0.2, 0.6, 0.3, 1
+                                RoundedRectangle:
+                                    pos: self.pos
+                                    size: self.size
+                                    radius: [100]
                             on_press: root.show_summary()
                         Button:
                             text: 'Web'
                             size_hint: None, None
-                            size: dp(52), dp(52)
+                            size: dp(56), dp(56)
                             font_size: sp(11)
                             bold: True
                             background_normal: ''
-                            background_color: 0.45, 0.25, 0.7, 1
+                            background_down: ''
+                            background_color: 0, 0, 0, 0
                             color: 1, 1, 1, 1
+                            canvas.before:
+                                Color:
+                                    rgba: 0.45, 0.25, 0.7, 1
+                                RoundedRectangle:
+                                    pos: self.pos
+                                    size: self.size
+                                    radius: [100]
                             on_press: root.google_search()
                         Button:
                             text: 'Del'
                             size_hint: None, None
-                            size: dp(52), dp(52)
+                            size: dp(56), dp(56)
                             font_size: sp(11)
                             bold: True
                             background_normal: ''
-                            background_color: 0.8, 0.15, 0.15, 1
+                            background_down: ''
+                            background_color: 0, 0, 0, 0
                             color: 1, 1, 1, 1
+                            canvas.before:
+                                Color:
+                                    rgba: 0.8, 0.15, 0.15, 1
+                                RoundedRectangle:
+                                    pos: self.pos
+                                    size: self.size
+                                    radius: [100]
                             on_press: root.confirm_delete()
                 # Info Card
                 BoxLayout:
@@ -928,27 +941,43 @@ ScreenManager:
                     height: dp(70)
                     BoxLayout:
                         size_hint: None, None
-                        size: dp(130), dp(62)
-                        spacing: dp(14)
+                        size: dp(124), dp(56)
+                        spacing: dp(12)
                         Button:
                             text: 'Edit'
                             size_hint: None, None
-                            size: dp(52), dp(52)
+                            size: dp(56), dp(56)
                             font_size: sp(11)
                             bold: True
                             background_normal: ''
-                            background_color: 0, 0.314, 0.784, 1
+                            background_down: ''
+                            background_color: 0, 0, 0, 0
                             color: 1, 1, 1, 1
+                            canvas.before:
+                                Color:
+                                    rgba: 0, 0.314, 0.784, 1
+                                RoundedRectangle:
+                                    pos: self.pos
+                                    size: self.size
+                                    radius: [100]
                             on_press: root.edit_spare()
                         Button:
                             text: 'Del'
                             size_hint: None, None
-                            size: dp(52), dp(52)
+                            size: dp(56), dp(56)
                             font_size: sp(11)
                             bold: True
                             background_normal: ''
-                            background_color: 0.8, 0.15, 0.15, 1
+                            background_down: ''
+                            background_color: 0, 0, 0, 0
                             color: 1, 1, 1, 1
+                            canvas.before:
+                                Color:
+                                    rgba: 0.8, 0.15, 0.15, 1
+                                RoundedRectangle:
+                                    pos: self.pos
+                                    size: self.size
+                                    radius: [100]
                             on_press: root.confirm_delete()
                 BoxLayout:
                     orientation: 'vertical'
@@ -1341,45 +1370,41 @@ ScreenManager:
                 font_size: sp(17)
                 bold: True
                 color: 1, 1, 1, 1
-        BoxLayout:
-            orientation: 'vertical'
-            padding: dp(18)
-            spacing: dp(14)
+        Label:
+            id: export_status
+            text: ''
+            font_size: sp(13)
+            color: 0.26, 0.63, 0.28, 1
+            size_hint_y: None
+            height: dp(30)
+            text_size: self.width, None
+            halign: 'center'
+        ScrollView:
+            do_scroll_x: False
+            GridLayout:
+                id: export_grid
+                cols: 5
+                spacing: dp(1)
+                padding: dp(6)
+                size_hint_y: None
+                height: self.minimum_height
+        ClickableBox:
+            size_hint_y: None
+            height: dp(50)
+            padding: dp(14), dp(10)
+            canvas.before:
+                Color:
+                    rgba: 0, 0.314, 0.784, 1
+                RoundedRectangle:
+                    pos: self.pos
+                    size: self.size
+                    radius: [dp(9)]
+            on_release: root.do_export()
             Label:
-                text: 'Export all data as XLSX and share.'
-                font_size: sp(14)
-                color: 0.3, 0.3, 0.3, 1
-                size_hint_y: None
-                height: dp(30)
-                halign: 'left'
-                text_size: self.size
-            Label:
-                id: export_status
-                text: ''
-                font_size: sp(13)
-                color: 0.26, 0.63, 0.28, 1
-                size_hint_y: None
-                height: dp(50)
-                text_size: self.width, None
-                halign: 'left'
-            ClickableBox:
-                size_hint_y: None
-                height: dp(48)
-                padding: dp(14), dp(10)
-                canvas.before:
-                    Color:
-                        rgba: 0, 0.314, 0.784, 1
-                    RoundedRectangle:
-                        pos: self.pos
-                        size: self.size
-                        radius: [dp(9)]
-                on_release: root.do_export()
-                Label:
-                    text: 'Export & Share'
-                    color: 1, 1, 1, 1
-                    font_size: sp(15)
-                    bold: True
-            Widget:
+                text: 'Export & Share as Excel'
+                color: 1, 1, 1, 1
+                font_size: sp(15)
+                bold: True
 
 <BackupScreen>:
     BoxLayout:
@@ -2425,6 +2450,59 @@ class AddSpareScreen(Screen):
 
 class ExportScreen(Screen):
     _last_export_path = ""
+
+    def on_enter(self):
+        Clock.schedule_once(lambda dt: self._load_preview(), 0.2)
+
+    def _load_preview(self):
+        """Load phone data into the grid as a preview (first 50 rows)."""
+        app = App.get_running_app()
+        grid = self.ids.export_grid
+        grid.clear_widgets()
+
+        # Header row
+        headers = ["ID", "Name", "Year", "Appearance", "Working"]
+        for h in headers:
+            lbl = Label(text=h, font_size=sp(11), bold=True, color=(1, 1, 1, 1),
+                size_hint_y=None, height=dp(30), text_size=(None, None), halign='center')
+            with lbl.canvas.before:
+                Color(0, 0.314, 0.784, 1)
+                lbl._bg = Rectangle(pos=lbl.pos, size=lbl.size)
+            lbl.bind(pos=lambda w, v: setattr(w._bg, "pos", v),
+                     size=lambda w, v: setattr(w._bg, "size", v))
+            grid.add_widget(lbl)
+
+        # Data rows (first 50 as preview)
+        phones = []
+        try:
+            phones = app.db.export_phones()
+        except:
+            pass
+
+        preview = phones[:50]
+        for i, p in enumerate(preview):
+            bg = (0.95, 0.96, 0.98, 1) if i % 2 == 0 else (1, 1, 1, 1)
+            row_data = [
+                str(p.get("id", "")),
+                str(p.get("name", "")),
+                str(p.get("release_date", "") or ""),
+                str(p.get("appearance_condition", "") or ""),
+                str(p.get("working_condition", "") or ""),
+            ]
+            for val in row_data:
+                lbl = Label(text=val, font_size=sp(10), color=(0.15, 0.15, 0.15, 1),
+                    size_hint_y=None, height=dp(26), text_size=(None, None), halign='center')
+                with lbl.canvas.before:
+                    Color(*bg)
+                    lbl._bg = Rectangle(pos=lbl.pos, size=lbl.size)
+                lbl.bind(pos=lambda w, v: setattr(w._bg, "pos", v),
+                         size=lambda w, v: setattr(w._bg, "size", v))
+                grid.add_widget(lbl)
+
+        total = len(phones)
+        shown = len(preview)
+        self.ids.export_status.text = f"Showing {shown} of {total} phones"
+        self.ids.export_status.color = (0.4, 0.4, 0.4, 1)
 
     def do_export(self):
         app = App.get_running_app()
