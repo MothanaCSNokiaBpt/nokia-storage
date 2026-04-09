@@ -1682,22 +1682,9 @@ class SpareDetailScreen(Screen):
         """Open edit screen for this spare part."""
         app = App.get_running_app()
         s = app.root.get_screen("add_spare")
-        s.clear_form()
-        spare = app.db.get_spare_part(self.s_id)
-        if spare:
-            Clock.schedule_once(lambda dt: self._fill_edit(s, spare), 0.15)
+        s.load_for_edit(self.s_id)
         app.root.transition = SlideTransition(direction="left")
         app.root.current = "add_spare"
-
-    def _fill_edit(self, s, spare):
-        try:
-            s.ids.spare_input_name.text = spare["name"]
-            s.ids.spare_input_desc.text = spare.get("description","") or ""
-            s.ids.spare_input_phone_id.text = spare.get("phone_id","") or ""
-            img_bytes = App.get_running_app().db.get_spare_image(self.s_id)
-            if img_bytes:
-                s.on_image_selected(img_bytes)
-        except: pass
 
     def add_image(self):
         """Show popup with Gallery and Camera for adding to spare gallery."""
@@ -1835,9 +1822,13 @@ class AddPhoneScreen(Screen):
 
 class AddSpareScreen(Screen):
     _image_bytes = None
+    edit_mode = BooleanProperty(False)
+    _edit_id = None
 
     def clear_form(self):
         self._image_bytes = None
+        self.edit_mode = False
+        self._edit_id = None
         Clock.schedule_once(self._clear, 0.1)
 
     def _clear(self, *a):
@@ -1847,6 +1838,28 @@ class AddSpareScreen(Screen):
             self.ids.preview_img.source = get_default_image_path(get_app_path())
         except: pass
 
+    def load_for_edit(self, spare_id):
+        """Load spare part data for editing."""
+        app = App.get_running_app()
+        self.edit_mode = True
+        self._edit_id = spare_id
+        spare = app.db.get_spare_part(spare_id)
+        if not spare:
+            return
+        self._image_bytes = app.db.get_spare_image(spare_id)
+        img = get_img_path_for_spare(spare_id, app.db)
+        Clock.schedule_once(partial(self._fill_edit, spare, img), 0.1)
+
+    def _fill_edit(self, spare, img_path, *a):
+        try:
+            self.ids.spare_input_name.text = spare["name"]
+            d = spare.get("description", "") or ""
+            self.ids.spare_input_desc.text = "" if d == "None" else d
+            self.ids.spare_input_phone_id.text = spare.get("phone_id", "") or ""
+            if img_path:
+                self.ids.preview_img.source = img_path
+        except: pass
+
     def pick_from_gallery(self):
         app = App.get_running_app()
         app.pick_image_for = ("add_spare_screen", None); app.open_file_chooser()
@@ -1854,7 +1867,6 @@ class AddSpareScreen(Screen):
     def take_camera(self):
         app = App.get_running_app()
         app.pick_image_for = ("add_spare_screen", None); app._launch_camera()
-
 
     def on_image_selected(self, img_bytes):
         self._image_bytes = img_bytes
@@ -1874,8 +1886,19 @@ class AddSpareScreen(Screen):
         try: name = self.ids.spare_input_name.text.strip()
         except: return
         if not name: app.show_toast("Name required"); return
-        app.db.add_spare_part(name=name, phone_id=self.ids.spare_input_phone_id.text.strip(),
-            image_bytes=self._image_bytes, description=self.ids.spare_input_desc.text.strip())
+        if self.edit_mode and self._edit_id:
+            # Update existing spare part
+            app.db.update_spare_part(self._edit_id,
+                name=name,
+                phone_id=self.ids.spare_input_phone_id.text.strip(),
+                description=self.ids.spare_input_desc.text.strip())
+            if self._image_bytes:
+                app.db.update_spare_part(self._edit_id, image_data=self._image_bytes)
+            clear_item_cache(f"s_{self._edit_id}", get_app_path())
+        else:
+            # Create new spare part
+            app.db.add_spare_part(name=name, phone_id=self.ids.spare_input_phone_id.text.strip(),
+                image_bytes=self._image_bytes, description=self.ids.spare_input_desc.text.strip())
         app.root.get_screen("main")._data_loaded = False
         app.show_toast("Spare part saved!"); self.go_back()
 
