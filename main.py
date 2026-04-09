@@ -272,6 +272,8 @@ KV = """
 
 ScreenManager:
     id: sm
+    SplashScreen:
+        name: 'splash'
     MainScreen:
         name: 'main'
     PhoneDetailScreen:
@@ -290,6 +292,24 @@ ScreenManager:
         name: 'search_all'
     ReportScreen:
         name: 'report'
+    PhotoGalleryScreen:
+        name: 'photo_gallery'
+
+<SplashScreen>:
+    BoxLayout:
+        canvas.before:
+            Color:
+                rgba: 1, 1, 1, 1
+            Rectangle:
+                pos: self.pos
+                size: self.size
+        Label:
+            text: 'NOKIA'
+            font_size: sp(50)
+            bold: True
+            color: 0, 0.314, 0.784, 1
+            halign: 'center'
+            valign: 'middle'
 
 <MainScreen>:
     BoxLayout:
@@ -314,10 +334,17 @@ ScreenManager:
                 halign: 'left'
                 valign: 'middle'
             ClickableLabel:
+                text: 'Gallery'
+                size_hint_x: None
+                width: dp(50)
+                font_size: sp(11)
+                color: 1, 1, 1, 1
+                on_release: root.open_gallery()
+            ClickableLabel:
                 text: 'Menu'
                 size_hint_x: None
-                width: dp(46)
-                font_size: sp(12)
+                width: dp(42)
+                font_size: sp(11)
                 color: 1, 1, 1, 1
                 on_release: root.show_menu()
         SearchBar:
@@ -1340,10 +1367,67 @@ ScreenManager:
                 padding: dp(14)
                 size_hint_y: None
                 height: self.minimum_height
+
+<PhotoGalleryScreen>:
+    BoxLayout:
+        orientation: 'vertical'
+        BoxLayout:
+            size_hint_y: None
+            height: dp(52)
+            padding: dp(6)
+            spacing: dp(6)
+            canvas.before:
+                Color:
+                    rgba: 0, 0.314, 0.784, 1
+                Rectangle:
+                    pos: self.pos
+                    size: self.size
+            ClickableLabel:
+                size_hint_x: None
+                width: dp(36)
+                text: '<'
+                font_size: sp(22)
+                bold: True
+                color: 1, 1, 1, 1
+                on_release: root.go_back()
+            Label:
+                text: 'Photo Gallery'
+                font_size: sp(17)
+                bold: True
+                color: 1, 1, 1, 1
+                text_size: self.size
+                halign: 'left'
+                valign: 'middle'
+        Button:
+            text: '+ Add Photos'
+            size_hint_y: None
+            height: dp(42)
+            font_size: sp(14)
+            bold: True
+            background_color: 0, 0.314, 0.784, 1
+            color: 1, 1, 1, 1
+            on_press: root.add_photos()
+        ScrollView:
+            do_scroll_x: False
+            GridLayout:
+                id: gallery_grid
+                cols: 2
+                spacing: dp(6)
+                padding: dp(8)
+                size_hint_y: None
+                height: self.minimum_height
 """
 
 
 # ── Screen Classes ──────────────────────────────────────────────
+
+class SplashScreen(Screen):
+    def on_enter(self):
+        Clock.schedule_once(lambda dt: self._go_main(), 2)
+    def _go_main(self):
+        app = App.get_running_app()
+        app.root.transition = SlideTransition(direction="left")
+        app.root.current = "main"
 
 class MainScreen(Screen):
     current_tab = StringProperty("phones")
@@ -1544,17 +1628,29 @@ class MainScreen(Screen):
         app.root.transition = SlideTransition(direction="left")
         app.root.current = "search_all"
 
+    def open_gallery(self):
+        app = App.get_running_app()
+        app.root.transition = SlideTransition(direction="left")
+        app.root.current = "photo_gallery"
+
     def show_menu(self):
-        popup = ModalView(size_hint=(0.72, None), height=dp(230))
-        c = BoxLayout(orientation="vertical", spacing=dp(2), padding=dp(10))
+        popup = ModalView(size_hint=(0.75, None), height=dp(260))
+        c = BoxLayout(orientation="vertical", spacing=dp(1), padding=dp(12))
         with c.canvas.before:
             Color(1,1,1,1)
-            c._bg = RoundedRectangle(pos=c.pos, size=c.size, radius=[dp(10)])
+            c._bg = RoundedRectangle(pos=c.pos, size=c.size, radius=[dp(12)])
         c.bind(pos=lambda w,v: setattr(w._bg,"pos",v), size=lambda w,v: setattr(w._bg,"size",v))
-        for t, n in [("Export Data","export_data"),("Backup & Restore","backup"),("Storage Report","report")]:
-            b = ClickableBox(size_hint_y=None, height=dp(46), padding=(dp(14),dp(8)))
-            b.add_widget(Label(text=t, font_size=sp(14), color=(0.1,0.1,0.18,1), text_size=(dp(200),None), halign="left"))
-            b.bind(on_release=lambda *a, nm=n, p=popup: (p.dismiss(), self._nav(nm)))
+        # Title
+        c.add_widget(Label(text="Menu", font_size=sp(16), bold=True, color=(0,0.314,0.784,1),
+            size_hint_y=None, height=dp(30)))
+        for t, n, clr in [("Export Data","export_data",(0,0.314,0.784,1)),
+                           ("Backup & Restore","backup",(0.26,0.63,0.28,1)),
+                           ("Storage Report","report",(0.4,0.3,0.6,1)),
+                           ("Photo Gallery","photo_gallery",(0.8,0.4,0.1,1))]:
+            from kivy.uix.button import Button as KBtn
+            b = KBtn(text=t, size_hint_y=None, height=dp(44), font_size=sp(14),
+                background_color=clr, color=(1,1,1,1), bold=True)
+            b.bind(on_press=lambda *a, nm=n, p=popup: (p.dismiss(), self._nav(nm)))
             c.add_widget(b)
         popup.add_widget(c); popup.open()
 
@@ -2013,7 +2109,16 @@ class ExportScreen(Screen):
     def do_export(self):
         app = App.get_running_app()
         try:
-            od = get_downloads_path(); os.makedirs(od, exist_ok=True)
+            # Try Downloads first, fallback to app storage
+            od = get_downloads_path()
+            try:
+                os.makedirs(od, exist_ok=True)
+                # Test write
+                test = os.path.join(od, "_test.tmp")
+                with open(test, "w") as f: f.write("test")
+                os.remove(test)
+            except:
+                od = get_app_path()  # Fallback
             ts = datetime.now().strftime("%Y%m%d_%H%M%S")
             fp = os.path.join(od, f"nokia_phones_{ts}.csv")
             phones = app.db.export_phones()
@@ -2028,10 +2133,11 @@ class ExportScreen(Screen):
                 w = csv.writer(f)
                 w.writerow(["ID","Name","Phone ID","Description"])
                 for s in spares: w.writerow([s["id"],s["name"],s.get("phone_id",""),s.get("description","")])
-            self.ids.export_status.text = f"Saved to Downloads!"; self.ids.export_status.color = (0.26,0.63,0.28,1)
-            app.show_toast("Exported!")
+            self.ids.export_status.text = f"Saved to:\n{od}"; self.ids.export_status.color = (0.26,0.63,0.28,1)
+            app.show_toast(f"Exported to {od[-30:]}")
         except Exception as e:
-            self.ids.export_status.text = f"Error: {str(e)[:80]}"; self.ids.export_status.color = (0.9,0.22,0.21,1)
+            self.ids.export_status.text = f"Error: {str(e)}"; self.ids.export_status.color = (0.9,0.22,0.21,1)
+            app.show_toast(f"Export failed: {str(e)[:50]}")
 
     def go_back(self):
         App.get_running_app().root.transition = SlideTransition(direction="right")
@@ -2163,6 +2269,57 @@ class ReportScreen(Screen):
         App.get_running_app().root.current = "main"
 
 
+class PhotoGalleryScreen(Screen):
+    def on_enter(self):
+        Clock.schedule_once(lambda dt: self._load(), 0.2)
+
+    def _load(self):
+        app = App.get_running_app()
+        grid = self.ids.gallery_grid
+        grid.clear_widgets()
+        images = app.db.get_general_gallery()
+        if not images:
+            grid.add_widget(Label(text="No photos yet. Tap '+ Add Photos' to start.",
+                font_size=sp(13), color=(0.5,0.5,0.5,1), size_hint_y=None, height=dp(40)))
+            return
+        for gal_id, img_data, caption in images:
+            img_path = write_blob_to_file(img_data, f"gg_{gal_id}", get_app_path())
+            if img_path:
+                box = BoxLayout(orientation="vertical", size_hint_y=None, height=dp(180), padding=dp(3))
+                with box.canvas.before:
+                    Color(1,1,1,1)
+                    box._bg = RoundedRectangle(pos=box.pos, size=box.size, radius=[dp(8)])
+                box.bind(pos=lambda w,v: setattr(w._bg,"pos",v), size=lambda w,v: setattr(w._bg,"size",v))
+                img_btn = ClickableBox(size_hint_y=None, height=dp(155))
+                img_widget = Image(source=img_path, nocache=True, allow_stretch=True, keep_ratio=True)
+                img_btn.add_widget(img_widget)
+                img_btn.bind(on_release=partial(self._view_full, img_path))
+                box.add_widget(img_btn)
+                if caption:
+                    box.add_widget(Label(text=caption, font_size=sp(10), color=(0.4,0.4,0.4,1),
+                        size_hint_y=None, height=dp(18), text_size=(dp(150),None), halign="center"))
+                grid.add_widget(box)
+
+    def _view_full(self, img_path, *a):
+        from kivy.uix.button import Button as KBtn
+        popup = ModalView(size_hint=(1, 1), background_color=(0, 0, 0, 0.95))
+        c = BoxLayout(orientation="vertical", padding=dp(4))
+        c.add_widget(Image(source=img_path, nocache=True, allow_stretch=True, keep_ratio=True))
+        cb = KBtn(text="Close", size_hint_y=None, height=dp(44), font_size=sp(14), background_color=(0.3,0.3,0.3,1))
+        cb.bind(on_press=lambda *a: popup.dismiss())
+        c.add_widget(cb)
+        popup.add_widget(c); popup.open()
+
+    def add_photos(self):
+        app = App.get_running_app()
+        app.pick_image_for = ("general_gallery", None)
+        app.open_file_chooser(multiple=True)
+
+    def go_back(self):
+        App.get_running_app().root.transition = SlideTransition(direction="right")
+        App.get_running_app().root.current = "main"
+
+
 # ── Main App ────────────────────────────────────────────────────
 
 class NokiaStorageApp(App):
@@ -2185,11 +2342,13 @@ class NokiaStorageApp(App):
                 print(f"Activity bind error: {e}")
         self._load_initial()
         Window.bind(on_keyboard=self._kb)
-        return Builder.load_string(KV)
+        root = Builder.load_string(KV)
+        root.current = "splash"
+        return root
 
     def _kb(self, win, key, *a):
         if key == 27:
-            if self.root and self.root.current != "main":
+            if self.root and self.root.current not in ("main", "splash"):
                 self.root.transition = SlideTransition(direction="right"); self.root.current = "main"
                 return True
             now = time.time()
@@ -2451,6 +2610,17 @@ class NokiaStorageApp(App):
             self.show_toast(f"Added {count} images!")
             d = self.root.get_screen("spare_detail")
             Clock.schedule_once(lambda dt: d._load_gallery(), 0.2)
+
+        elif tt == "general_gallery":
+            count = 0
+            for img_bytes in images_bytes_list:
+                try:
+                    self.db.add_general_gallery(img_bytes)
+                    count += 1
+                except: pass
+            self.show_toast(f"Added {count} photos!")
+            d = self.root.get_screen("photo_gallery")
+            Clock.schedule_once(lambda dt: d._load(), 0.2)
 
         elif tt == "restore_backup":
             pass  # Handled in _fsel

@@ -60,6 +60,13 @@ class NokiaDatabase:
                 created_at TEXT DEFAULT (datetime('now'))
             );
 
+            CREATE TABLE IF NOT EXISTS general_gallery (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                image_data BLOB NOT NULL,
+                caption TEXT,
+                created_at TEXT DEFAULT (datetime('now'))
+            );
+
             CREATE INDEX IF NOT EXISTS idx_phones_name ON phones(name);
             CREATE INDEX IF NOT EXISTS idx_spare_name ON spare_parts(name);
             CREATE INDEX IF NOT EXISTS idx_spare_phone ON spare_parts(phone_id);
@@ -336,6 +343,25 @@ class NokiaDatabase:
             "SELECT id, image_data FROM spare_gallery WHERE spare_id = ? ORDER BY created_at",
             (spare_id,))
         return [(r[0], bytes(r[1])) for r in cur.fetchall() if r[1]]
+
+    # ── Combined Search ─────────────────────────────────────────
+
+    # ── General Gallery ────────────────────────────────────────
+
+    def add_general_gallery(self, image_data, caption=""):
+        self.conn.execute(
+            "INSERT INTO general_gallery (image_data, caption, created_at) VALUES (?, ?, ?)",
+            (image_data, caption, datetime.now().isoformat()))
+        self.conn.commit()
+
+    def get_general_gallery(self):
+        cur = self.conn.execute(
+            "SELECT id, image_data, caption FROM general_gallery ORDER BY created_at DESC")
+        return [(r[0], bytes(r[1]), r[2] or "") for r in cur.fetchall() if r[1]]
+
+    def delete_general_gallery(self, gal_id):
+        self.conn.execute("DELETE FROM general_gallery WHERE id = ?", (gal_id,))
+        self.conn.commit()
 
     # ── Combined Search ─────────────────────────────────────────
 
