@@ -486,23 +486,15 @@ ScreenManager:
                         nocache: True
                         allow_stretch: True
                         keep_ratio: True
-                ClickableBox:
+                Button:
+                    text: 'Add More Images'
                     size_hint_y: None
-                    height: dp(34)
-                    padding: dp(10), dp(5)
-                    canvas.before:
-                        Color:
-                            rgba: 0, 0.314, 0.784, 0.12
-                        RoundedRectangle:
-                            pos: self.pos
-                            size: self.size
-                            radius: [dp(7)]
-                    on_release: root.add_image()
-                    Label:
-                        text: 'Add More Images'
-                        color: 0, 0.314, 0.784, 1
-                        font_size: sp(12)
-                        bold: True
+                    height: dp(40)
+                    font_size: sp(13)
+                    bold: True
+                    background_color: 0, 0.314, 0.784, 1
+                    color: 1, 1, 1, 1
+                    on_press: root.add_image()
                 # Info Card
                 BoxLayout:
                     orientation: 'vertical'
@@ -711,23 +703,15 @@ ScreenManager:
                         nocache: True
                         allow_stretch: True
                         keep_ratio: True
-                ClickableBox:
+                Button:
+                    text: 'Add More Images'
                     size_hint_y: None
-                    height: dp(34)
-                    padding: dp(10), dp(5)
-                    canvas.before:
-                        Color:
-                            rgba: 0, 0.314, 0.784, 0.12
-                        RoundedRectangle:
-                            pos: self.pos
-                            size: self.size
-                            radius: [dp(7)]
-                    on_release: root.add_image()
-                    Label:
-                        text: 'Add More Images'
-                        color: 0, 0.314, 0.784, 1
-                        font_size: sp(12)
-                        bold: True
+                    height: dp(40)
+                    font_size: sp(13)
+                    bold: True
+                    background_color: 0, 0.314, 0.784, 1
+                    color: 1, 1, 1, 1
+                    on_press: root.add_image()
                 BoxLayout:
                     orientation: 'vertical'
                     size_hint_y: None
@@ -1962,6 +1946,12 @@ class NokiaStorageApp(App):
         except Exception as e: print(f"DB: {e}")
         if platform == "android":
             Clock.schedule_once(lambda dt: self._perms(), 1)
+            # Bind activity result ONCE at startup (like official Kivy example)
+            try:
+                from android import activity as android_activity
+                android_activity.bind(on_activity_result=self._on_android_activity_result)
+            except Exception as e:
+                print(f"Activity bind error: {e}")
         self._load_initial()
         Window.bind(on_keyboard=self._kb)
         return Builder.load_string(KV)
@@ -2033,61 +2023,58 @@ class NokiaStorageApp(App):
             return f.read()
 
     def _on_android_activity_result(self, request_code, result_code, data):
-        """Class-level activity result handler - survives garbage collection."""
-        self.show_toast(f"H1: result rc={request_code} res={result_code}")
-        if request_code == 42:
-            self._handle_picker_result(result_code, data)
-        elif request_code == 43:
-            self._handle_camera_result(result_code, data)
+        """Activity result handler - bound ONCE at startup."""
+        # Use Clock.schedule_once to defer processing (official Kivy pattern)
+        Clock.schedule_once(lambda dt: self._process_activity_result(request_code, result_code, data), 0)
 
-    def _handle_picker_result(self, result_code, data):
-        """Process file picker result."""
-        self.show_toast("H2: picker result")
+    def _process_activity_result(self, request_code, result_code, data):
+        """Process activity result on main thread."""
+        self.show_toast(f"RES: rc={request_code} res={result_code}")
+        if request_code == 42:
+            self._process_picker(result_code, data)
+        elif request_code == 43:
+            self._process_camera(result_code, data)
+
+    def _process_picker(self, result_code, data):
+        self.show_toast("PICK1")
         if result_code != -1 or not data:
-            self.show_toast("H2: cancelled or no data")
+            self.show_toast("PICK: cancelled")
             return
         try:
             uris = []
             clip = data.getClipData()
             if clip:
-                cnt = clip.getItemCount()
-                self.show_toast(f"H3: clip with {cnt} items")
-                for i in range(cnt):
+                for i in range(clip.getItemCount()):
                     uris.append(clip.getItemAt(i).getUri())
+                self.show_toast(f"PICK2: {len(uris)} clips")
             else:
                 single = data.getData()
                 if single:
                     uris.append(single)
-                    self.show_toast("H3: single URI")
-
+                    self.show_toast("PICK2: 1 single")
             if not uris:
-                self.show_toast("H3: no URIs found")
+                self.show_toast("PICK2: no URIs")
                 return
-
-            self.show_toast(f"H4: reading {len(uris)} URIs")
             all_bytes = []
             for uri in uris:
                 try:
-                    img_bytes = self._read_uri_bytes(uri)
-                    if img_bytes and len(img_bytes) > 100:
-                        all_bytes.append(img_bytes)
-                        self.show_toast(f"H5: read {len(img_bytes)} bytes")
+                    b = self._read_uri_bytes(uri)
+                    if b and len(b) > 100:
+                        all_bytes.append(b)
                 except Exception as e:
-                    self.show_toast(f"H5-ERR: {str(e)[:40]}")
-
+                    self.show_toast(f"PICK3-ERR: {str(e)[:30]}")
+            self.show_toast(f"PICK4: {len(all_bytes)} read OK")
             if all_bytes:
-                self.show_toast(f"H6: handling {len(all_bytes)} images")
                 self._handle_selected_images(all_bytes)
             else:
-                self.show_toast("H6: no bytes read")
+                self.show_toast("PICK4: nothing read")
         except Exception as e:
-            self.show_toast(f"H2-ERR: {str(e)[:40]}")
+            self.show_toast(f"PICK-ERR: {str(e)[:40]}")
 
-    def _handle_camera_result(self, result_code, data):
-        """Process camera result."""
-        self.show_toast("CAM1: camera result")
+    def _process_camera(self, result_code, data):
+        self.show_toast("CAM1")
         if result_code != -1 or not data:
-            self.show_toast("CAM1: cancelled")
+            self.show_toast("CAM: cancelled")
             return
         try:
             from jnius import autoclass
@@ -2099,78 +2086,53 @@ class NokiaStorageApp(App):
             if not bitmap:
                 self.show_toast("CAM2: no bitmap")
                 return
-            self.show_toast("CAM3: got bitmap, compressing")
+            self.show_toast("CAM3: compressing")
             BitmapCF = autoclass("android.graphics.Bitmap$CompressFormat")
-            ByteArrayOutputStream = autoclass("java.io.ByteArrayOutputStream")
-            baos = ByteArrayOutputStream()
+            BAOS = autoclass("java.io.ByteArrayOutputStream")
+            baos = BAOS()
             bitmap.compress(BitmapCF.JPEG, 90, baos)
-            java_bytes = baos.toByteArray()
-            img_bytes = bytes(bytearray(java_bytes))
+            img_bytes = bytes(bytearray(baos.toByteArray()))
             baos.close()
             self.show_toast(f"CAM4: {len(img_bytes)} bytes")
             if img_bytes and len(img_bytes) > 100:
                 self._handle_selected_images([img_bytes])
-            else:
-                self.show_toast("CAM4: empty result")
         except Exception as e:
-            self.show_toast(f"CAM-ERR: {str(e)[:50]}")
+            self.show_toast(f"CAM-ERR: {str(e)[:40]}")
 
     def _ac(self, filters=None, multiple=False):
-        """Android file chooser using direct Intent."""
-        self.show_toast("AC1: starting picker")
+        """Android file chooser - just launch Intent, callback already bound."""
+        self.show_toast("AC1")
         try:
             from jnius import autoclass
-            from android import activity as android_activity
-
             Intent = autoclass("android.content.Intent")
             PythonActivity = autoclass("org.kivy.android.PythonActivity")
-
             mime = "image/*"
             if filters and "*.zip" in filters:
                 mime = "application/zip"
-
             intent = Intent(Intent.ACTION_GET_CONTENT)
             intent.setType(mime)
             intent.addCategory(Intent.CATEGORY_OPENABLE)
             if multiple:
                 intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, True)
-
-            # Unbind any old handler, rebind fresh
-            try:
-                android_activity.unbind(on_activity_result=self._on_android_activity_result)
-            except:
-                pass
-            android_activity.bind(on_activity_result=self._on_android_activity_result)
-
-            self.show_toast("AC2: launching intent")
+            self.show_toast("AC2")
             PythonActivity.mActivity.startActivityForResult(intent, 42)
-            self.show_toast("AC3: intent launched")
+            self.show_toast("AC3")
         except Exception as e:
             self.show_toast(f"AC-ERR: {str(e)[:50]}")
 
     def _launch_camera(self):
-        """Launch camera using Android Intent."""
-        self.show_toast("CAM-LAUNCH1: starting")
+        """Launch camera Intent - callback already bound at startup."""
+        self.show_toast("CAML1")
         try:
             from jnius import autoclass
-            from android import activity as android_activity
-
             Intent = autoclass("android.content.Intent")
             MediaStore = autoclass("android.provider.MediaStore")
             PythonActivity = autoclass("org.kivy.android.PythonActivity")
-
             intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
-
-            try:
-                android_activity.unbind(on_activity_result=self._on_android_activity_result)
-            except:
-                pass
-            android_activity.bind(on_activity_result=self._on_android_activity_result)
-
-            self.show_toast("CAM-LAUNCH2: launching")
+            self.show_toast("CAML2")
             PythonActivity.mActivity.startActivityForResult(intent, 43)
         except Exception as e:
-            self.show_toast(f"CAM-LAUNCH-ERR: {str(e)[:50]}")
+            self.show_toast(f"CAML-ERR: {str(e)[:50]}")
 
     def _handle_selected_images(self, images_bytes_list):
         """Handle one or more selected images."""
