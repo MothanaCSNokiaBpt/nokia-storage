@@ -53,10 +53,18 @@ class NokiaDatabase:
                 created_at TEXT DEFAULT (datetime('now'))
             );
 
+            CREATE TABLE IF NOT EXISTS spare_gallery (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                spare_id INTEGER NOT NULL,
+                image_data BLOB NOT NULL,
+                created_at TEXT DEFAULT (datetime('now'))
+            );
+
             CREATE INDEX IF NOT EXISTS idx_phones_name ON phones(name);
             CREATE INDEX IF NOT EXISTS idx_spare_name ON spare_parts(name);
             CREATE INDEX IF NOT EXISTS idx_spare_phone ON spare_parts(phone_id);
             CREATE INDEX IF NOT EXISTS idx_gallery_phone ON phone_gallery(phone_id);
+            CREATE INDEX IF NOT EXISTS idx_sgallery_spare ON spare_gallery(spare_id);
         """)
         # Add image_data column if upgrading from old schema
         try:
@@ -314,6 +322,20 @@ class NokiaDatabase:
             "SELECT COUNT(*) FROM phone_gallery WHERE phone_id = ?", (phone_id,)
         )
         return cur.fetchone()[0]
+
+    # ── Spare Gallery ──────────────────────────────────────────
+
+    def add_spare_gallery_image(self, spare_id, image_data):
+        self.conn.execute(
+            "INSERT INTO spare_gallery (spare_id, image_data, created_at) VALUES (?, ?, ?)",
+            (spare_id, image_data, datetime.now().isoformat()))
+        self.conn.commit()
+
+    def get_spare_gallery_images(self, spare_id):
+        cur = self.conn.execute(
+            "SELECT id, image_data FROM spare_gallery WHERE spare_id = ? ORDER BY created_at",
+            (spare_id,))
+        return [(r[0], bytes(r[1])) for r in cur.fetchall() if r[1]]
 
     # ── Combined Search ─────────────────────────────────────────
 

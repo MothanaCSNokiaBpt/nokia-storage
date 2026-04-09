@@ -676,6 +676,13 @@ ScreenManager:
             ClickableLabel:
                 size_hint_x: None
                 width: dp(40)
+                text: 'Edit'
+                font_size: sp(13)
+                color: 1, 1, 1, 1
+                on_release: root.edit_spare()
+            ClickableLabel:
+                size_hint_x: None
+                width: dp(40)
                 text: 'Del'
                 font_size: sp(13)
                 color: 1, 0.6, 0.6, 1
@@ -769,6 +776,22 @@ ScreenManager:
                         height: self.texture_size[1] + dp(6)
                         text_size: self.width, None
                         halign: 'left'
+                # Gallery section
+                Label:
+                    text: 'Photo Gallery'
+                    font_size: sp(15)
+                    bold: True
+                    color: 0.1, 0.1, 0.18, 1
+                    size_hint_y: None
+                    height: dp(26)
+                    text_size: self.size
+                    halign: 'left'
+                GridLayout:
+                    id: spare_gallery_grid
+                    cols: 1
+                    spacing: dp(6)
+                    size_hint_y: None
+                    height: self.minimum_height
                 Widget:
                     size_hint_y: None
                     height: dp(30)
@@ -1606,6 +1629,7 @@ class SpareDetailScreen(Screen):
         self.s_phone_id = s.get("phone_id","") or ""
         img = get_img_path_for_spare(sid, app.db)
         Clock.schedule_once(lambda dt: self._set_img(img), 0.1)
+        Clock.schedule_once(lambda dt: self._load_gallery(), 0.15)
 
     _current_img_path = ""
 
@@ -1634,8 +1658,49 @@ class SpareDetailScreen(Screen):
         popup.add_widget(content)
         popup.open()
 
+    def _load_gallery(self):
+        """Load spare part gallery images."""
+        app = App.get_running_app()
+        grid = self.ids.spare_gallery_grid
+        grid.clear_widgets()
+        images = app.db.get_spare_gallery_images(self.s_id)
+        if not images:
+            grid.add_widget(Label(text="No gallery photos", font_size=sp(12),
+                color=(0.5,0.5,0.5,1), size_hint_y=None, height=dp(24)))
+            return
+        for gal_id, img_data in images:
+            img_path = write_blob_to_file(img_data, f"sgal_{gal_id}", get_app_path())
+            if img_path:
+                btn = ClickableBox(size_hint_y=None, height=dp(200), padding=dp(2))
+                img_widget = Image(source=img_path, nocache=True,
+                    allow_stretch=True, keep_ratio=True)
+                btn.add_widget(img_widget)
+                btn.bind(on_release=partial(self._show_fullscreen, img_path))
+                grid.add_widget(btn)
+
+    def edit_spare(self):
+        """Open edit screen for this spare part."""
+        app = App.get_running_app()
+        s = app.root.get_screen("add_spare")
+        s.clear_form()
+        spare = app.db.get_spare_part(self.s_id)
+        if spare:
+            Clock.schedule_once(lambda dt: self._fill_edit(s, spare), 0.15)
+        app.root.transition = SlideTransition(direction="left")
+        app.root.current = "add_spare"
+
+    def _fill_edit(self, s, spare):
+        try:
+            s.ids.spare_input_name.text = spare["name"]
+            s.ids.spare_input_desc.text = spare.get("description","") or ""
+            s.ids.spare_input_phone_id.text = spare.get("phone_id","") or ""
+            img_bytes = App.get_running_app().db.get_spare_image(self.s_id)
+            if img_bytes:
+                s.on_image_selected(img_bytes)
+        except: pass
+
     def add_image(self):
-        """Show popup with Gallery and Camera for spare part."""
+        """Show popup with Gallery and Camera for adding to spare gallery."""
         app = App.get_running_app()
         popup = ModalView(size_hint=(0.75, None), height=dp(130))
         c = BoxLayout(orientation="vertical", spacing=dp(4), padding=dp(10))
@@ -1653,12 +1718,12 @@ class SpareDetailScreen(Screen):
 
     def _do_gallery(self):
         app = App.get_running_app()
-        app.pick_image_for = ("spare_direct", self.s_id)
-        app.open_file_chooser()
+        app.pick_image_for = ("spare_gallery", self.s_id)
+        app.open_file_chooser(multiple=True)
 
     def _do_camera(self):
         app = App.get_running_app()
-        app.pick_image_for = ("spare_direct", self.s_id)
+        app.pick_image_for = ("spare_gallery", self.s_id)
         app._launch_camera()
 
     def confirm_delete(self):
@@ -2111,18 +2176,22 @@ class NokiaStorageApp(App):
             self.show_toast("Camera: no data returned")
             return
         try:
-            from jnius import autoclass
-            # Get thumbnail bitmap from Intent extras
+            from jnius import autoclass, cast
             extras = data.getExtras()
             if not extras:
                 self.show_toast("Camera: no extras")
                 return
-            # getParcelable returns the Bitmap thumbnail
-            bitmap = extras.getParcelable("data")
-            if not bitmap:
-                self.show_toast("Camera: no bitmap in extras")
+            # Cast Parcelable to Bitmap explicitly
+            Bitmap = autoclass("android.graphics.Bitmap")
+            parcel = extras.get("data")
+            if not parcel:
+                self.show_toast("Camera: no data in extras")
                 return
-            # Compress bitmap to JPEG bytes
+            bitmap = cast(Bitmap, parcel)
+            if not bitmap:
+                self.show_toast("Camera: cast failed")
+                return
+            # Compress to JPEG
             BitmapCF = autoclass("android.graphics.Bitmap$CompressFormat")
             BAOS = autoclass("java.io.ByteArrayOutputStream")
             baos = BAOS()
@@ -2130,7 +2199,6 @@ class NokiaStorageApp(App):
             img_bytes = bytes(bytearray(baos.toByteArray()))
             baos.close()
             if img_bytes and len(img_bytes) > 100:
-                self.show_toast(f"Camera: {len(img_bytes)} bytes")
                 self._handle_selected_images([img_bytes])
             else:
                 self.show_toast("Camera: empty image")
@@ -2247,6 +2315,17 @@ class NokiaStorageApp(App):
             d.ids.detail_img.reload()
             self.root.get_screen("main")._data_loaded = False
             self.show_toast("Image saved!")
+
+        elif tt == "spare_gallery":
+            count = 0
+            for img_bytes in images_bytes_list:
+                try:
+                    self.db.add_spare_gallery_image(td, img_bytes)
+                    count += 1
+                except: pass
+            self.show_toast(f"Added {count} images!")
+            d = self.root.get_screen("spare_detail")
+            Clock.schedule_once(lambda dt: d._load_gallery(), 0.2)
 
         elif tt == "restore_backup":
             pass  # Handled in _fsel
