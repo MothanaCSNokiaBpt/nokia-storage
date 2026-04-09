@@ -325,49 +325,41 @@ ScreenManager:
         # Sort & Filter bar
         BoxLayout:
             size_hint_y: None
-            height: dp(34)
-            padding: dp(6), dp(2)
-            spacing: dp(4)
+            height: dp(38)
+            padding: dp(8), dp(3)
+            spacing: dp(6)
             canvas.before:
                 Color:
-                    rgba: 0.96, 0.96, 0.98, 1
+                    rgba: 0.94, 0.95, 0.98, 1
                 Rectangle:
                     pos: self.pos
                     size: self.size
-            Label:
-                text: 'Sort:'
-                size_hint_x: None
-                width: dp(30)
-                font_size: sp(11)
-                color: 0.4, 0.4, 0.4, 1
             Spinner:
                 id: sort_spinner
-                text: 'Name'
-                values: ['Name', 'ID', 'Year']
+                text: 'Sort: Name'
+                values: ['Sort: Name', 'Sort: ID', 'Sort: Year']
                 size_hint_x: None
-                width: dp(70)
-                font_size: sp(11)
+                width: dp(100)
+                font_size: sp(12)
+                background_color: 0, 0.314, 0.784, 1
+                color: 1, 1, 1, 1
                 on_text: root.apply_sort_filter()
-            Label:
-                text: 'Filter:'
-                size_hint_x: None
-                width: dp(34)
-                font_size: sp(11)
-                color: 0.4, 0.4, 0.4, 1
             Spinner:
                 id: filter_field
-                text: 'All'
-                values: ['All', 'Name', 'Year', 'Appearance', 'Working']
+                text: 'Filter: All'
+                values: ['Filter: All', 'Filter: Name', 'Filter: Year', 'Filter: Appearance', 'Filter: Working']
                 size_hint_x: None
-                width: dp(80)
-                font_size: sp(11)
+                width: dp(120)
+                font_size: sp(12)
+                background_color: 0.3, 0.3, 0.35, 1
+                color: 1, 1, 1, 1
                 on_text: root.on_filter_field_change()
             TextInput:
                 id: filter_value
-                hint_text: 'value...'
+                hint_text: 'type & Enter'
                 multiline: False
-                font_size: sp(11)
-                padding: dp(4), dp(5)
+                font_size: sp(12)
+                padding: dp(8), dp(7)
                 on_text_validate: root.apply_sort_filter()
         # Tabs
         BoxLayout:
@@ -1404,25 +1396,22 @@ class MainScreen(Screen):
         self._apply_sort_filter_internal()
 
     def on_filter_field_change(self, *a):
-        """Reset filter value when field changes."""
         try:
-            field = self.ids.filter_field.text
+            field = self.ids.filter_field.text.replace('Filter: ', '')
             if field == 'All':
                 self.ids.filter_value.text = ""
                 self.apply_sort_filter()
             else:
-                # Show hint for selected field
                 hints = {'Name': 'e.g. 3310', 'Year': 'e.g. 2003', 'Appearance': 'e.g. Excellent', 'Working': 'e.g. Fully'}
-                self.ids.filter_value.hint_text = hints.get(field, 'value...')
+                self.ids.filter_value.hint_text = hints.get(field, 'type & Enter')
         except: pass
 
     def _apply_sort_filter_internal(self):
-        """Apply current sort and filter to _raw_items."""
         items = list(self._raw_items)
 
-        # Apply filter
+        # Filter
         try:
-            field = self.ids.filter_field.text
+            field = self.ids.filter_field.text.replace('Filter: ', '')
             val = self.ids.filter_value.text.strip().lower()
             if field != 'All' and val and self.current_tab == "phones":
                 key_map = {'Name': 'name', 'Year': 'release_date', 'Appearance': 'appearance_condition', 'Working': 'working_condition'}
@@ -1431,9 +1420,9 @@ class MainScreen(Screen):
                     items = [i for i in items if val in (i.get(key, '') or '').lower()]
         except: pass
 
-        # Apply sort
+        # Sort
         try:
-            sort_by = self.ids.sort_spinner.text
+            sort_by = self.ids.sort_spinner.text.replace('Sort: ', '')
             if self.current_tab == "phones":
                 if sort_by == 'Name':
                     items.sort(key=lambda x: (x.get('name', '') or '').lower())
@@ -1488,34 +1477,39 @@ class MainScreen(Screen):
                 card.bind(on_release=partial(self._open_spare, s["id"]))
                 grid.add_widget(card)
 
-        # Pagination with dropdown in center
+        # Pagination
         if self._total_items > PAGE_SIZE:
             from kivy.uix.spinner import Spinner
-            pg = BoxLayout(size_hint_y=None, height=dp(40), spacing=dp(4), padding=(dp(4),dp(3)))
+            pg = BoxLayout(size_hint_y=None, height=dp(42), spacing=dp(4), padding=(dp(6),dp(4)))
+            pg.canvas.before.clear()
+            with pg.canvas.before:
+                Color(0.94, 0.95, 0.98, 1)
+                pg._bg = RoundedRectangle(pos=pg.pos, size=pg.size, radius=[dp(8)])
+            pg.bind(pos=lambda w,v: setattr(w._bg,"pos",v), size=lambda w,v: setattr(w._bg,"size",v))
 
+            # Prev buttons
             if self._current_page > 0:
-                pg.add_widget(self._pgbtn("|<", lambda *a: self._goto(0)))
+                pg.add_widget(self._pgbtn("<<", lambda *a: self._goto(0)))
                 pg.add_widget(self._pgbtn("< Prev", lambda *a: self._goto(self._current_page-1)))
-            else:
-                pg.add_widget(Widget(size_hint_x=None, width=dp(56)))
-                pg.add_widget(Widget(size_hint_x=None, width=dp(56)))
 
-            # Page dropdown in center
-            page_values = [str(i+1) for i in range(tp)]
-            page_spinner = Spinner(text=str(cp), values=page_values,
-                size_hint_x=None, width=dp(60), font_size=sp(12))
-            page_spinner.bind(text=lambda w, t: self._goto(int(t)-1) if t.isdigit() else None)
-            pg.add_widget(Widget())  # spacer
+            pg.add_widget(Widget())  # spacer left
+
+            # Page dropdown - styled blue
+            page_values = [f"Page {i+1}" for i in range(tp)]
+            page_spinner = Spinner(text=f"Page {cp}", values=page_values,
+                size_hint_x=None, width=dp(90), font_size=sp(12),
+                background_color=(0, 0.314, 0.784, 1), color=(1,1,1,1),
+                dropdown_cls__max_height=dp(250))
+            page_spinner.bind(text=lambda w, t: self._goto(int(t.replace('Page ',''))-1) if 'Page' in t else None)
             pg.add_widget(page_spinner)
-            pg.add_widget(Label(text=f"/ {tp}", font_size=sp(12), color=(0.4,0.4,0.4,1), size_hint_x=None, width=dp(30)))
-            pg.add_widget(Widget())  # spacer
+            pg.add_widget(Label(text=f"of {tp}", font_size=sp(12), color=(0.4,0.4,0.4,1), size_hint_x=None, width=dp(36)))
 
+            pg.add_widget(Widget())  # spacer right
+
+            # Next buttons
             if end < self._total_items:
                 pg.add_widget(self._pgbtn("Next >", lambda *a: self._goto(self._current_page+1)))
-                pg.add_widget(self._pgbtn(">|", lambda *a: self._goto(tp-1)))
-            else:
-                pg.add_widget(Widget(size_hint_x=None, width=dp(56)))
-                pg.add_widget(Widget(size_hint_x=None, width=dp(56)))
+                pg.add_widget(self._pgbtn(">>", lambda *a: self._goto(tp-1)))
 
             grid.add_widget(pg)
 
