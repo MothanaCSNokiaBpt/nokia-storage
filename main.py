@@ -45,7 +45,7 @@ if platform == "android":
 
 PAGE_SIZE = 50
 
-# ── Paths ───────────────────────────────────────────────────────
+# -- Paths ---------------------------------------------------------
 def get_app_path():
     if platform == "android":
         try:
@@ -65,59 +65,11 @@ def get_downloads_path():
             pass
     return os.path.join(get_app_path(), "exports")
 
-# ── Image System: File-based via imghelper ──────────────────────
+# -- Image System: File-based via imghelper ------------------------
 from imghelper import (
     get_default_image_path, write_blob_to_file, clear_item_cache,
     smart_read, get_cache_dir
 )
-
-def _android_share(filepaths, mime_type, subject):
-    """Share one or more files using Android's system share dialog.
-    filepaths: single string or list of strings."""
-    if platform != "android":
-        return
-    try:
-        from jnius import autoclass, cast
-        PythonActivity = autoclass("org.kivy.android.PythonActivity")
-        Intent = autoclass("android.content.Intent")
-        Uri = autoclass("android.net.Uri")
-        File = autoclass("java.io.File")
-        ArrayList = autoclass("java.util.ArrayList")
-        # Disable strict mode for file URI
-        StrictMode = autoclass("android.os.StrictMode")
-        builder = autoclass("android.os.StrictMode$VmPolicy$Builder")()
-        StrictMode.setVmPolicy(builder.build())
-        context = PythonActivity.mActivity
-
-        if isinstance(filepaths, str):
-            filepaths = [filepaths]
-
-        if len(filepaths) == 1:
-            # Single file share
-            jfile = File(filepaths[0])
-            uri = Uri.fromFile(jfile)
-            intent = Intent()
-            intent.setAction(Intent.ACTION_SEND)
-            intent.setType(mime_type)
-            intent.putExtra(Intent.EXTRA_STREAM, cast("android.os.Parcelable", uri))
-            intent.putExtra(Intent.EXTRA_SUBJECT, subject)
-            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            context.startActivity(intent)
-        else:
-            # Multiple files share
-            uris = ArrayList()
-            for fp in filepaths:
-                jfile = File(fp)
-                uris.add(cast("android.os.Parcelable", Uri.fromFile(jfile)))
-            intent = Intent()
-            intent.setAction(Intent.ACTION_SEND_MULTIPLE)
-            intent.setType(mime_type)
-            intent.putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
-            intent.putExtra(Intent.EXTRA_SUBJECT, subject)
-            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            context.startActivity(intent)
-    except Exception as e:
-        App.get_running_app().show_toast(f"Share error: {str(e)[:50]}")
 
 def get_img_path_for_phone(phone_id, db):
     """Get displayable image file path for a phone."""
@@ -136,7 +88,7 @@ def get_img_path_for_spare(spare_id, db):
     return get_default_image_path(app_path)
 
 
-# ── XLSX Creator (pure Python, no openpyxl) ────────────────────
+# -- XLSX Creator (pure Python, no openpyxl) -----------------------
 def create_xlsx(sheets_data, filepath):
     import zipfile as zf_mod
     with zf_mod.ZipFile(filepath, 'w', zf_mod.ZIP_DEFLATED) as zf:
@@ -174,7 +126,7 @@ def create_xlsx(sheets_data, filepath):
             zf.writestr(f'xl/worksheets/sheet{i}.xml', ws)
 
 
-# ── Custom Widgets ──────────────────────────────────────────────
+# -- Custom Widgets ------------------------------------------------
 class ClickableBox(ButtonBehavior, BoxLayout):
     pass
 
@@ -207,7 +159,7 @@ class SearchBar(BoxLayout):
                 screen.do_search(text)
 
 
-# ── KV Layout ──────────────────────────────────────────────────
+# -- KV Layout -----------------------------------------------------
 KV = """
 #:import dp kivy.metrics.dp
 #:import sp kivy.metrics.sp
@@ -368,6 +320,8 @@ KV = """
 
 ScreenManager:
     id: sm
+    SplashScreen:
+        name: 'splash'
     MainScreen:
         name: 'main'
     PhoneDetailScreen:
@@ -388,6 +342,25 @@ ScreenManager:
         name: 'report'
     PhotoGalleryScreen:
         name: 'photo_gallery'
+
+<SplashScreen>:
+    BoxLayout:
+        orientation: 'vertical'
+        canvas.before:
+            Color:
+                rgba: 1, 1, 1, 1
+            Rectangle:
+                pos: self.pos
+                size: self.size
+        Widget:
+        Label:
+            text: 'NOKIA'
+            font_size: sp(48)
+            bold: True
+            color: 0, 0.314, 0.784, 1
+            size_hint_y: None
+            height: dp(60)
+        Widget:
 
 <MainScreen>:
     BoxLayout:
@@ -610,50 +583,6 @@ ScreenManager:
                 text_size: self.size
                 halign: 'left'
                 valign: 'middle'
-            Button:
-                text: 'Google'
-                size_hint_x: None
-                width: dp(50)
-                font_size: sp(11)
-                bold: True
-                background_normal: ''
-                background_color: 0.15, 0.4, 0.85, 1
-                color: 1, 1, 1, 1
-                on_press: root.google_search()
-            Button:
-                text: 'Summary'
-                size_hint_x: None
-                width: dp(56)
-                font_size: sp(11)
-                bold: True
-                background_normal: ''
-                background_color: 0.4, 0.3, 0.6, 1
-                color: 1, 1, 1, 1
-                on_press: root.show_summary()
-            Button:
-                text: 'Share'
-                size_hint_x: None
-                width: dp(50)
-                font_size: sp(12)
-                bold: True
-                background_normal: ''
-                background_color: 0.15, 0.4, 0.85, 1
-                color: 1, 1, 1, 1
-                on_press: root.share_phone()
-            ClickableLabel:
-                size_hint_x: None
-                width: dp(44)
-                text: 'Edit'
-                font_size: sp(13)
-                color: 1, 1, 1, 1
-                on_release: root.edit_phone()
-            ClickableLabel:
-                size_hint_x: None
-                width: dp(40)
-                text: 'Del'
-                font_size: sp(13)
-                color: 1, 0.6, 0.6, 1
-                on_release: root.confirm_delete()
         ScrollView:
             do_scroll_x: False
             BoxLayout:
@@ -689,6 +618,60 @@ ScreenManager:
                     background_color: 0, 0.314, 0.784, 1
                     color: 1, 1, 1, 1
                     on_press: root.add_image()
+                # Action buttons row
+                BoxLayout:
+                    size_hint_y: None
+                    height: dp(58)
+                    spacing: dp(12)
+                    padding: dp(10), dp(4)
+                    orientation: 'horizontal'
+                    Widget:
+                    Button:
+                        text: '\\u270e'
+                        size_hint: None, None
+                        size: dp(48), dp(48)
+                        font_size: sp(20)
+                        background_normal: ''
+                        background_color: 0, 0.314, 0.784, 1
+                        color: 1, 1, 1, 1
+                        on_press: root.edit_phone()
+                    Button:
+                        text: '\\u2197'
+                        size_hint: None, None
+                        size: dp(48), dp(48)
+                        font_size: sp(20)
+                        background_normal: ''
+                        background_color: 0, 0.314, 0.784, 1
+                        color: 1, 1, 1, 1
+                        on_press: root.share_phone()
+                    Button:
+                        text: '\\U0001f4ca'
+                        size_hint: None, None
+                        size: dp(48), dp(48)
+                        font_size: sp(20)
+                        background_normal: ''
+                        background_color: 0, 0.314, 0.784, 1
+                        color: 1, 1, 1, 1
+                        on_press: root.show_summary()
+                    Button:
+                        text: '\\U0001f50d'
+                        size_hint: None, None
+                        size: dp(48), dp(48)
+                        font_size: sp(20)
+                        background_normal: ''
+                        background_color: 0, 0.314, 0.784, 1
+                        color: 1, 1, 1, 1
+                        on_press: root.google_search()
+                    Button:
+                        text: '\\U0001f5d1'
+                        size_hint: None, None
+                        size: dp(48), dp(48)
+                        font_size: sp(20)
+                        background_normal: ''
+                        background_color: 0.85, 0.2, 0.2, 1
+                        color: 1, 1, 1, 1
+                        on_press: root.confirm_delete()
+                    Widget:
                 # Info Card
                 BoxLayout:
                     orientation: 'vertical'
@@ -866,30 +849,6 @@ ScreenManager:
                 text_size: self.size
                 halign: 'left'
                 valign: 'middle'
-            Button:
-                text: 'Share'
-                size_hint_x: None
-                width: dp(50)
-                font_size: sp(12)
-                bold: True
-                background_normal: ''
-                background_color: 0.15, 0.4, 0.85, 1
-                color: 1, 1, 1, 1
-                on_press: root.share_spare()
-            ClickableLabel:
-                size_hint_x: None
-                width: dp(40)
-                text: 'Edit'
-                font_size: sp(13)
-                color: 1, 1, 1, 1
-                on_release: root.edit_spare()
-            ClickableLabel:
-                size_hint_x: None
-                width: dp(40)
-                text: 'Del'
-                font_size: sp(13)
-                color: 1, 0.6, 0.6, 1
-                on_release: root.confirm_delete()
         ScrollView:
             do_scroll_x: False
             BoxLayout:
@@ -924,6 +883,42 @@ ScreenManager:
                     background_color: 0, 0.314, 0.784, 1
                     color: 1, 1, 1, 1
                     on_press: root.add_image()
+                # Action buttons row
+                BoxLayout:
+                    size_hint_y: None
+                    height: dp(58)
+                    spacing: dp(12)
+                    padding: dp(10), dp(4)
+                    orientation: 'horizontal'
+                    Widget:
+                    Button:
+                        text: '\\u270e'
+                        size_hint: None, None
+                        size: dp(48), dp(48)
+                        font_size: sp(20)
+                        background_normal: ''
+                        background_color: 0, 0.314, 0.784, 1
+                        color: 1, 1, 1, 1
+                        on_press: root.edit_spare()
+                    Button:
+                        text: '\\u2197'
+                        size_hint: None, None
+                        size: dp(48), dp(48)
+                        font_size: sp(20)
+                        background_normal: ''
+                        background_color: 0, 0.314, 0.784, 1
+                        color: 1, 1, 1, 1
+                        on_press: root.share_spare()
+                    Button:
+                        text: '\\U0001f5d1'
+                        size_hint: None, None
+                        size: dp(48), dp(48)
+                        font_size: sp(20)
+                        background_normal: ''
+                        background_color: 0.85, 0.2, 0.2, 1
+                        color: 1, 1, 1, 1
+                        on_press: root.confirm_delete()
+                    Widget:
                 BoxLayout:
                     orientation: 'vertical'
                     size_hint_y: None
@@ -1320,7 +1315,7 @@ ScreenManager:
             padding: dp(18)
             spacing: dp(14)
             Label:
-                text: 'Export all data as XLSX to Downloads.'
+                text: 'Export all data as XLSX and share.'
                 font_size: sp(14)
                 color: 0.3, 0.3, 0.3, 1
                 size_hint_y: None
@@ -1349,27 +1344,7 @@ ScreenManager:
                         radius: [dp(9)]
                 on_release: root.do_export()
                 Label:
-                    text: 'Export to XLSX'
-                    color: 1, 1, 1, 1
-                    font_size: sp(15)
-                    bold: True
-            ClickableBox:
-                id: share_export_btn
-                size_hint_y: None
-                height: dp(48)
-                padding: dp(14), dp(10)
-                opacity: 0
-                disabled: True
-                canvas.before:
-                    Color:
-                        rgba: 0.15, 0.4, 0.85, 1
-                    RoundedRectangle:
-                        pos: self.pos
-                        size: self.size
-                        radius: [dp(9)]
-                on_release: root.share_export()
-                Label:
-                    text: 'Share Exported File'
+                    text: 'Export & Share'
                     color: 1, 1, 1, 1
                     font_size: sp(15)
                     bold: True
@@ -1575,7 +1550,18 @@ ScreenManager:
 """
 
 
-# ── Screen Classes ──────────────────────────────────────────────
+# -- Screen Classes ------------------------------------------------
+
+
+class SplashScreen(Screen):
+    def on_enter(self):
+        Clock.schedule_once(self._go_main, 2)
+
+    def _go_main(self, *args):
+        app = App.get_running_app()
+        if app.root:
+            app.root.transition = SlideTransition(direction="left")
+            app.root.current = "main"
 
 
 class MainScreen(Screen):
@@ -1985,22 +1971,24 @@ class PhoneDetailScreen(Screen):
 
     def share_phone(self):
         """Share phone info as plain text via Android share."""
-        app = App.get_running_app()
-        text = f"Nokia {self.p_name}\nID: {self.p_id}\nRelease: {self.p_date}\nAppearance: {self.p_appear}\nWorking: {self.p_working}\nRemarks: {self.p_remarks or '-'}"
+        text = f"Nokia {self.p_name}\nID: {self.p_id}\nRelease: {self.p_date}\nAppearance: {self.p_appear}\nWorking: {self.p_working}"
+        if self.p_remarks and self.p_remarks != '-':
+            text += f"\nRemarks: {self.p_remarks}"
         if platform == "android":
             try:
                 from jnius import autoclass
                 Intent = autoclass("android.content.Intent")
+                String = autoclass("java.lang.String")
                 PythonActivity = autoclass("org.kivy.android.PythonActivity")
                 intent = Intent()
                 intent.setAction(Intent.ACTION_SEND)
                 intent.setType("text/plain")
-                intent.putExtra(Intent.EXTRA_TEXT, text)
+                intent.putExtra(Intent.EXTRA_TEXT, String(text))
                 PythonActivity.mActivity.startActivity(intent)
             except Exception as e:
-                app.show_toast(f"Share error: {str(e)[:50]}")
+                App.get_running_app().show_toast(f"Share: {str(e)[:40]}")
         else:
-            app.show_toast("Share: text copied (desktop)")
+            App.get_running_app().show_toast("Share: text copied (desktop)")
 
     def google_search(self):
         """Open Google search for this phone model."""
@@ -2008,16 +1996,37 @@ class PhoneDetailScreen(Screen):
         webbrowser.open(f"https://www.google.com/search?q=Nokia+{self.p_name}")
 
     def show_summary(self):
-        """Show a summary popup for this phone."""
+        """Show a summary popup for all phones with the same name."""
         app = App.get_running_app()
-        # Count phones with same name
-        same_name_count = 0
+        # Query all phones with same name
+        same_phones = []
         try:
-            all_phones = app.db.get_all_phones()
-            same_name_count = sum(1 for p in all_phones if (p.get('name', '') or '').lower() == self.p_name.lower())
-        except:
-            pass
-        # Get related spare parts
+            cursor = app.db.conn.cursor()
+            cursor.execute("SELECT * FROM phones WHERE name = ?", (self.p_name,))
+            cols = [desc[0] for desc in cursor.description]
+            same_phones = [dict(zip(cols, row)) for row in cursor.fetchall()]
+        except Exception:
+            try:
+                all_phones = app.db.get_all_phones()
+                same_phones = [p for p in all_phones if (p.get('name', '') or '').lower() == self.p_name.lower()]
+            except:
+                pass
+
+        total_same = len(same_phones)
+
+        # Working condition breakdown
+        working_counts = {}
+        for p in same_phones:
+            w = p.get('working_condition', '') or 'Unknown'
+            working_counts[w] = working_counts.get(w, 0) + 1
+
+        # Appearance breakdown
+        appear_counts = {}
+        for p in same_phones:
+            a = p.get('appearance_condition', '') or 'Unknown'
+            appear_counts[a] = appear_counts.get(a, 0) + 1
+
+        # Related spare parts
         spare_names = []
         try:
             spares = app.db.get_spare_parts_for_phone(self.p_name)
@@ -2026,7 +2035,8 @@ class PhoneDetailScreen(Screen):
             pass
         spare_text = ", ".join(spare_names) if spare_names else "None"
 
-        popup = ModalView(size_hint=(0.88, None), height=dp(320))
+        # Build popup
+        popup = ModalView(size_hint=(0.88, None), height=dp(380))
         c = BoxLayout(orientation="vertical", spacing=dp(6), padding=dp(14))
         with c.canvas.before:
             Color(1,1,1,1)
@@ -2034,18 +2044,23 @@ class PhoneDetailScreen(Screen):
         c.bind(pos=lambda w,v: setattr(w._bg,"pos",v), size=lambda w,v: setattr(w._bg,"size",v))
         c.add_widget(Label(text="Phone Summary", font_size=sp(17), bold=True, color=(0,0.314,0.784,1),
             size_hint_y=None, height=dp(28)))
-        lines = [
-            f"Name: {self.p_name}",
-            f"ID: {self.p_id}",
-            f"Release: {self.p_date or '-'}",
-            f"Appearance: {self.p_appear or '-'}",
-            f"Working: {self.p_working or '-'}",
-            f"Same model in DB: {same_name_count}",
-            f"Spare parts: {spare_text}",
-        ]
+
+        lines = [f"{total_same} phones named {self.p_name}"]
+        lines.append("")
+        lines.append("Working Condition:")
+        for wk, cnt in working_counts.items():
+            lines.append(f"  {wk}: {cnt}")
+        lines.append("")
+        lines.append("Appearance:")
+        for ap, cnt in appear_counts.items():
+            lines.append(f"  {ap}: {cnt}")
+        lines.append("")
+        lines.append(f"Spare parts: {spare_text}")
+
         for line in lines:
             c.add_widget(Label(text=line, font_size=sp(13), color=(0.15,0.15,0.15,1),
-                size_hint_y=None, height=dp(22), text_size=(dp(280), None), halign="left"))
+                size_hint_y=None, height=dp(20), text_size=(dp(280), None), halign="left"))
+
         from kivy.uix.button import Button as KBtn
         close = KBtn(text="Close", size_hint_y=None, height=dp(40), font_size=sp(14),
             background_color=(0,0.314,0.784,1), color=(1,1,1,1))
@@ -2194,22 +2209,22 @@ class SpareDetailScreen(Screen):
 
     def share_spare(self):
         """Share spare part info as plain text via Android share."""
-        app = App.get_running_app()
         text = f"Nokia Spare: {self.s_name}\nID: {self.s_id_str}\nLinked Phone: {self.s_phone_id or '-'}\nDescription: {self.s_desc or '-'}"
         if platform == "android":
             try:
                 from jnius import autoclass
                 Intent = autoclass("android.content.Intent")
+                String = autoclass("java.lang.String")
                 PythonActivity = autoclass("org.kivy.android.PythonActivity")
                 intent = Intent()
                 intent.setAction(Intent.ACTION_SEND)
                 intent.setType("text/plain")
-                intent.putExtra(Intent.EXTRA_TEXT, text)
+                intent.putExtra(Intent.EXTRA_TEXT, String(text))
                 PythonActivity.mActivity.startActivity(intent)
             except Exception as e:
-                app.show_toast(f"Share error: {str(e)[:50]}")
+                App.get_running_app().show_toast(f"Share: {str(e)[:40]}")
         else:
-            app.show_toast("Share: text copied (desktop)")
+            App.get_running_app().show_toast("Share: text copied (desktop)")
 
     def confirm_delete(self):
         popup = ModalView(size_hint=(0.78, None), height=dp(130))
@@ -2438,35 +2453,40 @@ class ExportScreen(Screen):
                 ])
 
             sheets = {"Phones": phone_rows, "Spare Parts": spare_rows}
-            fp = os.path.join(od, f"nokia_export_{ts}.xlsx")
-            create_xlsx(sheets, fp)
+            filepath = os.path.join(od, f"nokia_export_{ts}.xlsx")
+            create_xlsx(sheets, filepath)
 
-            self._last_export_path = fp
-            self.ids.export_status.text = f"Exported {len(phones)} phones, {len(spares)} spares\nFile: {fp}"
+            self._last_export_path = filepath
+            self.ids.export_status.text = f"Exported {len(phones)} phones, {len(spares)} spares"
             self.ids.export_status.color = (0.26,0.63,0.28,1)
             app.show_toast("Export saved!")
 
-            # Show share button
-            try:
-                self.ids.share_export_btn.opacity = 1
-                self.ids.share_export_btn.disabled = False
-            except:
-                pass
+            # Share the file
+            if platform == "android":
+                try:
+                    from jnius import autoclass, cast
+                    StrictMode = autoclass("android.os.StrictMode")
+                    builder = autoclass("android.os.StrictMode$VmPolicy$Builder")()
+                    StrictMode.setVmPolicy(builder.build())
+                    Intent = autoclass("android.content.Intent")
+                    Uri = autoclass("android.net.Uri")
+                    File = autoclass("java.io.File")
+                    PythonActivity = autoclass("org.kivy.android.PythonActivity")
+                    jfile = File(filepath)
+                    uri = Uri.fromFile(jfile)
+                    intent = Intent()
+                    intent.setAction(Intent.ACTION_SEND)
+                    intent.setType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                    intent.putExtra(Intent.EXTRA_STREAM, cast("android.os.Parcelable", uri))
+                    intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    PythonActivity.mActivity.startActivity(intent)
+                except Exception as e:
+                    app.show_toast(f"Share error: {str(e)[:40]}")
+            else:
+                app.show_toast(f"File at: {filepath}")
         except Exception as e:
             self.ids.export_status.text = f"Error: {str(e)}"
             self.ids.export_status.color = (0.9,0.22,0.21,1)
-
-    def share_export(self):
-        """Share the last exported file."""
-        if not self._last_export_path or not os.path.exists(self._last_export_path):
-            App.get_running_app().show_toast("No export file to share")
-            return
-        if platform == "android":
-            _android_share(self._last_export_path,
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                "Nokia Storage Export")
-        else:
-            App.get_running_app().show_toast(f"File at: {self._last_export_path}")
 
     def go_back(self):
         App.get_running_app().root.transition = SlideTransition(direction="right")
@@ -2499,7 +2519,27 @@ class BackupScreen(Screen):
             self.ids.backup_status.color = (0.9,0.22,0.21,1)
 
     def _share_backup(self, filepath):
-        _android_share(filepath, "application/zip", "Nokia Storage Backup")
+        if platform == "android":
+            try:
+                from jnius import autoclass, cast
+                StrictMode = autoclass("android.os.StrictMode")
+                builder = autoclass("android.os.StrictMode$VmPolicy$Builder")()
+                StrictMode.setVmPolicy(builder.build())
+                Intent = autoclass("android.content.Intent")
+                Uri = autoclass("android.net.Uri")
+                File = autoclass("java.io.File")
+                PythonActivity = autoclass("org.kivy.android.PythonActivity")
+                jfile = File(filepath)
+                uri = Uri.fromFile(jfile)
+                intent = Intent()
+                intent.setAction(Intent.ACTION_SEND)
+                intent.setType("application/zip")
+                intent.putExtra(Intent.EXTRA_STREAM, cast("android.os.Parcelable", uri))
+                intent.putExtra(Intent.EXTRA_SUBJECT, "Nokia Storage Backup")
+                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                PythonActivity.mActivity.startActivity(intent)
+            except Exception as e:
+                App.get_running_app().show_toast(f"Share error: {str(e)[:50]}")
 
     def restore_backup(self):
         app = App.get_running_app()
@@ -2629,19 +2669,18 @@ class ReportScreen(Screen):
                     break
         year_range = f"{min(years)} - {max(years)}" if years else "N/A"
 
-        # Helper to create a colored stat card - single column, full width
+        # Helper to create a colored stat card - vertical layout, no overlap
         def stat_card(title, value, bg_color):
-            bx = BoxLayout(orientation="horizontal", size_hint_y=None, height=dp(60),
-                padding=dp(12), spacing=dp(8))
-            with bx.canvas.before:
+            card = BoxLayout(orientation="vertical", size_hint_y=None, height=dp(70), padding=dp(10))
+            with card.canvas.before:
                 Color(*bg_color)
-                bx._bg = RoundedRectangle(pos=bx.pos, size=bx.size, radius=[dp(10)])
-            bx.bind(pos=lambda w,v: setattr(w._bg,"pos",v), size=lambda w,v: setattr(w._bg,"size",v))
-            bx.add_widget(Label(text=str(value), font_size=sp(22), bold=True, color=(1,1,1,1),
-                size_hint_x=None, width=dp(80), text_size=(dp(80), None), halign="center", valign="middle"))
-            bx.add_widget(Label(text=title, font_size=sp(13), color=(1,1,1,0.9),
-                text_size=(self.width, None), halign="left", valign="middle"))
-            return bx
+                card._bg = RoundedRectangle(pos=card.pos, size=card.size, radius=[dp(10)])
+            card.bind(pos=lambda w,v: setattr(w._bg,"pos",v), size=lambda w,v: setattr(w._bg,"size",v))
+            num_label = Label(text=str(value), font_size=sp(24), bold=True, color=(1,1,1,1), size_hint_y=0.6)
+            desc_label = Label(text=title, font_size=sp(12), color=(1,1,1,0.8), size_hint_y=0.4)
+            card.add_widget(num_label)
+            card.add_widget(desc_label)
+            return card
 
         def sec(t):
             g.add_widget(Label(text=t, font_size=sp(16), bold=True, color=(0,0.314,0.784,1),
@@ -2657,18 +2696,14 @@ class ReportScreen(Screen):
         g.add_widget(stat_card("Year Range", year_range, (0.6, 0.2, 0.4, 1)))
 
         # Most common model card
-        mc_bx = BoxLayout(orientation="horizontal", size_hint_y=None, height=dp(60),
-            padding=dp(12), spacing=dp(8))
-        with mc_bx.canvas.before:
+        mc_card = BoxLayout(orientation="vertical", size_hint_y=None, height=dp(70), padding=dp(10))
+        with mc_card.canvas.before:
             Color(0, 0.44, 1, 1)
-            mc_bx._bg = RoundedRectangle(pos=mc_bx.pos, size=mc_bx.size, radius=[dp(10)])
-        mc_bx.bind(pos=lambda w,v: setattr(w._bg,"pos",v), size=lambda w,v: setattr(w._bg,"size",v))
-        mc_bx.add_widget(Label(text=f"{most_common[0]} ({most_common[1]})", font_size=sp(16), bold=True, color=(1,1,1,1),
-            text_size=(dp(280),None), halign="left", valign="middle"))
-        lbl = Label(text="Most Common", font_size=sp(11), color=(1,1,1,0.85),
-            size_hint_x=None, width=dp(80), text_size=(dp(80),None), halign="right", valign="middle")
-        mc_bx.add_widget(lbl)
-        g.add_widget(mc_bx)
+            mc_card._bg = RoundedRectangle(pos=mc_card.pos, size=mc_card.size, radius=[dp(10)])
+        mc_card.bind(pos=lambda w,v: setattr(w._bg,"pos",v), size=lambda w,v: setattr(w._bg,"size",v))
+        mc_card.add_widget(Label(text=f"{most_common[0]} ({most_common[1]})", font_size=sp(18), bold=True, color=(1,1,1,1), size_hint_y=0.6))
+        mc_card.add_widget(Label(text="Most Common Model", font_size=sp(12), color=(1,1,1,0.8), size_hint_y=0.4))
+        g.add_widget(mc_card)
 
         # Condition breakdown with percentages
         def condition_section(title, data, color_base):
@@ -2854,7 +2889,7 @@ class PhotoGalleryScreen(Screen):
         App.get_running_app().root.current = "main"
 
 
-# ── Main App ────────────────────────────────────────────────────
+# -- Main App ------------------------------------------------------
 
 class NokiaStorageApp(App):
     title = "Nokia Storage"
@@ -2876,11 +2911,13 @@ class NokiaStorageApp(App):
                 print(f"Activity bind error: {e}")
         self._load_initial()
         Window.bind(on_keyboard=self._kb)
-        return Builder.load_string(KV)
+        root = Builder.load_string(KV)
+        root.current = "splash"
+        return root
 
     def _kb(self, win, key, *a):
         if key == 27:
-            if self.root and self.root.current not in ("main",):
+            if self.root and self.root.current not in ("main", "splash"):
                 self.root.transition = SlideTransition(direction="right"); self.root.current = "main"
                 return True
             now = time.time()
