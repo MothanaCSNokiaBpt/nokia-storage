@@ -3152,7 +3152,7 @@ class NokiaStorageApp(App):
         except Exception as e:
             self.show_toast(f"Camera error: {str(e)[:50]}")
 
-    def _resize_image(self, img_bytes, max_dim=1200):
+    def _resize_image(self, img_bytes, max_dim=2000):
         """Resize image to max_dim using Android Bitmap API. Returns valid JPEG."""
         if not img_bytes or platform != "android":
             return img_bytes
@@ -3173,7 +3173,7 @@ class NokiaStorageApp(App):
                     nh, nw = max_dim, int(w * max_dim / h)
                 bitmap = Bitmap.createScaledBitmap(bitmap, nw, nh, True)
             baos = BAOS()
-            bitmap.compress(BitmapCF.JPEG, 85, baos)
+            bitmap.compress(BitmapCF.JPEG, 95, baos)
             result = bytes(bytearray(baos.toByteArray()))
             baos.close()
             return result
