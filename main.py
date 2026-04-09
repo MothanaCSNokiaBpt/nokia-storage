@@ -2083,7 +2083,56 @@ class NokiaStorageApp(App):
                 print(f"Activity bind error: {e}")
         self._load_initial()
         Window.bind(on_keyboard=self._kb)
-        return Builder.load_string(KV)
+        root = Builder.load_string(KV)
+        # Show intro video on startup
+        Clock.schedule_once(lambda dt: self._play_intro(), 0.5)
+        return root
+
+    def _play_intro(self):
+        """Play intro video once on startup."""
+        try:
+            from kivy.uix.video import Video
+            # Find the intro video
+            intro_path = None
+            for p in [os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "intro.mp4"),
+                       os.path.join(get_app_path(), "assets", "intro.mp4")]:
+                if os.path.exists(p):
+                    intro_path = p
+                    break
+            if not intro_path:
+                # Try kivy resource
+                try:
+                    from kivy.resources import resource_find
+                    r = resource_find("assets/intro.mp4")
+                    if r: intro_path = r
+                except: pass
+            if not intro_path:
+                return
+
+            self._intro_popup = ModalView(size_hint=(1, 1), background_color=(0, 0, 0, 1),
+                auto_dismiss=False)
+            video = Video(source=intro_path, state='play', options={'eos': 'stop'},
+                allow_stretch=True, keep_ratio=True)
+
+            def on_eos(widget, value):
+                if value == 'stop':
+                    Clock.schedule_once(lambda dt: self._close_intro(), 0.3)
+
+            video.bind(eos=on_eos)
+            self._intro_popup.add_widget(video)
+            self._intro_popup.open()
+
+            # Auto-close after 10 seconds max (safety)
+            Clock.schedule_once(lambda dt: self._close_intro(), 10)
+        except Exception:
+            pass
+
+    def _close_intro(self):
+        try:
+            if hasattr(self, '_intro_popup') and self._intro_popup:
+                self._intro_popup.dismiss()
+                self._intro_popup = None
+        except: pass
 
     def _kb(self, win, key, *a):
         if key == 27:
