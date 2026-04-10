@@ -527,30 +527,17 @@ ScreenManager:
                 width: dp(34)
                 font_size: sp(11)
                 color: 0.3, 0.3, 0.3, 1
-            Slider:
-                id: year_slider_min
-                min: 1998
-                max: 2025
-                value: 1998
-                step: 1
-                size_hint_x: 0.4
-                on_value: root.apply_sort_filter()
-            Label:
-                id: year_range_label
-                text: '1998 - 2025'
+            Spinner:
+                id: year_spinner
+                text: 'All Years'
+                values: ['All Years']
                 size_hint_x: None
-                width: dp(70)
+                width: dp(110)
                 font_size: sp(11)
-                color: 0.3, 0.3, 0.3, 1
-                halign: 'center'
-            Slider:
-                id: year_slider_max
-                min: 1998
-                max: 2025
-                value: 2025
-                step: 1
-                size_hint_x: 0.4
-                on_value: root.apply_sort_filter()
+                background_color: 0, 0.314, 0.784, 1
+                color: 1, 1, 1, 1
+                option_cls: 'BlueSpinnerOption'
+                on_text: root.apply_sort_filter()
         # Tabs
         BoxLayout:
             size_hint_y: None
@@ -711,110 +698,55 @@ ScreenManager:
                     background_color: 0, 0.314, 0.784, 1
                     color: 1, 1, 1, 1
                     on_press: root.add_image()
-                # Action buttons - centered row with icons
+                # Action buttons - icon images as buttons
                 AnchorLayout:
                     anchor_x: 'center'
                     size_hint_y: None
-                    height: dp(70)
+                    height: dp(62)
                     BoxLayout:
                         size_hint: None, None
-                        size: dp(310), dp(56)
-                        spacing: dp(8)
-                        Button:
+                        size: dp(290), dp(52)
+                        spacing: dp(10)
+                        ClickableBox:
                             size_hint: None, None
-                            size: dp(52), dp(52)
-                            background_normal: ''
-                            background_down: ''
-                            background_color: 0, 0, 0, 0
-                            canvas.before:
-                                Color:
-                                    rgba: 0.2, 0.6, 0.3, 1
-                                RoundedRectangle:
-                                    pos: self.pos
-                                    size: self.size
-                                    radius: [100]
-                            on_press: root.show_summary()
+                            size: dp(48), dp(48)
+                            on_release: root.show_summary()
                             Image:
                                 source: 'assets/icons/Info.png'
-                                size: dp(28), dp(28)
-                                size_hint: None, None
-                                pos_hint: {'center_x': .5, 'center_y': .5}
-                        Button:
+                                allow_stretch: True
+                                keep_ratio: True
+                        ClickableBox:
                             size_hint: None, None
-                            size: dp(52), dp(52)
-                            background_normal: ''
-                            background_down: ''
-                            background_color: 0, 0, 0, 0
-                            canvas.before:
-                                Color:
-                                    rgba: 0, 0.314, 0.784, 1
-                                RoundedRectangle:
-                                    pos: self.pos
-                                    size: self.size
-                                    radius: [100]
-                            on_press: root.google_search()
+                            size: dp(48), dp(48)
+                            on_release: root.google_search()
                             Image:
                                 source: 'assets/icons/Web.png'
-                                size: dp(28), dp(28)
-                                size_hint: None, None
-                                pos_hint: {'center_x': .5, 'center_y': .5}
-                        Button:
+                                allow_stretch: True
+                                keep_ratio: True
+                        ClickableBox:
                             size_hint: None, None
-                            size: dp(52), dp(52)
-                            background_normal: ''
-                            background_down: ''
-                            background_color: 0, 0, 0, 0
-                            canvas.before:
-                                Color:
-                                    rgba: 0.9, 0.5, 0.1, 1
-                                RoundedRectangle:
-                                    pos: self.pos
-                                    size: self.size
-                                    radius: [100]
-                            on_press: root.ebay_search()
+                            size: dp(48), dp(48)
+                            on_release: root.ebay_search()
                             Image:
                                 source: 'assets/icons/eBay.png'
-                                size: dp(28), dp(28)
-                                size_hint: None, None
-                                pos_hint: {'center_x': .5, 'center_y': .5}
-                        Button:
+                                allow_stretch: True
+                                keep_ratio: True
+                        ClickableBox:
                             size_hint: None, None
-                            size: dp(52), dp(52)
-                            background_normal: ''
-                            background_down: ''
-                            background_color: 0, 0, 0, 0
-                            canvas.before:
-                                Color:
-                                    rgba: 0.45, 0.25, 0.7, 1
-                                RoundedRectangle:
-                                    pos: self.pos
-                                    size: self.size
-                                    radius: [100]
-                            on_press: root.edit_phone()
+                            size: dp(48), dp(48)
+                            on_release: root.edit_phone()
                             Image:
                                 source: 'assets/icons/Edit.png'
-                                size: dp(28), dp(28)
-                                size_hint: None, None
-                                pos_hint: {'center_x': .5, 'center_y': .5}
-                        Button:
+                                allow_stretch: True
+                                keep_ratio: True
+                        ClickableBox:
                             size_hint: None, None
-                            size: dp(52), dp(52)
-                            background_normal: ''
-                            background_down: ''
-                            background_color: 0, 0, 0, 0
-                            canvas.before:
-                                Color:
-                                    rgba: 0.8, 0.15, 0.15, 1
-                                RoundedRectangle:
-                                    pos: self.pos
-                                    size: self.size
-                                    radius: [100]
-                            on_press: root.confirm_delete()
+                            size: dp(48), dp(48)
+                            on_release: root.confirm_delete()
                             Image:
                                 source: 'assets/icons/Delete.png'
-                                size: dp(28), dp(28)
-                                size_hint: None, None
-                                pos_hint: {'center_x': .5, 'center_y': .5}
+                                allow_stretch: True
+                                keep_ratio: True
                 # Info Card
                 BoxLayout:
                     orientation: 'vertical'
@@ -1026,51 +958,31 @@ ScreenManager:
                     background_color: 0, 0.314, 0.784, 1
                     color: 1, 1, 1, 1
                     on_press: root.add_image()
-                # Action buttons - centered
+                # Action buttons - centered icons
                 AnchorLayout:
                     anchor_x: 'center'
                     size_hint_y: None
-                    height: dp(70)
+                    height: dp(62)
                     BoxLayout:
                         size_hint: None, None
-                        size: dp(124), dp(56)
-                        spacing: dp(12)
-                        Button:
-                            text: 'Edit'
+                        size: dp(116), dp(52)
+                        spacing: dp(10)
+                        ClickableBox:
                             size_hint: None, None
-                            size: dp(56), dp(56)
-                            font_size: sp(11)
-                            bold: True
-                            background_normal: ''
-                            background_down: ''
-                            background_color: 0, 0, 0, 0
-                            color: 1, 1, 1, 1
-                            canvas.before:
-                                Color:
-                                    rgba: 0, 0.314, 0.784, 1
-                                RoundedRectangle:
-                                    pos: self.pos
-                                    size: self.size
-                                    radius: [100]
-                            on_press: root.edit_spare()
-                        Button:
-                            text: 'Del'
+                            size: dp(48), dp(48)
+                            on_release: root.edit_spare()
+                            Image:
+                                source: 'assets/icons/Edit.png'
+                                allow_stretch: True
+                                keep_ratio: True
+                        ClickableBox:
                             size_hint: None, None
-                            size: dp(56), dp(56)
-                            font_size: sp(11)
-                            bold: True
-                            background_normal: ''
-                            background_down: ''
-                            background_color: 0, 0, 0, 0
-                            color: 1, 1, 1, 1
-                            canvas.before:
-                                Color:
-                                    rgba: 0.8, 0.15, 0.15, 1
-                                RoundedRectangle:
-                                    pos: self.pos
-                                    size: self.size
-                                    radius: [100]
-                            on_press: root.confirm_delete()
+                            size: dp(48), dp(48)
+                            on_release: root.confirm_delete()
+                            Image:
+                                source: 'assets/icons/Delete.png'
+                                allow_stretch: True
+                                keep_ratio: True
                 BoxLayout:
                     orientation: 'vertical'
                     size_hint_y: None
@@ -1769,6 +1681,16 @@ class MainScreen(Screen):
                     working_vals.add(w)
             self._filter_values_cache['appearance'] = sorted(appear_vals)
             self._filter_values_cache['working'] = sorted(working_vals)
+            # Unique years
+            years = set()
+            for p in all_phones:
+                y = (p.get('release_date', '') or '').strip()
+                if y:
+                    years.add(y)
+            year_list = ['All Years'] + sorted(years)
+            try:
+                self.ids.year_spinner.values = year_list
+            except: pass
         except:
             self._filter_values_cache['appearance'] = []
             self._filter_values_cache['working'] = []
@@ -1789,8 +1711,14 @@ class MainScreen(Screen):
         """Called from KV when sort/filter/slider changes."""
         # Update year range label
         try:
-            ymin = int(self.ids.year_slider_min.value)
-            ymax = int(self.ids.year_slider_max.value)
+            year_sel = self.ids.year_spinner.text
+            ymin = 0
+            ymax = 9999
+            if year_sel != 'All Years':
+                try:
+                    ymin = int(year_sel)
+                    ymax = ymin
+                except: pass
             # Ensure min <= max
             if ymin > ymax:
                 # Swap them visually
@@ -1846,8 +1774,14 @@ class MainScreen(Screen):
 
         # Filter by year range sliders
         try:
-            ymin = int(self.ids.year_slider_min.value)
-            ymax = int(self.ids.year_slider_max.value)
+            year_sel = self.ids.year_spinner.text
+            ymin = 0
+            ymax = 9999
+            if year_sel != 'All Years':
+                try:
+                    ymin = int(year_sel)
+                    ymax = ymin
+                except: pass
             if ymin > ymax:
                 ymin, ymax = ymax, ymin
             if self.current_tab == "phones" and (ymin > 1998 or ymax < 2025):
@@ -2002,8 +1936,7 @@ class MainScreen(Screen):
             self.ids.filter_value_spinner.values = ["All"]
             self.ids.filter_field.text = "Filter: All"
             self.ids.sort_spinner.text = "Sort: Name"
-            self.ids.year_slider_min.value = 1998
-            self.ids.year_slider_max.value = 2025
+            self.ids.year_spinner.text = 'All Years'
             self.ids.year_range_label.text = '1998 - 2025'
         except: pass
         self.refresh_list()
