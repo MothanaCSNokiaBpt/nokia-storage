@@ -729,8 +729,8 @@ ScreenManager:
                     height: dp(62)
                     BoxLayout:
                         size_hint: None, None
-                        size: dp(290), dp(52)
-                        spacing: dp(10)
+                        size: dp(340), dp(52)
+                        spacing: dp(8)
                         Button:
                             size_hint: None, None
                             size: dp(48), dp(48)
@@ -752,6 +752,13 @@ ScreenManager:
                             background_down: 'assets/icons/eBay.png'
                             border: [0, 0, 0, 0]
                             on_press: root.ebay_search()
+                        Button:
+                            size_hint: None, None
+                            size: dp(48), dp(48)
+                            background_normal: 'assets/icons/Youtube.png'
+                            background_down: 'assets/icons/Youtube.png'
+                            border: [0, 0, 0, 0]
+                            on_press: root.youtube_search()
                         Button:
                             size_hint: None, None
                             size: dp(48), dp(48)
@@ -2409,6 +2416,11 @@ class PhoneDetailScreen(Screen):
         """Open eBay search for this phone model."""
         import webbrowser
         webbrowser.open(f"https://www.ebay.com/sch/i.html?_nkw=Nokia+{self.p_name}")
+
+    def youtube_search(self):
+        """Open YouTube search for this phone model."""
+        import webbrowser
+        webbrowser.open(f"https://www.youtube.com/results?search_query=Nokia+{self.p_name}")
 
     def show_summary(self):
         """Show a summary popup for all phones with the same name."""
