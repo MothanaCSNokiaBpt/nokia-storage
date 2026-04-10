@@ -411,32 +411,56 @@ ScreenManager:
             Button:
                 text: 'Home'
                 size_hint_x: None
-                width: dp(58)
-                font_size: sp(12)
+                width: dp(56)
+                font_size: sp(11)
                 bold: True
                 background_normal: ''
-                background_color: 0.15, 0.4, 0.85, 1
+                background_down: ''
+                background_color: 0, 0, 0, 0
                 color: 1, 1, 1, 1
+                canvas.before:
+                    Color:
+                        rgba: 0.15, 0.4, 0.85, 1
+                    RoundedRectangle:
+                        pos: self.pos
+                        size: self.size
+                        radius: [dp(14)]
                 on_press: root.refresh_home()
             Button:
                 text: 'Gallery'
                 size_hint_x: None
-                width: dp(58)
-                font_size: sp(12)
+                width: dp(56)
+                font_size: sp(11)
                 bold: True
                 background_normal: ''
-                background_color: 0.15, 0.4, 0.85, 1
+                background_down: ''
+                background_color: 0, 0, 0, 0
                 color: 1, 1, 1, 1
+                canvas.before:
+                    Color:
+                        rgba: 0.15, 0.4, 0.85, 1
+                    RoundedRectangle:
+                        pos: self.pos
+                        size: self.size
+                        radius: [dp(14)]
                 on_press: root.open_gallery()
             Button:
                 text: 'Menu'
                 size_hint_x: None
-                width: dp(58)
-                font_size: sp(12)
+                width: dp(56)
+                font_size: sp(11)
                 bold: True
                 background_normal: ''
-                background_color: 0.15, 0.4, 0.85, 1
+                background_down: ''
+                background_color: 0, 0, 0, 0
                 color: 1, 1, 1, 1
+                canvas.before:
+                    Color:
+                        rgba: 0.15, 0.4, 0.85, 1
+                    RoundedRectangle:
+                        pos: self.pos
+                        size: self.size
+                        radius: [dp(14)]
                 on_press: root.show_menu()
         SearchBar:
             id: search_bar
@@ -466,7 +490,7 @@ ScreenManager:
             Spinner:
                 id: filter_field
                 text: 'Filter: All'
-                values: ['Filter: All', 'Filter: Name', 'Filter: Year', 'Filter: Appearance', 'Filter: Working']
+                values: ['Filter: All', 'Filter: Appearance', 'Filter: Working']
                 size_hint_x: None
                 width: dp(120)
                 font_size: sp(12)
@@ -474,13 +498,59 @@ ScreenManager:
                 color: 1, 1, 1, 1
                 option_cls: 'BlueSpinnerOption'
                 on_text: root.on_filter_field_change()
-            TextInput:
-                id: filter_value
-                hint_text: 'type & Enter'
-                multiline: False
-                font_size: sp(12)
-                padding: dp(8), dp(7)
-                on_text_validate: root.apply_sort_filter()
+            Spinner:
+                id: filter_value_spinner
+                text: 'All'
+                values: ['All']
+                size_hint_x: None
+                width: dp(120)
+                font_size: sp(11)
+                background_color: 0.2, 0.2, 0.25, 1
+                color: 1, 1, 1, 1
+                option_cls: 'BlueSpinnerOption'
+                on_text: root.apply_sort_filter()
+        # Year slider row
+        BoxLayout:
+            size_hint_y: None
+            height: dp(34)
+            padding: dp(8), dp(2)
+            spacing: dp(4)
+            canvas.before:
+                Color:
+                    rgba: 0.92, 0.93, 0.96, 1
+                Rectangle:
+                    pos: self.pos
+                    size: self.size
+            Label:
+                text: 'Year:'
+                size_hint_x: None
+                width: dp(34)
+                font_size: sp(11)
+                color: 0.3, 0.3, 0.3, 1
+            Slider:
+                id: year_slider_min
+                min: 1998
+                max: 2025
+                value: 1998
+                step: 1
+                size_hint_x: 0.4
+                on_value: root.apply_sort_filter()
+            Label:
+                id: year_range_label
+                text: '1998 - 2025'
+                size_hint_x: None
+                width: dp(70)
+                font_size: sp(11)
+                color: 0.3, 0.3, 0.3, 1
+                halign: 'center'
+            Slider:
+                id: year_slider_max
+                min: 1998
+                max: 2025
+                value: 2025
+                step: 1
+                size_hint_x: 0.4
+                on_value: root.apply_sort_filter()
         # Tabs
         BoxLayout:
             size_hint_y: None
@@ -615,12 +685,11 @@ ScreenManager:
                 height: self.minimum_height
                 padding: dp(14)
                 spacing: dp(10)
-                # Phone Image - tap to view full size
-                ClickableBox:
+                # Phone Image - plain BoxLayout, no tap action
+                BoxLayout:
                     size_hint_y: None
                     height: dp(220)
                     padding: dp(16)
-                    on_release: root.view_main_image()
                     canvas.before:
                         Color:
                             rgba: 0.94, 0.96, 1, 1
@@ -642,43 +711,21 @@ ScreenManager:
                     background_color: 0, 0.314, 0.784, 1
                     color: 1, 1, 1, 1
                     on_press: root.add_image()
-                # Action buttons - centered row
+                # Action buttons - centered row with icons
                 AnchorLayout:
                     anchor_x: 'center'
                     size_hint_y: None
                     height: dp(70)
                     BoxLayout:
                         size_hint: None, None
-                        size: dp(270), dp(56)
-                        spacing: dp(12)
+                        size: dp(310), dp(56)
+                        spacing: dp(8)
                         Button:
-                            text: 'Edit'
                             size_hint: None, None
-                            size: dp(56), dp(56)
-                            font_size: sp(11)
-                            bold: True
+                            size: dp(52), dp(52)
                             background_normal: ''
                             background_down: ''
                             background_color: 0, 0, 0, 0
-                            color: 1, 1, 1, 1
-                            canvas.before:
-                                Color:
-                                    rgba: 0, 0.314, 0.784, 1
-                                RoundedRectangle:
-                                    pos: self.pos
-                                    size: self.size
-                                    radius: [100]
-                            on_press: root.edit_phone()
-                        Button:
-                            text: 'Info'
-                            size_hint: None, None
-                            size: dp(56), dp(56)
-                            font_size: sp(11)
-                            bold: True
-                            background_normal: ''
-                            background_down: ''
-                            background_color: 0, 0, 0, 0
-                            color: 1, 1, 1, 1
                             canvas.before:
                                 Color:
                                     rgba: 0.2, 0.6, 0.3, 1
@@ -687,16 +734,55 @@ ScreenManager:
                                     size: self.size
                                     radius: [100]
                             on_press: root.show_summary()
+                            Image:
+                                source: 'assets/icons/Info.png'
+                                size: dp(28), dp(28)
+                                size_hint: None, None
+                                pos_hint: {'center_x': .5, 'center_y': .5}
                         Button:
-                            text: 'Web'
                             size_hint: None, None
-                            size: dp(56), dp(56)
-                            font_size: sp(11)
-                            bold: True
+                            size: dp(52), dp(52)
                             background_normal: ''
                             background_down: ''
                             background_color: 0, 0, 0, 0
-                            color: 1, 1, 1, 1
+                            canvas.before:
+                                Color:
+                                    rgba: 0, 0.314, 0.784, 1
+                                RoundedRectangle:
+                                    pos: self.pos
+                                    size: self.size
+                                    radius: [100]
+                            on_press: root.google_search()
+                            Image:
+                                source: 'assets/icons/Web.png'
+                                size: dp(28), dp(28)
+                                size_hint: None, None
+                                pos_hint: {'center_x': .5, 'center_y': .5}
+                        Button:
+                            size_hint: None, None
+                            size: dp(52), dp(52)
+                            background_normal: ''
+                            background_down: ''
+                            background_color: 0, 0, 0, 0
+                            canvas.before:
+                                Color:
+                                    rgba: 0.9, 0.5, 0.1, 1
+                                RoundedRectangle:
+                                    pos: self.pos
+                                    size: self.size
+                                    radius: [100]
+                            on_press: root.ebay_search()
+                            Image:
+                                source: 'assets/icons/eBay.png'
+                                size: dp(28), dp(28)
+                                size_hint: None, None
+                                pos_hint: {'center_x': .5, 'center_y': .5}
+                        Button:
+                            size_hint: None, None
+                            size: dp(52), dp(52)
+                            background_normal: ''
+                            background_down: ''
+                            background_color: 0, 0, 0, 0
                             canvas.before:
                                 Color:
                                     rgba: 0.45, 0.25, 0.7, 1
@@ -704,17 +790,18 @@ ScreenManager:
                                     pos: self.pos
                                     size: self.size
                                     radius: [100]
-                            on_press: root.google_search()
+                            on_press: root.edit_phone()
+                            Image:
+                                source: 'assets/icons/Edit.png'
+                                size: dp(28), dp(28)
+                                size_hint: None, None
+                                pos_hint: {'center_x': .5, 'center_y': .5}
                         Button:
-                            text: 'Del'
                             size_hint: None, None
-                            size: dp(56), dp(56)
-                            font_size: sp(11)
-                            bold: True
+                            size: dp(52), dp(52)
                             background_normal: ''
                             background_down: ''
                             background_color: 0, 0, 0, 0
-                            color: 1, 1, 1, 1
                             canvas.before:
                                 Color:
                                     rgba: 0.8, 0.15, 0.15, 1
@@ -723,6 +810,11 @@ ScreenManager:
                                     size: self.size
                                     radius: [100]
                             on_press: root.confirm_delete()
+                            Image:
+                                source: 'assets/icons/Delete.png'
+                                size: dp(28), dp(28)
+                                size_hint: None, None
+                                pos_hint: {'center_x': .5, 'center_y': .5}
                 # Info Card
                 BoxLayout:
                     orientation: 'vertical'
@@ -908,11 +1000,11 @@ ScreenManager:
                 height: self.minimum_height
                 padding: dp(14)
                 spacing: dp(10)
-                ClickableBox:
+                # Spare Image - plain BoxLayout, no tap action
+                BoxLayout:
                     size_hint_y: None
                     height: dp(220)
                     padding: dp(16)
-                    on_release: root.view_main_image()
                     canvas.before:
                         Color:
                             rgba: 0.94, 0.96, 1, 1
@@ -1629,7 +1721,8 @@ class MainScreen(Screen):
     _is_search = False
     _data_loaded = False
     _sort_ascending = True
-    _last_sort_text = ""
+    _last_sort_field = ""
+    _filter_values_cache = {}  # Cache for unique filter values
 
     def on_enter(self):
         if not self._data_loaded:
@@ -1642,6 +1735,7 @@ class MainScreen(Screen):
         self._current_page = 0
         self._is_search = False
         self._data_loaded = False
+        self._filter_values_cache = {}
         try: self.ids.search_bar.ids.search_input.text = ""
         except: pass
         self.refresh_list()
@@ -1653,7 +1747,31 @@ class MainScreen(Screen):
         self._raw_items = app.db.get_all_phones() if self.current_tab == "phones" else app.db.get_all_spare_parts()
         self._is_search = False
         self._data_loaded = True
+        self._populate_filters()
         self._apply_sort_filter_internal()
+
+    def _populate_filters(self):
+        """Query DB for unique appearance and working values."""
+        app = App.get_running_app()
+        if not app.db:
+            return
+        try:
+            all_phones = self._raw_items if self.current_tab == "phones" else []
+            # Unique appearance values
+            appear_vals = set()
+            working_vals = set()
+            for p in all_phones:
+                a = (p.get('appearance_condition', '') or '').strip()
+                w = (p.get('working_condition', '') or '').strip()
+                if a:
+                    appear_vals.add(a)
+                if w:
+                    working_vals.add(w)
+            self._filter_values_cache['appearance'] = sorted(appear_vals)
+            self._filter_values_cache['working'] = sorted(working_vals)
+        except:
+            self._filter_values_cache['appearance'] = []
+            self._filter_values_cache['working'] = []
 
     def do_search(self, text):
         app = App.get_running_app()
@@ -1668,15 +1786,28 @@ class MainScreen(Screen):
         self._apply_sort_filter_internal()
 
     def apply_sort_filter(self, *a):
-        """Called from KV when sort/filter changes."""
+        """Called from KV when sort/filter/slider changes."""
+        # Update year range label
+        try:
+            ymin = int(self.ids.year_slider_min.value)
+            ymax = int(self.ids.year_slider_max.value)
+            # Ensure min <= max
+            if ymin > ymax:
+                # Swap them visually
+                pass
+            self.ids.year_range_label.text = f'{ymin} - {ymax}'
+        except:
+            pass
+
         # Toggle sort direction if same sort value selected again
         try:
             current_sort = self.ids.sort_spinner.text
-            if current_sort == self._last_sort_text:
+            sort_field = current_sort.replace('Sort: ', '')
+            if sort_field == self._last_sort_field:
                 self._sort_ascending = not self._sort_ascending
             else:
                 self._sort_ascending = True
-                self._last_sort_text = current_sort
+                self._last_sort_field = sort_field
         except:
             pass
         self._current_page = 0
@@ -1686,25 +1817,52 @@ class MainScreen(Screen):
         try:
             field = self.ids.filter_field.text.replace('Filter: ', '')
             if field == 'All':
-                self.ids.filter_value.text = ""
-                self.apply_sort_filter()
-            else:
-                hints = {'Name': 'e.g. 3310', 'Year': 'e.g. 2003', 'Appearance': 'e.g. Excellent', 'Working': 'e.g. Fully'}
-                self.ids.filter_value.hint_text = hints.get(field, 'type & Enter')
+                self.ids.filter_value_spinner.text = 'All'
+                self.ids.filter_value_spinner.values = ['All']
+            elif field == 'Appearance':
+                vals = self._filter_values_cache.get('appearance', [])
+                self.ids.filter_value_spinner.values = ['All'] + vals
+                self.ids.filter_value_spinner.text = 'All'
+            elif field == 'Working':
+                vals = self._filter_values_cache.get('working', [])
+                self.ids.filter_value_spinner.values = ['All'] + vals
+                self.ids.filter_value_spinner.text = 'All'
+            self.apply_sort_filter()
         except: pass
 
     def _apply_sort_filter_internal(self):
         items = list(self._raw_items)
 
-        # Filter
+        # Filter by field/value spinner
         try:
             field = self.ids.filter_field.text.replace('Filter: ', '')
-            val = self.ids.filter_value.text.strip().lower()
-            if field != 'All' and val and self.current_tab == "phones":
-                key_map = {'Name': 'name', 'Year': 'release_date', 'Appearance': 'appearance_condition', 'Working': 'working_condition'}
+            val = self.ids.filter_value_spinner.text.strip()
+            if field != 'All' and val and val != 'All' and self.current_tab == "phones":
+                key_map = {'Appearance': 'appearance_condition', 'Working': 'working_condition'}
                 key = key_map.get(field, '')
                 if key:
-                    items = [i for i in items if val in (i.get(key, '') or '').lower()]
+                    items = [i for i in items if val.lower() in (i.get(key, '') or '').lower()]
+        except: pass
+
+        # Filter by year range sliders
+        try:
+            ymin = int(self.ids.year_slider_min.value)
+            ymax = int(self.ids.year_slider_max.value)
+            if ymin > ymax:
+                ymin, ymax = ymax, ymin
+            if self.current_tab == "phones" and (ymin > 1998 or ymax < 2025):
+                def _extract_year(item):
+                    rd = item.get('release_date', '') or ''
+                    for part in rd.replace('-', ' ').replace('/', ' ').split():
+                        if len(part) == 4 and part.isdigit():
+                            return int(part)
+                    return None
+                filtered = []
+                for i in items:
+                    yr = _extract_year(i)
+                    if yr is None or (ymin <= yr <= ymax):
+                        filtered.append(i)
+                items = filtered
         except: pass
 
         # Sort
@@ -1837,12 +1995,16 @@ class MainScreen(Screen):
         self._data_loaded = False
         self._current_page = 0
         self._sort_ascending = True
-        self._last_sort_text = ""
+        self._last_sort_field = ""
         try:
             self.ids.search_bar.ids.search_input.text = ""
-            self.ids.filter_value.text = ""
+            self.ids.filter_value_spinner.text = "All"
+            self.ids.filter_value_spinner.values = ["All"]
             self.ids.filter_field.text = "Filter: All"
             self.ids.sort_spinner.text = "Sort: Name"
+            self.ids.year_slider_min.value = 1998
+            self.ids.year_slider_max.value = 2025
+            self.ids.year_range_label.text = '1998 - 2025'
         except: pass
         self.refresh_list()
 
@@ -1866,8 +2028,13 @@ class MainScreen(Screen):
                            ("Storage Report","report",(0.4,0.3,0.6,1)),
                            ("Photo Gallery","photo_gallery",(0.8,0.4,0.1,1))]:
             from kivy.uix.button import Button as KBtn
-            b = KBtn(text=t, size_hint_y=None, height=dp(44), font_size=sp(14),
-                background_color=clr, color=(1,1,1,1), bold=True)
+            b = KBtn(text=t, size_hint_y=None, height=dp(42), font_size=sp(13),
+                background_normal='', background_color=(0,0,0,0), color=(1,1,1,1), bold=True)
+            # Add rounded blue background via canvas
+            with b.canvas.before:
+                Color(0, 0.314, 0.784, 1)
+                b._bg = RoundedRectangle(pos=b.pos, size=b.size, radius=[dp(10)])
+            b.bind(pos=lambda w,v: setattr(w._bg,"pos",v), size=lambda w,v: setattr(w._bg,"size",v))
             b.bind(on_press=lambda *a, nm=n, p=popup: (p.dismiss(), self._nav(nm)))
             c.add_widget(b)
         popup.add_widget(c); popup.open()
@@ -1904,11 +2071,6 @@ class PhoneDetailScreen(Screen):
             self.ids.detail_img.source = src
             self.ids.detail_img.reload()
         except: pass
-
-    def view_main_image(self):
-        """Open main phone image in full screen."""
-        if self._current_img_path:
-            self._show_fullscreen(self._current_img_path)
 
     def _load_gallery(self):
         """Load gallery images from phone_gallery table with delete buttons."""
@@ -2036,6 +2198,11 @@ class PhoneDetailScreen(Screen):
         """Open Google search for this phone model."""
         import webbrowser
         webbrowser.open(f"https://www.google.com/search?q=Nokia+{self.p_name}")
+
+    def ebay_search(self):
+        """Open eBay search for this phone model."""
+        import webbrowser
+        webbrowser.open(f"https://www.ebay.com/sch/i.html?_nkw=Nokia+{self.p_name}")
 
     def show_summary(self):
         """Show a summary popup for all phones with the same name."""
@@ -2176,10 +2343,6 @@ class SpareDetailScreen(Screen):
             self.ids.detail_img.source = src
             self.ids.detail_img.reload()
         except: pass
-
-    def view_main_image(self):
-        if self._current_img_path:
-            self._show_fullscreen(self._current_img_path)
 
     def _show_fullscreen(self, img_path, *args):
         from kivy.uix.button import Button as KButton
