@@ -500,7 +500,7 @@ ScreenManager:
             Spinner:
                 id: filter_field
                 text: 'Filter: All'
-                values: ['Filter: All', 'Filter: Appearance', 'Filter: Working']
+                values: ['Filter: All', 'Filter: Appearance', 'Filter: Working', 'Filter: With Images', 'Filter: Without Images', 'Filter: Unique Models']
                 size_hint_x: None
                 width: dp(120)
                 font_size: sp(12)
@@ -850,6 +850,15 @@ ScreenManager:
                             text_size: self.size
                             halign: 'left'
                             valign: 'middle'
+                    Label:
+                        text: root.dup_count_text
+                        font_size: sp(12)
+                        bold: True
+                        color: 0, 0.314, 0.784, 1
+                        size_hint_y: None
+                        height: dp(22) if root.dup_count_text else dp(0)
+                        text_size: self.size
+                        halign: 'left'
                     Label:
                         text: root.no_fw_text
                         font_size: sp(13)
@@ -1396,6 +1405,7 @@ ScreenManager:
                     height: dp(42)
                     font_size: sp(14)
                     padding: dp(10), dp(9)
+                    on_text_validate: root.auto_fill_from_name()
                 TextInput:
                     id: input_date
                     hint_text: 'Release Date'
@@ -1404,17 +1414,39 @@ ScreenManager:
                     height: dp(42)
                     font_size: sp(14)
                     padding: dp(10), dp(9)
+                Spinner:
+                    id: input_appear_spinner
+                    text: 'Select Appearance'
+                    values: []
+                    size_hint_y: None
+                    height: dp(42)
+                    font_size: sp(13)
+                    background_color: 0, 0.314, 0.784, 1
+                    color: 1, 1, 1, 1
+                    option_cls: 'BlueSpinnerOption'
+                    on_text: root.on_appear_select(self.text)
                 TextInput:
                     id: input_appear
-                    hint_text: 'Appearance Condition'
+                    hint_text: 'Or type new appearance...'
                     multiline: False
                     size_hint_y: None
                     height: dp(42)
                     font_size: sp(14)
                     padding: dp(10), dp(9)
+                Spinner:
+                    id: input_working_spinner
+                    text: 'Select Working'
+                    values: []
+                    size_hint_y: None
+                    height: dp(42)
+                    font_size: sp(13)
+                    background_color: 0, 0.314, 0.784, 1
+                    color: 1, 1, 1, 1
+                    option_cls: 'BlueSpinnerOption'
+                    on_text: root.on_working_select(self.text)
                 TextInput:
                     id: input_working
-                    hint_text: 'Working Condition'
+                    hint_text: 'Or type new working condition...'
                     multiline: False
                     size_hint_y: None
                     height: dp(42)
@@ -1999,6 +2031,9 @@ class MainScreen(Screen):
                 vals = self._filter_values_cache.get('working', [])
                 self.ids.filter_value_spinner.values = ['All'] + vals
                 self.ids.filter_value_spinner.text = 'All'
+            elif field in ('With Images', 'Without Images', 'Unique Models'):
+                self.ids.filter_value_spinner.values = ['All']
+                self.ids.filter_value_spinner.text = 'All'
             self.apply_sort_filter()
         except: pass
 
@@ -2009,7 +2044,23 @@ class MainScreen(Screen):
         try:
             field = self.ids.filter_field.text.replace('Filter: ', '')
             val = self.ids.filter_value_spinner.text.strip()
-            if field != 'All' and val and val != 'All' and self.current_tab in ("phones", "wall"):
+
+            # Special filters (CHANGE 5)
+            if field == 'With Images':
+                items = [i for i in items if i.get('has_image')]
+            elif field == 'Without Images':
+                items = [i for i in items if not i.get('has_image')]
+            elif field == 'Unique Models':
+                # One per name, prefer FW
+                seen = {}
+                for i in items:
+                    n = (i.get('name', '') or '').strip()
+                    if n not in seen:
+                        seen[n] = i
+                    elif (i.get('working_condition', '') or '').strip() == 'FW' and (seen[n].get('working_condition', '') or '').strip() != 'FW':
+                        seen[n] = i
+                items = list(seen.values())
+            elif field != 'All' and val and val != 'All' and self.current_tab in ("phones", "wall"):
                 key_map = {'Appearance': 'appearance_condition', 'Working': 'working_condition'}
                 key = key_map.get(field, '')
                 if key:
@@ -2251,6 +2302,7 @@ class PhoneDetailScreen(Screen):
     p_id = StringProperty(""); p_name = StringProperty(""); p_date = StringProperty("")
     p_appear = StringProperty(""); p_working = StringProperty(""); p_remarks = StringProperty("")
     no_fw_text = StringProperty("")
+    dup_count_text = StringProperty("")
 
     def load_phone(self, pid):
         app = App.get_running_app()
@@ -2270,6 +2322,13 @@ class PhoneDetailScreen(Screen):
             self.no_fw_text = "" if fw_count > 0 else "!! No Fully Working Phone with this name !!"
         except:
             self.no_fw_text = ""
+        # CHANGE 4: Duplicate count
+        try:
+            cur = app.db.conn.execute("SELECT COUNT(*) FROM phones WHERE TRIM(name) = TRIM(?)", (p["name"],))
+            cnt = cur.fetchone()[0]
+            self.dup_count_text = f"{cnt} phone(s) with same name" if cnt > 1 else ""
+        except:
+            self.dup_count_text = ""
         img = get_img_path_for_phone(pid, app.db)
         Clock.schedule_once(lambda dt: self._set_img(img), 0.1)
         Clock.schedule_once(lambda dt: self._load_gallery(), 0.15)
@@ -2808,7 +2867,12 @@ class AddPhoneScreen(Screen):
             for fid in ["input_id","input_name","input_date","input_appear","input_working","input_remarks"]:
                 self.ids[fid].text = ""
             self.ids.preview_img.source = get_default_image_path(get_app_path())
+            # CHANGE 1: Reset readonly for new phone mode
+            self.ids.input_id.readonly = False
+            self.ids.input_id.background_color = (1, 1, 1, 1)
         except: pass
+        # CHANGE 3: Populate condition spinners
+        Clock.schedule_once(lambda dt: self._populate_condition_spinners(), 0.1)
 
     def load_for_edit(self, pid):
         app = App.get_running_app()
@@ -2837,7 +2901,48 @@ class AddPhoneScreen(Screen):
             self.ids.input_working.text = p.get("working_condition","") or ""
             r = p.get("remarks","") or ""; self.ids.input_remarks.text = "" if r in ("None","none") else r
             self.ids.preview_img.source = img_path or get_default_image_path(get_app_path())
+            # CHANGE 1: Make ID readonly in edit mode
+            self.ids.input_id.readonly = True
+            self.ids.input_id.background_color = (0.9, 0.9, 0.9, 1)
         except: pass
+        # CHANGE 3: Populate condition spinners after filling
+        Clock.schedule_once(lambda dt: self._populate_condition_spinners(), 0.1)
+
+    def auto_fill_from_name(self):
+        """CHANGE 2: Auto-fill release date from existing phone with same name."""
+        app = App.get_running_app()
+        name = self.ids.input_name.text.strip()
+        if not name or self.edit_mode:
+            return
+        try:
+            cur = app.db.conn.execute(
+                "SELECT release_date FROM phones WHERE TRIM(name) = TRIM(?) LIMIT 1", (name,))
+            row = cur.fetchone()
+            if row and row[0]:
+                self.ids.input_date.text = str(row[0])
+        except: pass
+
+    def _populate_condition_spinners(self):
+        """CHANGE 3: Populate appearance and working condition spinners from DB."""
+        app = App.get_running_app()
+        try:
+            cur = app.db.conn.execute("SELECT DISTINCT TRIM(appearance_condition) FROM phones WHERE appearance_condition != '' ORDER BY appearance_condition")
+            appears = [r[0] for r in cur.fetchall() if r[0]]
+            self.ids.input_appear_spinner.values = appears + ['Other...']
+        except: pass
+        try:
+            cur = app.db.conn.execute("SELECT DISTINCT TRIM(working_condition) FROM phones WHERE working_condition != '' ORDER BY working_condition")
+            works = [r[0] for r in cur.fetchall() if r[0]]
+            self.ids.input_working_spinner.values = works + ['Other...']
+        except: pass
+
+    def on_appear_select(self, text):
+        if text and text != 'Select Appearance' and text != 'Other...':
+            self.ids.input_appear.text = text
+
+    def on_working_select(self, text):
+        if text and text != 'Select Working' and text != 'Other...':
+            self.ids.input_working.text = text
 
     def pick_from_gallery(self):
         app = App.get_running_app()
@@ -2868,6 +2973,12 @@ class AddPhoneScreen(Screen):
         except: return
         if not pid or not name:
             app.show_toast("ID and Name required"); return
+        # CHANGE 1: Duplicate ID check
+        if not self.edit_mode:
+            existing = app.db.get_phone(pid)
+            if existing:
+                app.show_toast("ID already exists! Change the ID.")
+                return
         if self._save_to_wall:
             app.db.add_wall_item(item_id=pid, name=name,
                 release_date=self.ids.input_date.text.strip(),
@@ -3258,6 +3369,60 @@ class ReportScreen(Screen):
     def on_enter(self):
         Clock.schedule_once(lambda dt: self._load(), 0.2)
 
+    def _nav_filter(self, filter_name):
+        """CHANGE 6: Navigate to main with a specific filter applied."""
+        app = App.get_running_app()
+        main = app.root.get_screen("main")
+        main.current_tab = "phones"
+        main._data_loaded = False
+        try:
+            main.ids.filter_field.text = f"Filter: {filter_name}"
+            main.ids.filter_value_spinner.text = "All"
+        except: pass
+        app.root.transition = SlideTransition(direction="right")
+        app.root.current = "main"
+
+    def _nav_working_filter(self, value):
+        """CHANGE 7: Navigate to main with working condition filter."""
+        app = App.get_running_app()
+        main = app.root.get_screen("main")
+        main.current_tab = "phones"
+        main._data_loaded = False
+        try:
+            main.ids.filter_field.text = "Filter: Working"
+            main.ids.filter_value_spinner.text = value
+            main.ids.filter_value_spinner.values = ['All', value]
+        except: pass
+        app.root.transition = SlideTransition(direction="right")
+        app.root.current = "main"
+
+    def _nav_appear_filter(self, value):
+        """CHANGE 7: Navigate to main with appearance filter."""
+        app = App.get_running_app()
+        main = app.root.get_screen("main")
+        main.current_tab = "phones"
+        main._data_loaded = False
+        try:
+            main.ids.filter_field.text = "Filter: Appearance"
+            main.ids.filter_value_spinner.text = value
+            main.ids.filter_value_spinner.values = ['All', value]
+        except: pass
+        app.root.transition = SlideTransition(direction="right")
+        app.root.current = "main"
+
+    def _nav_search(self, name):
+        """CHANGE 7: Navigate to main and search for a model name."""
+        app = App.get_running_app()
+        main = app.root.get_screen("main")
+        main.current_tab = "phones"
+        main._data_loaded = False
+        try:
+            main.ids.search_bar.ids.search_input.text = name
+        except: pass
+        main.do_search(name)
+        app.root.transition = SlideTransition(direction="right")
+        app.root.current = "main"
+
     def _load(self):
         app = App.get_running_app()
         g = self.ids.report_grid; g.clear_widgets()
@@ -3292,8 +3457,23 @@ class ReportScreen(Screen):
                     break
         year_range = f"{min(years)} - {max(years)}" if years else "N/A"
 
-        # Helper to create a colored stat card - vertical layout, no overlap
-        def stat_card(title, value, bg_color):
+        # CHANGE 6: Helper to create a clickable colored stat card
+        def stat_card(title, value, bg_color, on_tap=None):
+            card = ClickableBox(orientation="vertical", size_hint_y=None, height=dp(70), padding=dp(10))
+            with card.canvas.before:
+                Color(*bg_color)
+                card._bg = RoundedRectangle(pos=card.pos, size=card.size, radius=[dp(10)])
+            card.bind(pos=lambda w,v: setattr(w._bg,"pos",v), size=lambda w,v: setattr(w._bg,"size",v))
+            num_label = Label(text=str(value), font_size=sp(24), bold=True, color=(1,1,1,1), size_hint_y=0.6)
+            desc_label = Label(text=title, font_size=sp(12), color=(1,1,1,0.8), size_hint_y=0.4)
+            card.add_widget(num_label)
+            card.add_widget(desc_label)
+            if on_tap:
+                card.bind(on_release=lambda *a: on_tap())
+            return card
+
+        # Non-clickable stat card (for spare parts, wall, year range)
+        def stat_card_plain(title, value, bg_color):
             card = BoxLayout(orientation="vertical", size_hint_y=None, height=dp(70), padding=dp(10))
             with card.canvas.before:
                 Color(*bg_color)
@@ -3309,15 +3489,19 @@ class ReportScreen(Screen):
             g.add_widget(Label(text=t, font_size=sp(16), bold=True, color=(0,0.314,0.784,1),
                 size_hint_y=None, height=dp(30), text_size=(dp(300),None), halign="left"))
 
-        # Key stat cards - single column (full width each)
+        # Key stat cards - CHANGE 6: clickable stat cards
         sec("Overview")
-        g.add_widget(stat_card("Total Phones", total_phones, (0, 0.314, 0.784, 1)))
-        g.add_widget(stat_card("With Images", with_images, (0.26, 0.63, 0.28, 1)))
-        g.add_widget(stat_card("Without Images", without_images, (0.85, 0.4, 0.1, 1)))
-        g.add_widget(stat_card("Unique Models", unique_models, (0.4, 0.3, 0.6, 1)))
-        g.add_widget(stat_card("Spare Parts", total_spares, (0.2, 0.2, 0.25, 1)))
-        g.add_widget(stat_card("Wall Items", total_wall, (0.5, 0.3, 0.15, 1)))
-        g.add_widget(stat_card("Year Range", year_range, (0.6, 0.2, 0.4, 1)))
+        g.add_widget(stat_card("Total Phones", total_phones, (0, 0.314, 0.784, 1),
+            on_tap=lambda: self._nav_filter("All")))
+        g.add_widget(stat_card("With Images", with_images, (0.26, 0.63, 0.28, 1),
+            on_tap=lambda: self._nav_filter("With Images")))
+        g.add_widget(stat_card("Without Images", without_images, (0.85, 0.4, 0.1, 1),
+            on_tap=lambda: self._nav_filter("Without Images")))
+        g.add_widget(stat_card("Unique Models", unique_models, (0.4, 0.3, 0.6, 1),
+            on_tap=lambda: self._nav_filter("Unique Models")))
+        g.add_widget(stat_card_plain("Spare Parts", total_spares, (0.2, 0.2, 0.25, 1)))
+        g.add_widget(stat_card_plain("Wall Items", total_wall, (0.5, 0.3, 0.15, 1)))
+        g.add_widget(stat_card_plain("Year Range", year_range, (0.6, 0.2, 0.4, 1)))
 
         # Most common model card
         mc_card = BoxLayout(orientation="vertical", size_hint_y=None, height=dp(70), padding=dp(10))
@@ -3329,12 +3513,12 @@ class ReportScreen(Screen):
         mc_card.add_widget(Label(text="Most Common Model", font_size=sp(12), color=(1,1,1,0.8), size_hint_y=0.4))
         g.add_widget(mc_card)
 
-        # Condition breakdown with percentages
-        def condition_section(title, data, color_base):
+        # CHANGE 7: Condition breakdown with clickable rows
+        def condition_section(title, data, color_base, nav_func):
             sec(title)
             for n, c in data:
                 pct = (c / total_phones * 100) if total_phones > 0 else 0
-                row = BoxLayout(size_hint_y=None, height=dp(28), padding=(dp(8),dp(2)), spacing=dp(4))
+                row = ClickableBox(size_hint_y=None, height=dp(28), padding=(dp(8),dp(2)), spacing=dp(4))
                 with row.canvas.before:
                     Color(*color_base, 0.1)
                     row._bg = RoundedRectangle(pos=row.pos, size=row.size, radius=[dp(5)])
@@ -3345,10 +3529,12 @@ class ReportScreen(Screen):
                     size_hint_x=None, width=dp(36), halign="right", text_size=(dp(36),None)))
                 row.add_widget(Label(text=f"({pct:.1f}%)", font_size=sp(11), color=(0.4,0.4,0.4,1),
                     size_hint_x=None, width=dp(56), halign="right", text_size=(dp(56),None)))
+                val_name = str(n or "Unknown")
+                row.bind(on_release=lambda *a, v=val_name: nav_func(v))
                 g.add_widget(row)
 
-        condition_section("By Working Condition", r.get("by_working",[]), (0, 0.314, 0.784))
-        condition_section("By Appearance", r.get("by_appearance",[]), (0.26, 0.63, 0.28))
+        condition_section("By Working Condition", r.get("by_working",[]), (0, 0.314, 0.784), self._nav_working_filter)
+        condition_section("By Appearance", r.get("by_appearance",[]), (0.26, 0.63, 0.28), self._nav_appear_filter)
 
         # Spare parts breakdown by name (top 10)
         try:
@@ -3370,14 +3556,17 @@ class ReportScreen(Screen):
         except:
             pass
 
+        # CHANGE 7: Top 20 Models - clickable rows
         sec("Top 20 Models")
         for n, c in r.get("by_model",[]):
-            row = BoxLayout(size_hint_y=None, height=dp(24), padding=(dp(8),dp(1)))
+            row = ClickableBox(size_hint_y=None, height=dp(24), padding=(dp(8),dp(1)))
             row.add_widget(Label(text=str(n), font_size=sp(12), color=(0.3,0.3,0.3,1), text_size=(dp(220),None), halign="left"))
             row.add_widget(Label(text=str(c), font_size=sp(12), bold=True, color=(0.1,0.1,0.18,1), size_hint_x=None, width=dp(50), halign="right", text_size=(dp(50),None)))
+            model_name = str(n)
+            row.bind(on_release=lambda *a, mn=model_name: self._nav_search(mn))
             g.add_widget(row)
 
-        # No FW Phone section - models with no Fully Working phone
+        # CHANGE 7: No FW Phone section - clickable rows
         try:
             cur = app.db.conn.execute("""
                 SELECT DISTINCT TRIM(name) as tname FROM phones
@@ -3399,7 +3588,7 @@ class ReportScreen(Screen):
                     cur2 = app.db.conn.execute(
                         "SELECT COUNT(*) FROM phones WHERE name = ?", (name,))
                     cnt = cur2.fetchone()[0]
-                    row = BoxLayout(size_hint_y=None, height=dp(26), padding=(dp(8),dp(1)))
+                    row = ClickableBox(size_hint_y=None, height=dp(26), padding=(dp(8),dp(1)))
                     with row.canvas.before:
                         Color(1, 0.93, 0.93, 1)
                         row._bg = RoundedRectangle(pos=row.pos, size=row.size, radius=[dp(4)])
@@ -3408,6 +3597,8 @@ class ReportScreen(Screen):
                         bold=True, text_size=(dp(220),None), halign="left"))
                     row.add_widget(Label(text=f"({cnt})", font_size=sp(12), color=(0.5,0.1,0.1,1),
                         size_hint_x=None, width=dp(40), halign="right", text_size=(dp(40),None)))
+                    nofw_name = str(name)
+                    row.bind(on_release=lambda *a, mn=nofw_name: self._nav_search(mn))
                     g.add_widget(row)
         except:
             pass
