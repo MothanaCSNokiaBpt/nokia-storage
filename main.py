@@ -844,6 +844,15 @@ ScreenManager:
                             halign: 'left'
                             valign: 'middle'
                     Label:
+                        text: root.no_fw_text
+                        font_size: sp(13)
+                        bold: True
+                        color: 0.85, 0.1, 0.1, 1
+                        size_hint_y: None
+                        height: dp(26) if root.no_fw_text else dp(0)
+                        text_size: self.size
+                        halign: 'left'
+                    Label:
                         text: 'Remarks:'
                         font_size: sp(12)
                         bold: True
@@ -2234,6 +2243,7 @@ class MainScreen(Screen):
 class PhoneDetailScreen(Screen):
     p_id = StringProperty(""); p_name = StringProperty(""); p_date = StringProperty("")
     p_appear = StringProperty(""); p_working = StringProperty(""); p_remarks = StringProperty("")
+    no_fw_text = StringProperty("")
 
     def load_phone(self, pid):
         app = App.get_running_app()
@@ -2244,6 +2254,15 @@ class PhoneDetailScreen(Screen):
         self.p_appear = p.get("appearance_condition","") or ""
         self.p_working = p.get("working_condition","") or ""
         r = p.get("remarks","") or ""; self.p_remarks = "" if r in ("None","none") else r
+        # Check if any phone with same name is Fully Working
+        try:
+            cur = app.db.conn.execute(
+                "SELECT COUNT(*) FROM phones WHERE name = ? AND working_condition LIKE '%Fully Working%'",
+                (p["name"],))
+            fw_count = cur.fetchone()[0]
+            self.no_fw_text = "" if fw_count > 0 else "!! No Fully Working Phone with this name !!"
+        except:
+            self.no_fw_text = ""
         img = get_img_path_for_phone(pid, app.db)
         Clock.schedule_once(lambda dt: self._set_img(img), 0.1)
         Clock.schedule_once(lambda dt: self._load_gallery(), 0.15)
@@ -3345,6 +3364,41 @@ class ReportScreen(Screen):
             row.add_widget(Label(text=str(n), font_size=sp(12), color=(0.3,0.3,0.3,1), text_size=(dp(220),None), halign="left"))
             row.add_widget(Label(text=str(c), font_size=sp(12), bold=True, color=(0.1,0.1,0.18,1), size_hint_x=None, width=dp(50), halign="right", text_size=(dp(50),None)))
             g.add_widget(row)
+
+        # No FW Phone section - models with no Fully Working phone
+        try:
+            cur = app.db.conn.execute("""
+                SELECT DISTINCT name FROM phones
+                WHERE name NOT IN (
+                    SELECT DISTINCT name FROM phones
+                    WHERE working_condition LIKE '%Fully Working%'
+                )
+                ORDER BY name
+            """)
+            no_fw = [r[0] for r in cur.fetchall() if r[0]]
+            if no_fw:
+                sec("No Fully Working Phone")
+                g.add_widget(Label(
+                    text=f"{len(no_fw)} models with no FW unit",
+                    font_size=sp(13), bold=True, color=(0.85,0.1,0.1,1),
+                    size_hint_y=None, height=dp(24), text_size=(dp(300),None), halign="left"))
+                for name in no_fw:
+                    # Count total of this model
+                    cur2 = app.db.conn.execute(
+                        "SELECT COUNT(*) FROM phones WHERE name = ?", (name,))
+                    cnt = cur2.fetchone()[0]
+                    row = BoxLayout(size_hint_y=None, height=dp(26), padding=(dp(8),dp(1)))
+                    with row.canvas.before:
+                        Color(1, 0.93, 0.93, 1)
+                        row._bg = RoundedRectangle(pos=row.pos, size=row.size, radius=[dp(4)])
+                    row.bind(pos=lambda w,v: setattr(w._bg,"pos",v), size=lambda w,v: setattr(w._bg,"size",v))
+                    row.add_widget(Label(text=str(name), font_size=sp(12), color=(0.7,0.1,0.1,1),
+                        bold=True, text_size=(dp(220),None), halign="left"))
+                    row.add_widget(Label(text=f"({cnt})", font_size=sp(12), color=(0.5,0.1,0.1,1),
+                        size_hint_x=None, width=dp(40), halign="right", text_size=(dp(40),None)))
+                    g.add_widget(row)
+        except:
+            pass
 
         g.add_widget(Widget(size_hint_y=None, height=dp(30)))
 
