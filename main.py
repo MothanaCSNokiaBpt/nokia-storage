@@ -722,7 +722,7 @@ ScreenManager:
                     background_color: 0, 0.314, 0.784, 1
                     color: 1, 1, 1, 1
                     on_press: root.add_image()
-                # Action buttons - icon images as buttons
+                # Action icon buttons
                 AnchorLayout:
                     anchor_x: 'center'
                     size_hint_y: None
@@ -731,46 +731,41 @@ ScreenManager:
                         size_hint: None, None
                         size: dp(290), dp(52)
                         spacing: dp(10)
-                        ClickableBox:
+                        Button:
                             size_hint: None, None
                             size: dp(48), dp(48)
-                            on_release: root.show_summary()
-                            Image:
-                                source: 'assets/icons/Info.png'
-                                allow_stretch: True
-                                keep_ratio: True
-                        ClickableBox:
+                            background_normal: 'assets/icons/Info.png'
+                            background_down: 'assets/icons/Info.png'
+                            border: [0, 0, 0, 0]
+                            on_press: root.show_summary()
+                        Button:
                             size_hint: None, None
                             size: dp(48), dp(48)
-                            on_release: root.google_search()
-                            Image:
-                                source: 'assets/icons/Web.png'
-                                allow_stretch: True
-                                keep_ratio: True
-                        ClickableBox:
+                            background_normal: 'assets/icons/Web.png'
+                            background_down: 'assets/icons/Web.png'
+                            border: [0, 0, 0, 0]
+                            on_press: root.google_search()
+                        Button:
                             size_hint: None, None
                             size: dp(48), dp(48)
-                            on_release: root.ebay_search()
-                            Image:
-                                source: 'assets/icons/eBay.png'
-                                allow_stretch: True
-                                keep_ratio: True
-                        ClickableBox:
+                            background_normal: 'assets/icons/eBay.png'
+                            background_down: 'assets/icons/eBay.png'
+                            border: [0, 0, 0, 0]
+                            on_press: root.ebay_search()
+                        Button:
                             size_hint: None, None
                             size: dp(48), dp(48)
-                            on_release: root.edit_phone()
-                            Image:
-                                source: 'assets/icons/Edit.png'
-                                allow_stretch: True
-                                keep_ratio: True
-                        ClickableBox:
+                            background_normal: 'assets/icons/Edit.png'
+                            background_down: 'assets/icons/Edit.png'
+                            border: [0, 0, 0, 0]
+                            on_press: root.edit_phone()
+                        Button:
                             size_hint: None, None
                             size: dp(48), dp(48)
-                            on_release: root.confirm_delete()
-                            Image:
-                                source: 'assets/icons/Delete.png'
-                                allow_stretch: True
-                                keep_ratio: True
+                            background_normal: 'assets/icons/Delete.png'
+                            background_down: 'assets/icons/Delete.png'
+                            border: [0, 0, 0, 0]
+                            on_press: root.confirm_delete()
                 # Info Card
                 BoxLayout:
                     orientation: 'vertical'
@@ -991,22 +986,20 @@ ScreenManager:
                         size_hint: None, None
                         size: dp(116), dp(52)
                         spacing: dp(10)
-                        ClickableBox:
+                        Button:
                             size_hint: None, None
                             size: dp(48), dp(48)
-                            on_release: root.edit_spare()
-                            Image:
-                                source: 'assets/icons/Edit.png'
-                                allow_stretch: True
-                                keep_ratio: True
-                        ClickableBox:
+                            background_normal: 'assets/icons/Edit.png'
+                            background_down: 'assets/icons/Edit.png'
+                            border: [0, 0, 0, 0]
+                            on_press: root.edit_spare()
+                        Button:
                             size_hint: None, None
                             size: dp(48), dp(48)
-                            on_release: root.confirm_delete()
-                            Image:
-                                source: 'assets/icons/Delete.png'
-                                allow_stretch: True
-                                keep_ratio: True
+                            background_normal: 'assets/icons/Delete.png'
+                            background_down: 'assets/icons/Delete.png'
+                            border: [0, 0, 0, 0]
+                            on_press: root.confirm_delete()
                 BoxLayout:
                     orientation: 'vertical'
                     size_hint_y: None
@@ -1155,22 +1148,20 @@ ScreenManager:
                         size_hint: None, None
                         size: dp(116), dp(52)
                         spacing: dp(10)
-                        ClickableBox:
+                        Button:
                             size_hint: None, None
                             size: dp(48), dp(48)
-                            on_release: root.edit_wall()
-                            Image:
-                                source: 'assets/icons/Edit.png'
-                                allow_stretch: True
-                                keep_ratio: True
-                        ClickableBox:
+                            background_normal: 'assets/icons/Edit.png'
+                            background_down: 'assets/icons/Edit.png'
+                            border: [0, 0, 0, 0]
+                            on_press: root.edit_wall()
+                        Button:
                             size_hint: None, None
                             size: dp(48), dp(48)
-                            on_release: root.confirm_delete()
-                            Image:
-                                source: 'assets/icons/Delete.png'
-                                allow_stretch: True
-                                keep_ratio: True
+                            background_normal: 'assets/icons/Delete.png'
+                            background_down: 'assets/icons/Delete.png'
+                            border: [0, 0, 0, 0]
+                            on_press: root.confirm_delete()
                 # Info Card
                 BoxLayout:
                     orientation: 'vertical'
