@@ -2257,7 +2257,7 @@ class PhoneDetailScreen(Screen):
         # Check if any phone with same name is Fully Working
         try:
             cur = app.db.conn.execute(
-                "SELECT COUNT(*) FROM phones WHERE name = ? AND working_condition LIKE '%Fully Working%'",
+                "SELECT COUNT(*) FROM phones WHERE name = ? AND working_condition LIKE '%FW%'",
                 (p["name"],))
             fw_count = cur.fetchone()[0]
             self.no_fw_text = "" if fw_count > 0 else "!! No Fully Working Phone with this name !!"
@@ -3371,7 +3371,7 @@ class ReportScreen(Screen):
                 SELECT DISTINCT name FROM phones
                 WHERE name NOT IN (
                     SELECT DISTINCT name FROM phones
-                    WHERE working_condition LIKE '%Fully Working%'
+                    WHERE working_condition LIKE '%FW%'
                 )
                 ORDER BY name
             """)
