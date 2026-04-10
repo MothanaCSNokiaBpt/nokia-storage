@@ -111,6 +111,14 @@ def get_img_path_for_spare(spare_id, db):
         return write_blob_to_file(img_data, f"s_{spare_id}", app_path)
     return get_default_image_path(app_path)
 
+def get_img_path_for_wall(wall_id, db):
+    """Get displayable image file path for a wall item."""
+    app_path = get_app_path()
+    img_data = db.get_wall_image(wall_id)
+    if img_data:
+        return write_blob_to_file(img_data, f"w_{wall_id}", app_path)
+    return get_default_image_path(app_path)
+
 
 # -- XLSX Creator (pure Python, no openpyxl) -----------------------
 def create_xlsx(sheets_data, filepath):
@@ -352,6 +360,8 @@ ScreenManager:
         name: 'phone_detail'
     SpareDetailScreen:
         name: 'spare_detail'
+    WallDetailScreen:
+        name: 'wall_detail'
     AddPhoneScreen:
         name: 'add_phone'
     AddSpareScreen:
@@ -570,6 +580,20 @@ ScreenManager:
                     bold: True
                     font_size: sp(13)
                     color: (1,1,1,1) if root.current_tab == 'spares' else (0.3,0.3,0.3,1)
+            ClickableBox:
+                padding: dp(6)
+                on_release: root.switch_tab('wall')
+                canvas.before:
+                    Color:
+                        rgba: (0, 0.314, 0.784, 1) if root.current_tab == 'wall' else (0.92, 0.92, 0.92, 1)
+                    Rectangle:
+                        pos: self.pos
+                        size: self.size
+                Label:
+                    text: 'Wall'
+                    bold: True
+                    font_size: sp(13)
+                    color: (1,1,1,1) if root.current_tab == 'wall' else (0.3,0.3,0.3,1)
         ScrollView:
             id: scroll_view
             do_scroll_x: False
@@ -1050,6 +1074,209 @@ ScreenManager:
                     halign: 'left'
                 GridLayout:
                     id: spare_gallery_grid
+                    cols: 1
+                    spacing: dp(6)
+                    size_hint_y: None
+                    height: self.minimum_height
+                Widget:
+                    size_hint_y: None
+                    height: dp(30)
+
+<WallDetailScreen>:
+    BoxLayout:
+        orientation: 'vertical'
+        BoxLayout:
+            size_hint_y: None
+            height: dp(52)
+            padding: dp(6)
+            spacing: dp(6)
+            canvas.before:
+                Color:
+                    rgba: 0, 0.314, 0.784, 1
+                Rectangle:
+                    pos: self.pos
+                    size: self.size
+            ClickableLabel:
+                size_hint_x: None
+                width: dp(36)
+                text: '<'
+                font_size: sp(22)
+                bold: True
+                color: 1, 1, 1, 1
+                on_release: root.go_back()
+            Label:
+                text: 'Wall Item'
+                font_size: sp(17)
+                bold: True
+                color: 1, 1, 1, 1
+                text_size: self.size
+                halign: 'left'
+                valign: 'middle'
+        ScrollView:
+            do_scroll_x: False
+            BoxLayout:
+                orientation: 'vertical'
+                size_hint_y: None
+                height: self.minimum_height
+                padding: dp(14)
+                spacing: dp(10)
+                # Wall Image
+                BoxLayout:
+                    size_hint_y: None
+                    height: dp(220)
+                    padding: dp(16)
+                    canvas.before:
+                        Color:
+                            rgba: 0.94, 0.96, 1, 1
+                        RoundedRectangle:
+                            pos: self.pos
+                            size: self.size
+                            radius: [dp(14)]
+                    Image:
+                        id: detail_img
+                        nocache: True
+                        allow_stretch: True
+                        keep_ratio: True
+                Button:
+                    text: 'Add More Images'
+                    size_hint_y: None
+                    height: dp(40)
+                    font_size: sp(13)
+                    bold: True
+                    background_color: 0, 0.314, 0.784, 1
+                    color: 1, 1, 1, 1
+                    on_press: root.add_image()
+                # Action buttons - centered icons
+                AnchorLayout:
+                    anchor_x: 'center'
+                    size_hint_y: None
+                    height: dp(62)
+                    BoxLayout:
+                        size_hint: None, None
+                        size: dp(116), dp(52)
+                        spacing: dp(10)
+                        ClickableBox:
+                            size_hint: None, None
+                            size: dp(48), dp(48)
+                            on_release: root.edit_wall()
+                            Image:
+                                source: 'assets/icons/Edit.png'
+                                allow_stretch: True
+                                keep_ratio: True
+                        ClickableBox:
+                            size_hint: None, None
+                            size: dp(48), dp(48)
+                            on_release: root.confirm_delete()
+                            Image:
+                                source: 'assets/icons/Delete.png'
+                                allow_stretch: True
+                                keep_ratio: True
+                # Info Card
+                BoxLayout:
+                    orientation: 'vertical'
+                    size_hint_y: None
+                    height: self.minimum_height
+                    padding: dp(14)
+                    spacing: dp(8)
+                    canvas.before:
+                        Color:
+                            rgba: 1, 1, 1, 1
+                        RoundedRectangle:
+                            pos: self.pos
+                            size: self.size
+                            radius: [dp(10)]
+                    Label:
+                        text: root.w_name
+                        font_size: sp(20)
+                        bold: True
+                        color: 0.1, 0.1, 0.18, 1
+                        size_hint_y: None
+                        height: dp(28)
+                        text_size: self.size
+                        halign: 'left'
+                    Label:
+                        text: 'ID: ' + root.w_id
+                        font_size: sp(13)
+                        color: 0.4, 0.4, 0.4, 1
+                        size_hint_y: None
+                        height: dp(20)
+                        text_size: self.size
+                        halign: 'left'
+                    Label:
+                        text: 'Release: ' + root.w_date
+                        font_size: sp(13)
+                        color: 0.4, 0.4, 0.4, 1
+                        size_hint_y: None
+                        height: dp(20)
+                        text_size: self.size
+                        halign: 'left'
+                    BoxLayout:
+                        size_hint_y: None
+                        height: dp(28)
+                        padding: dp(8), dp(4)
+                        canvas.before:
+                            Color:
+                                rgba: 0.26, 0.63, 0.28, 0.12
+                            RoundedRectangle:
+                                pos: self.pos
+                                size: self.size
+                                radius: [dp(5)]
+                        Label:
+                            text: 'Appearance: ' + root.w_appear
+                            font_size: sp(12)
+                            color: 0.2, 0.5, 0.22, 1
+                            bold: True
+                            text_size: self.size
+                            halign: 'left'
+                            valign: 'middle'
+                    BoxLayout:
+                        size_hint_y: None
+                        height: dp(28)
+                        padding: dp(8), dp(4)
+                        canvas.before:
+                            Color:
+                                rgba: 0, 0.314, 0.784, 0.12
+                            RoundedRectangle:
+                                pos: self.pos
+                                size: self.size
+                                radius: [dp(5)]
+                        Label:
+                            text: 'Working: ' + root.w_working
+                            font_size: sp(12)
+                            color: 0, 0.28, 0.7, 1
+                            bold: True
+                            text_size: self.size
+                            halign: 'left'
+                            valign: 'middle'
+                    Label:
+                        text: 'Remarks:'
+                        font_size: sp(12)
+                        bold: True
+                        color: 0.3, 0.3, 0.3, 1
+                        size_hint_y: None
+                        height: dp(18)
+                        text_size: self.size
+                        halign: 'left'
+                    Label:
+                        text: root.w_remarks or '-'
+                        font_size: sp(12)
+                        color: 0.4, 0.4, 0.4, 1
+                        size_hint_y: None
+                        height: self.texture_size[1] + dp(6)
+                        text_size: self.width, None
+                        halign: 'left'
+                # Linked Phones
+                Label:
+                    text: 'Linked Phones'
+                    font_size: sp(15)
+                    bold: True
+                    color: 0.1, 0.1, 0.18, 1
+                    size_hint_y: None
+                    height: dp(26)
+                    text_size: self.size
+                    halign: 'left'
+                GridLayout:
+                    id: linked_phones_grid
                     cols: 1
                     spacing: dp(6)
                     size_hint_y: None
@@ -1656,7 +1883,12 @@ class MainScreen(Screen):
         app = App.get_running_app()
         if not app.db: return
         self._current_page = 0
-        self._raw_items = app.db.get_all_phones() if self.current_tab == "phones" else app.db.get_all_spare_parts()
+        if self.current_tab == "phones":
+            self._raw_items = app.db.get_all_phones()
+        elif self.current_tab == "spares":
+            self._raw_items = app.db.get_all_spare_parts()
+        elif self.current_tab == "wall":
+            self._raw_items = app.db.get_all_wall_items()
         self._is_search = False
         self._data_loaded = True
         self._populate_filters()
@@ -1668,11 +1900,11 @@ class MainScreen(Screen):
         if not app.db:
             return
         try:
-            all_phones = self._raw_items if self.current_tab == "phones" else []
+            all_items = self._raw_items if self.current_tab in ("phones", "wall") else []
             # Unique appearance values
             appear_vals = set()
             working_vals = set()
-            for p in all_phones:
+            for p in all_items:
                 a = (p.get('appearance_condition', '') or '').strip()
                 w = (p.get('working_condition', '') or '').strip()
                 if a:
@@ -1683,7 +1915,7 @@ class MainScreen(Screen):
             self._filter_values_cache['working'] = sorted(working_vals)
             # Unique years
             years = set()
-            for p in all_phones:
+            for p in all_items:
                 y = (p.get('release_date', '') or '').strip()
                 if y:
                     years.add(y)
@@ -1702,7 +1934,12 @@ class MainScreen(Screen):
             self.refresh_list()
             return
         self._current_page = 0
-        self._raw_items = app.db.search_phones(text) if self.current_tab == "phones" else app.db.search_spare_parts(text)
+        if self.current_tab == "phones":
+            self._raw_items = app.db.search_phones(text)
+        elif self.current_tab == "spares":
+            self._raw_items = app.db.search_spare_parts(text)
+        elif self.current_tab == "wall":
+            self._raw_items = app.db.search_wall_items(text)
         self._is_search = True
         self._data_loaded = True
         self._apply_sort_filter_internal()
@@ -1765,7 +2002,7 @@ class MainScreen(Screen):
         try:
             field = self.ids.filter_field.text.replace('Filter: ', '')
             val = self.ids.filter_value_spinner.text.strip()
-            if field != 'All' and val and val != 'All' and self.current_tab == "phones":
+            if field != 'All' and val and val != 'All' and self.current_tab in ("phones", "wall"):
                 key_map = {'Appearance': 'appearance_condition', 'Working': 'working_condition'}
                 key = key_map.get(field, '')
                 if key:
@@ -1784,7 +2021,7 @@ class MainScreen(Screen):
                 except: pass
             if ymin > ymax:
                 ymin, ymax = ymax, ymin
-            if self.current_tab == "phones" and (ymin > 1998 or ymax < 2025):
+            if self.current_tab in ("phones", "wall") and (ymin > 1998 or ymax < 2025):
                 def _extract_year(item):
                     rd = item.get('release_date', '') or ''
                     for part in rd.replace('-', ' ').replace('/', ' ').split():
@@ -1802,7 +2039,7 @@ class MainScreen(Screen):
         # Sort
         try:
             sort_by = self.ids.sort_spinner.text.replace('Sort: ', '')
-            if self.current_tab == "phones":
+            if self.current_tab in ("phones", "wall"):
                 if sort_by == 'Name':
                     items.sort(key=lambda x: (x.get('name', '') or '').lower(), reverse=not self._sort_ascending)
                 elif sort_by == 'ID':
@@ -1833,7 +2070,14 @@ class MainScreen(Screen):
         items = self._all_items[start:end]
         tp = max(1, (self._total_items + PAGE_SIZE - 1) // PAGE_SIZE)
         cp = self._current_page + 1
-        lt = "found" if self._is_search else ("phones" if self.current_tab == "phones" else "parts")
+        if self._is_search:
+            lt = "found"
+        elif self.current_tab == "phones":
+            lt = "phones"
+        elif self.current_tab == "wall":
+            lt = "wall"
+        else:
+            lt = "parts"
         sort_dir = "ASC" if self._sort_ascending else "DESC"
         self.ids.count_label.text = f"{self._total_items} {lt} | Page {cp}/{tp} | {sort_dir}"
         defimg = get_default_image_path(get_app_path())
@@ -1847,6 +2091,16 @@ class MainScreen(Screen):
                     phone_working=p.get("working_condition","") or "",
                     phone_image=img or defimg)
                 card.bind(on_release=partial(self._open_phone, p["id"]))
+                grid.add_widget(card)
+        elif self.current_tab == "wall":
+            for p in items:
+                img = get_img_path_for_wall(p["id"], app.db) if p.get("has_image") else defimg
+                card = PhoneCard(phone_id=p["id"], phone_name=p["name"],
+                    phone_date=p.get("release_date","") or "",
+                    phone_appear=p.get("appearance_condition","") or "",
+                    phone_working=p.get("working_condition","") or "",
+                    phone_image=img or defimg)
+                card.bind(on_release=partial(self._open_wall, p["id"]))
                 grid.add_widget(card)
         else:
             for s in items:
@@ -1906,11 +2160,20 @@ class MainScreen(Screen):
         app.root.transition = SlideTransition(direction="left")
         app.root.current = "spare_detail"
 
+    def _open_wall(self, wid, *a):
+        app = App.get_running_app()
+        app.root.get_screen("wall_detail").load_wall(wid)
+        app.root.transition = SlideTransition(direction="left")
+        app.root.current = "wall_detail"
+
     def add_item(self):
         app = App.get_running_app()
         app.root.transition = SlideTransition(direction="left")
         if self.current_tab == "phones":
-            s = app.root.get_screen("add_phone"); s.edit_mode = False; s.clear_form()
+            s = app.root.get_screen("add_phone"); s.edit_mode = False; s._save_to_wall = False; s.clear_form()
+            app.root.current = "add_phone"
+        elif self.current_tab == "wall":
+            s = app.root.get_screen("add_phone"); s.edit_mode = False; s._save_to_wall = True; s.clear_form()
             app.root.current = "add_phone"
         else:
             s = app.root.get_screen("add_spare"); s.clear_form()
@@ -2217,7 +2480,7 @@ class PhoneDetailScreen(Screen):
 
     def edit_phone(self):
         app = App.get_running_app()
-        s = app.root.get_screen("add_phone"); s.edit_mode = True; s.load_for_edit(self.p_id)
+        s = app.root.get_screen("add_phone"); s.edit_mode = True; s._save_to_wall = False; s.load_for_edit(self.p_id)
         app.root.transition = SlideTransition(direction="left"); app.root.current = "add_phone"
 
     def confirm_delete(self):
@@ -2376,16 +2639,146 @@ class SpareDetailScreen(Screen):
         app.root.transition = SlideTransition(direction="right"); app.root.current = "main"
 
 
+class WallDetailScreen(Screen):
+    w_id = StringProperty(""); w_name = StringProperty(""); w_date = StringProperty("")
+    w_appear = StringProperty(""); w_working = StringProperty(""); w_remarks = StringProperty("")
+
+    def load_wall(self, wid):
+        app = App.get_running_app()
+        w = app.db.get_wall_item(wid)
+        if not w: return
+        self.w_id = w["id"]; self.w_name = w["name"]
+        self.w_date = w.get("release_date","") or ""
+        self.w_appear = w.get("appearance_condition","") or ""
+        self.w_working = w.get("working_condition","") or ""
+        r = w.get("remarks","") or ""; self.w_remarks = "" if r in ("None","none") else r
+        img = get_img_path_for_wall(wid, app.db)
+        Clock.schedule_once(lambda dt: self._set_img(img), 0.1)
+        Clock.schedule_once(lambda dt: self._load_linked_phones(), 0.15)
+
+    _current_img_path = ""
+
+    def _set_img(self, path):
+        try:
+            src = path or get_default_image_path(get_app_path())
+            self._current_img_path = src
+            self.ids.detail_img.source = src
+            self.ids.detail_img.reload()
+        except: pass
+
+    def _load_linked_phones(self):
+        """Load phones with the same name as this wall item."""
+        app = App.get_running_app()
+        grid = self.ids.linked_phones_grid
+        grid.clear_widgets()
+        defimg = get_default_image_path(get_app_path())
+        linked = []
+        try:
+            all_phones = app.db.search_phones(self.w_name)
+            linked = [p for p in all_phones if (p.get('name', '') or '').lower() == self.w_name.lower()]
+        except:
+            pass
+        if not linked:
+            grid.add_widget(Label(text="No linked phones", font_size=sp(12),
+                color=(0.5,0.5,0.5,1), size_hint_y=None, height=dp(24)))
+            return
+        for p in linked:
+            img = get_img_path_for_phone(p["id"], app.db) if p.get("has_image") else defimg
+            card = PhoneCard(phone_id=p["id"], phone_name=p["name"],
+                phone_date=p.get("release_date","") or "",
+                phone_appear=p.get("appearance_condition","") or "",
+                phone_working=p.get("working_condition","") or "",
+                phone_image=img or defimg)
+            card.bind(on_release=partial(self._open_phone, p["id"]))
+            grid.add_widget(card)
+
+    def _open_phone(self, pid, *a):
+        app = App.get_running_app()
+        app.root.get_screen("phone_detail").load_phone(pid)
+        app.root.transition = SlideTransition(direction="left")
+        app.root.current = "phone_detail"
+
+    def edit_wall(self):
+        app = App.get_running_app()
+        s = app.root.get_screen("add_phone")
+        s.edit_mode = True
+        s._save_to_wall = True
+        s.load_for_edit_wall(self.w_id)
+        app.root.transition = SlideTransition(direction="left")
+        app.root.current = "add_phone"
+
+    def add_image(self):
+        """Show popup with Gallery and Camera options for wall item."""
+        app = App.get_running_app()
+        popup = ModalView(size_hint=(0.75, None), height=dp(130))
+        c = BoxLayout(orientation="vertical", spacing=dp(4), padding=dp(10))
+        with c.canvas.before:
+            Color(1,1,1,1); c._bg = RoundedRectangle(pos=c.pos, size=c.size, radius=[dp(10)])
+        c.bind(pos=lambda w,v: setattr(w._bg,"pos",v), size=lambda w,v: setattr(w._bg,"size",v))
+        gb = ClickableBox(size_hint_y=None, height=dp(44), padding=(dp(10),dp(6)))
+        gb.add_widget(Label(text="Pick from Gallery", font_size=sp(14), color=(0.1,0.1,0.18,1)))
+        gb.bind(on_release=lambda *a: (popup.dismiss(), self._do_gallery_add()))
+        cb = ClickableBox(size_hint_y=None, height=dp(44), padding=(dp(10),dp(6)))
+        cb.add_widget(Label(text="Take Photo", font_size=sp(14), color=(0.1,0.1,0.18,1)))
+        cb.bind(on_release=lambda *a: (popup.dismiss(), self._do_camera_add()))
+        c.add_widget(gb); c.add_widget(cb)
+        popup.add_widget(c); popup.open()
+
+    def _do_gallery_add(self):
+        app = App.get_running_app()
+        app.pick_image_for = ("wall_direct", self.w_id)
+        app.open_file_chooser(multiple=False)
+
+    def _do_camera_add(self):
+        app = App.get_running_app()
+        app.pick_image_for = ("wall_direct", self.w_id)
+        app._launch_camera()
+
+    def confirm_delete(self):
+        popup = ModalView(size_hint=(0.78, None), height=dp(130))
+        c = BoxLayout(orientation="vertical", spacing=dp(10), padding=dp(14))
+        with c.canvas.before:
+            Color(1,1,1,1); c._bg = RoundedRectangle(pos=c.pos, size=c.size, radius=[dp(10)])
+        c.bind(pos=lambda w,v: setattr(w._bg,"pos",v), size=lambda w,v: setattr(w._bg,"size",v))
+        c.add_widget(Label(text=f"Delete {self.w_name}?", font_size=sp(15), color=(0.1,0.1,0.18,1), size_hint_y=None, height=dp(28)))
+        row = BoxLayout(spacing=dp(8), size_hint_y=None, height=dp(40))
+        cb = ClickableBox(padding=(dp(8),dp(5))); cb.add_widget(Label(text="Cancel", font_size=sp(13), color=(0.4,0.4,0.4,1)))
+        cb.bind(on_release=lambda *a: popup.dismiss())
+        db = ClickableBox(padding=(dp(8),dp(5)))
+        with db.canvas.before:
+            Color(0.9,0.22,0.21,1); db._bg = RoundedRectangle(pos=db.pos, size=db.size, radius=[dp(7)])
+        db.bind(pos=lambda w,v: setattr(w._bg,"pos",v), size=lambda w,v: setattr(w._bg,"size",v))
+        db.add_widget(Label(text="Delete", font_size=sp(13), color=(1,1,1,1), bold=True))
+        db.bind(on_release=lambda *a: (App.get_running_app().db.delete_wall_item(self.w_id),
+            setattr(App.get_running_app().root.get_screen("main"), "_data_loaded", False),
+            popup.dismiss(), self.go_back()))
+        row.add_widget(cb); row.add_widget(db); c.add_widget(row)
+        popup.add_widget(c); popup.open()
+
+    def go_back(self):
+        app = App.get_running_app()
+        app.root.transition = SlideTransition(direction="right"); app.root.current = "main"
+
+
 class AddPhoneScreen(Screen):
     edit_mode = BooleanProperty(False)
     screen_title = StringProperty("Add Phone")
     _image_bytes = None  # Store raw bytes in memory
+    _save_to_wall = False  # When True, save to wall_items table instead of phones
 
     def on_edit_mode(self, *a):
-        self.screen_title = "Edit Phone" if self.edit_mode else "Add Phone"
+        if self._save_to_wall:
+            self.screen_title = "Edit Wall Item" if self.edit_mode else "Add Wall Item"
+        else:
+            self.screen_title = "Edit Phone" if self.edit_mode else "Add Phone"
 
     def clear_form(self):
         self._image_bytes = None
+        # Update title based on _save_to_wall
+        if self._save_to_wall:
+            self.screen_title = "Edit Wall Item" if self.edit_mode else "Add Wall Item"
+        else:
+            self.screen_title = "Edit Phone" if self.edit_mode else "Add Phone"
         Clock.schedule_once(self._clear, 0.1)
 
     def _clear(self, *a):
@@ -2401,7 +2794,18 @@ class AddPhoneScreen(Screen):
         if not p: return
         self._image_bytes = app.db.get_phone_image(pid)
         img = get_img_path_for_phone(pid, app.db)
+        self.screen_title = "Edit Phone"
         Clock.schedule_once(partial(self._fill, p, img), 0.1)
+
+    def load_for_edit_wall(self, wid):
+        """Load wall item data for editing."""
+        app = App.get_running_app()
+        w = app.db.get_wall_item(wid)
+        if not w: return
+        self._image_bytes = app.db.get_wall_image(wid)
+        img = get_img_path_for_wall(wid, app.db)
+        self.screen_title = "Edit Wall Item"
+        Clock.schedule_once(partial(self._fill, w, img), 0.1)
 
     def _fill(self, p, img_path, *a):
         try:
@@ -2442,15 +2846,26 @@ class AddPhoneScreen(Screen):
         except: return
         if not pid or not name:
             app.show_toast("ID and Name required"); return
-        app.db.add_phone(phone_id=pid, name=name,
-            release_date=self.ids.input_date.text.strip(),
-            appearance=self.ids.input_appear.text.strip(),
-            working=self.ids.input_working.text.strip(),
-            remarks=self.ids.input_remarks.text.strip(),
-            image_bytes=self._image_bytes)
-        clear_item_cache(f"p_{pid}", get_app_path())
-        app.root.get_screen("main")._data_loaded = False
-        app.show_toast("Phone saved!"); self.go_back()
+        if self._save_to_wall:
+            app.db.add_wall_item(item_id=pid, name=name,
+                release_date=self.ids.input_date.text.strip(),
+                appearance=self.ids.input_appear.text.strip(),
+                working=self.ids.input_working.text.strip(),
+                remarks=self.ids.input_remarks.text.strip(),
+                image_bytes=self._image_bytes)
+            clear_item_cache(f"w_{pid}", get_app_path())
+            app.root.get_screen("main")._data_loaded = False
+            app.show_toast("Wall item saved!"); self.go_back()
+        else:
+            app.db.add_phone(phone_id=pid, name=name,
+                release_date=self.ids.input_date.text.strip(),
+                appearance=self.ids.input_appear.text.strip(),
+                working=self.ids.input_working.text.strip(),
+                remarks=self.ids.input_remarks.text.strip(),
+                image_bytes=self._image_bytes)
+            clear_item_cache(f"p_{pid}", get_app_path())
+            app.root.get_screen("main")._data_loaded = False
+            app.show_toast("Phone saved!"); self.go_back()
 
     def go_back(self):
         app = App.get_running_app()
@@ -2620,6 +3035,7 @@ class ExportScreen(Screen):
 
             phones = app.db.export_phones()
             spares = app.db.export_spare_parts()
+            wall_items = app.db.export_wall_items()
 
             # Build XLSX data
             phone_rows = [["ID", "Name", "Release Date", "Appearance", "Working", "Remarks"]]
@@ -2640,12 +3056,22 @@ class ExportScreen(Screen):
                     str(s.get("description","") or "")
                 ])
 
-            sheets = {"Phones": phone_rows, "Spare Parts": spare_rows}
+            wall_rows = [["ID", "Name", "Release Date", "Appearance", "Working", "Remarks"]]
+            for w in wall_items:
+                wall_rows.append([
+                    str(w["id"]), str(w["name"]),
+                    str(w.get("release_date","") or ""),
+                    str(w.get("appearance_condition","") or ""),
+                    str(w.get("working_condition","") or ""),
+                    str(w.get("remarks","") or "")
+                ])
+
+            sheets = {"Phones": phone_rows, "Spare Parts": spare_rows, "Wall": wall_rows}
             filepath = os.path.join(od, f"nokia_export_{ts}.xlsx")
             create_xlsx(sheets, filepath)
 
             self._last_export_path = filepath
-            self.ids.export_status.text = f"Exported {len(phones)} phones, {len(spares)} spares"
+            self.ids.export_status.text = f"Exported {len(phones)} phones, {len(spares)} spares, {len(wall_items)} wall"
             self.ids.export_status.color = (0.26,0.63,0.28,1)
             app.show_toast("Export saved!")
 
@@ -2678,7 +3104,7 @@ class BackupScreen(Screen):
                 od = os.path.join(get_app_path(), "backups")
             os.makedirs(od, exist_ok=True)
             bf = os.path.join(od, f"nokia_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip")
-            # DB contains ALL data: phones, spares, images (BLOBs), gallery
+            # DB contains ALL data: phones, spares, wall items, images (BLOBs), gallery
             with zipfile.ZipFile(bf, "w", zipfile.ZIP_DEFLATED) as zf:
                 dbp = get_db_path()
                 if os.path.exists(dbp):
@@ -2761,7 +3187,7 @@ class SearchAllScreen(Screen):
         if not text.strip():
             grid.add_widget(Label(text="Type and press Enter", font_size=sp(13), color=(0.5,0.5,0.5,1), size_hint_y=None, height=dp(36)))
             return
-        phones, spares = app.db.search_all(text)
+        phones, spares, wall_items = app.db.search_all(text)
         defimg = get_default_image_path(get_app_path())
         if phones:
             grid.add_widget(Label(text=f"Phones ({len(phones)})", font_size=sp(14), bold=True, color=(0,0.314,0.784,1), size_hint_y=None, height=dp(26), text_size=(dp(300),None), halign="left"))
@@ -2778,7 +3204,15 @@ class SearchAllScreen(Screen):
                 card = SpareCard(spare_id=s["id"], spare_name=s["name"], spare_desc=s.get("description","") or "",
                     spare_image=img or defimg)
                 card.bind(on_release=partial(self._os, s["id"])); grid.add_widget(card)
-        if not phones and not spares:
+        if wall_items:
+            grid.add_widget(Label(text=f"Wall Items ({len(wall_items)})", font_size=sp(14), bold=True, color=(0,0.314,0.784,1), size_hint_y=None, height=dp(26), text_size=(dp(300),None), halign="left"))
+            for w in wall_items[:PAGE_SIZE]:
+                img = get_img_path_for_wall(w["id"], app.db) if w.get("has_image") else defimg
+                card = PhoneCard(phone_id=w["id"], phone_name=w["name"], phone_date=w.get("release_date","") or "",
+                    phone_appear=w.get("appearance_condition","") or "", phone_working=w.get("working_condition","") or "",
+                    phone_image=img or defimg)
+                card.bind(on_release=partial(self._ow, w["id"])); grid.add_widget(card)
+        if not phones and not spares and not wall_items:
             grid.add_widget(Label(text="No results", font_size=sp(13), color=(0.5,0.5,0.5,1), size_hint_y=None, height=dp(36)))
 
     def _op(self, pid, *a):
@@ -2789,6 +3223,10 @@ class SearchAllScreen(Screen):
         app = App.get_running_app()
         app.root.get_screen("spare_detail").load_spare(sid)
         app.root.transition = SlideTransition(direction="left"); app.root.current = "spare_detail"
+    def _ow(self, wid, *a):
+        app = App.get_running_app()
+        app.root.get_screen("wall_detail").load_wall(wid)
+        app.root.transition = SlideTransition(direction="left"); app.root.current = "wall_detail"
     def go_back(self):
         App.get_running_app().root.transition = SlideTransition(direction="right")
         App.get_running_app().root.current = "main"
@@ -2809,6 +3247,12 @@ class ReportScreen(Screen):
         without_images = total_phones - with_images
         unique_models = r.get('unique_models', 0)
         total_spares = r.get('total_spares', 0)
+
+        # Wall items count
+        total_wall = 0
+        try:
+            total_wall = app.db.get_wall_count()
+        except: pass
 
         # Find most common model
         by_model = r.get('by_model', [])
@@ -2850,6 +3294,7 @@ class ReportScreen(Screen):
         g.add_widget(stat_card("Without Images", without_images, (0.85, 0.4, 0.1, 1)))
         g.add_widget(stat_card("Unique Models", unique_models, (0.4, 0.3, 0.6, 1)))
         g.add_widget(stat_card("Spare Parts", total_spares, (0.2, 0.2, 0.25, 1)))
+        g.add_widget(stat_card("Wall Items", total_wall, (0.5, 0.3, 0.15, 1)))
         g.add_widget(stat_card("Year Range", year_range, (0.6, 0.2, 0.4, 1)))
 
         # Most common model card
@@ -3094,10 +3539,21 @@ class NokiaStorageApp(App):
                        os.path.join(get_app_path(), "initial_data.json")]:
                 if os.path.exists(jp):
                     with open(jp, "r", encoding="utf-8") as f: data = json.load(f)
-                    rows = [{"id":str(i[0]),"name":str(i[1]),"release_date":str(i[2]),
-                             "appearance_condition":str(i[3]),"working_condition":str(i[4]),
-                             "remarks":str(i[5]) if i[5] else ""} for i in data]
-                    self.db.import_phones_from_rows(rows); break
+                    phone_rows = []
+                    wall_rows = []
+                    for i in data:
+                        row = {"id":str(i[0]),"name":str(i[1]),"release_date":str(i[2]),
+                               "appearance_condition":str(i[3]),"working_condition":str(i[4]),
+                               "remarks":str(i[5]) if i[5] else ""}
+                        if str(i[0]).startswith("XXXX"):
+                            wall_rows.append(row)
+                        else:
+                            phone_rows.append(row)
+                    if phone_rows:
+                        self.db.import_phones_from_rows(phone_rows)
+                    if wall_rows:
+                        self.db.import_wall_from_rows(wall_rows)
+                    break
         except Exception as e: print(f"Init: {e}")
 
     def show_toast(self, text):
@@ -3336,6 +3792,17 @@ class NokiaStorageApp(App):
             self.show_toast(f"Added {count} images!")
             d = self.root.get_screen("spare_detail")
             Clock.schedule_once(lambda dt: d._load_gallery(), 0.2)
+
+        elif tt == "wall_direct":
+            # Set image as main wall item image
+            self.db.update_wall_item(td, image_data=images_bytes_list[0])
+            clear_item_cache(f"w_{td}", get_app_path())
+            new_img = get_img_path_for_wall(td, self.db)
+            d = self.root.get_screen("wall_detail")
+            d.ids.detail_img.source = new_img
+            d.ids.detail_img.reload()
+            self.root.get_screen("main")._data_loaded = False
+            self.show_toast("Image saved!")
 
         elif tt == "general_gallery":
             count = 0

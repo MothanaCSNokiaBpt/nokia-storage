@@ -67,6 +67,20 @@ class NokiaDatabase:
                 created_at TEXT DEFAULT (datetime('now'))
             );
 
+            CREATE TABLE IF NOT EXISTS wall_items (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                release_date TEXT,
+                appearance_condition TEXT,
+                working_condition TEXT,
+                remarks TEXT,
+                image_path TEXT,
+                image_data BLOB,
+                created_at TEXT DEFAULT (datetime('now'))
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_wall_name ON wall_items(name);
+
             CREATE INDEX IF NOT EXISTS idx_phones_name ON phones(name);
             CREATE INDEX IF NOT EXISTS idx_spare_name ON spare_parts(name);
             CREATE INDEX IF NOT EXISTS idx_spare_phone ON spare_parts(phone_id);
@@ -365,8 +379,98 @@ class NokiaDatabase:
 
     # ── Combined Search ─────────────────────────────────────────
 
+    # ── Wall Items CRUD ──────────────────────────────────────────
+
+    def add_wall_item(self, item_id, name, release_date="", appearance="",
+                      working="", remarks="", image_path="", image_bytes=None):
+        if not image_bytes and image_path:
+            image_bytes = self.read_image_file(image_path)
+        self.conn.execute(
+            """INSERT OR REPLACE INTO wall_items
+               (id, name, release_date, appearance_condition,
+                working_condition, remarks, image_path, image_data, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (item_id, name, release_date, appearance, working,
+             remarks, image_path or "", image_bytes,
+             datetime.now().isoformat()))
+        self.conn.commit()
+
+    def update_wall_item(self, item_id, **kwargs):
+        allowed = {"name", "release_date", "appearance_condition",
+                    "working_condition", "remarks", "image_path"}
+        fields = {k: v for k, v in kwargs.items() if k in allowed}
+        if "image_data" in kwargs:
+            fields["image_data"] = kwargs["image_data"]
+        if not fields:
+            return
+        set_clause = ", ".join(f"{k} = ?" for k in fields)
+        values = list(fields.values()) + [item_id]
+        self.conn.execute(f"UPDATE wall_items SET {set_clause} WHERE id = ?", values)
+        self.conn.commit()
+
+    def delete_wall_item(self, item_id):
+        self.conn.execute("DELETE FROM wall_items WHERE id = ?", (item_id,))
+        self.conn.commit()
+
+    def get_wall_item(self, item_id):
+        cur = self.conn.execute("SELECT * FROM wall_items WHERE id = ?", (item_id,))
+        row = cur.fetchone()
+        return dict(row) if row else None
+
+    def get_all_wall_items(self):
+        cur = self.conn.execute(
+            """SELECT id, name, release_date, appearance_condition,
+                      working_condition, remarks, image_path,
+                      CASE WHEN image_data IS NOT NULL THEN 1 ELSE 0 END as has_image
+               FROM wall_items ORDER BY name, id""")
+        return [dict(r) for r in cur.fetchall()]
+
+    def get_wall_image(self, item_id):
+        cur = self.conn.execute("SELECT image_data FROM wall_items WHERE id = ?", (item_id,))
+        row = cur.fetchone()
+        if row and row[0]:
+            return bytes(row[0])
+        return None
+
+    def search_wall_items(self, query):
+        q = f"%{query}%"
+        cur = self.conn.execute(
+            """SELECT id, name, release_date, appearance_condition,
+                      working_condition, remarks, image_path,
+                      CASE WHEN image_data IS NOT NULL THEN 1 ELSE 0 END as has_image
+               FROM wall_items
+               WHERE name LIKE ? OR id LIKE ? OR release_date LIKE ?
+               ORDER BY name, id""", (q, q, q))
+        return [dict(r) for r in cur.fetchall()]
+
+    def get_wall_count(self):
+        cur = self.conn.execute("SELECT COUNT(*) FROM wall_items")
+        return cur.fetchone()[0]
+
+    def import_wall_from_rows(self, rows):
+        count = 0
+        for row in rows:
+            try:
+                self.conn.execute(
+                    """INSERT OR IGNORE INTO wall_items
+                       (id, name, release_date, appearance_condition,
+                        working_condition, remarks, image_path, created_at)
+                       VALUES (?, ?, ?, ?, ?, ?, '', ?)""",
+                    (str(row.get("id", "")), str(row.get("name", "")),
+                     str(row.get("release_date", "")),
+                     str(row.get("appearance_condition", "")),
+                     str(row.get("working_condition", "")),
+                     str(row.get("remarks", "")),
+                     datetime.now().isoformat()))
+                count += 1
+            except: continue
+        self.conn.commit()
+        return count
+
+    # ── Combined Search ─────────────────────────────────────────
+
     def search_all(self, query):
-        return self.search_phones(query), self.search_spare_parts(query)
+        return self.search_phones(query), self.search_spare_parts(query), self.search_wall_items(query)
 
     # ── Import / Export ─────────────────────────────────────────
 
@@ -439,6 +543,14 @@ class NokiaDatabase:
             "SELECT COUNT(*) FROM phones WHERE image_data IS NOT NULL")
         report["phones_with_images"] = cur.fetchone()[0]
         return report
+
+    def export_wall_items(self):
+        cur = self.conn.execute(
+            """SELECT id, name, release_date, appearance_condition,
+                      working_condition, remarks, image_path
+               FROM wall_items ORDER BY name, id"""
+        )
+        return [dict(r) for r in cur.fetchall()]
 
     def close(self):
         if self.conn:
