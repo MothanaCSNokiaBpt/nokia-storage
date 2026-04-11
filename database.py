@@ -35,6 +35,7 @@ class NokiaDatabase:
                 image_data BLOB,
                 avg_price REAL DEFAULT 0,
                 rarity_score REAL DEFAULT 0,
+                description TEXT,
                 created_at TEXT DEFAULT (datetime('now'))
             );
 
@@ -112,6 +113,12 @@ class NokiaDatabase:
                 try:
                     self.conn.execute(f"ALTER TABLE phones ADD COLUMN {col} REAL DEFAULT 0")
                 except: pass
+        try:
+            self.conn.execute("SELECT description FROM phones LIMIT 1")
+        except Exception:
+            try:
+                self.conn.execute("ALTER TABLE phones ADD COLUMN description TEXT")
+            except: pass
         self.conn.commit()
 
     # ── Image helpers ───────────────────────────────────────────
@@ -161,7 +168,7 @@ class NokiaDatabase:
 
     def add_phone(self, phone_id, name, release_date="", appearance="",
                   working="", remarks="", image_path="", image_bytes=None,
-                  avg_price=0, rarity_score=0):
+                  avg_price=0, rarity_score=0, description=""):
         if not image_bytes and image_path:
             image_bytes = self.read_image_file(image_path)
             if image_bytes:
@@ -170,11 +177,11 @@ class NokiaDatabase:
             """INSERT OR REPLACE INTO phones
                (id, name, release_date, appearance_condition,
                 working_condition, remarks, image_path, image_data,
-                avg_price, rarity_score, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                avg_price, rarity_score, description, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (phone_id, name, release_date, appearance, working,
              remarks, image_path or "", image_bytes,
-             avg_price or 0, rarity_score or 0,
+             avg_price or 0, rarity_score or 0, description or "",
              datetime.now().isoformat())
         )
         self.conn.commit()
@@ -182,7 +189,7 @@ class NokiaDatabase:
     def update_phone(self, phone_id, **kwargs):
         allowed = {"name", "release_date", "appearance_condition",
                     "working_condition", "remarks", "image_path",
-                    "avg_price", "rarity_score"}
+                    "avg_price", "rarity_score", "description"}
         fields = {k: v for k, v in kwargs.items() if k in allowed}
         # Handle image update
         if "image_path" in kwargs:
@@ -498,8 +505,8 @@ class NokiaDatabase:
                     """INSERT OR IGNORE INTO phones
                        (id, name, release_date, appearance_condition,
                         working_condition, remarks, image_path,
-                        avg_price, rarity_score, created_at)
-                       VALUES (?, ?, ?, ?, ?, ?, '', ?, ?, ?)""",
+                        avg_price, rarity_score, description, created_at)
+                       VALUES (?, ?, ?, ?, ?, ?, '', ?, ?, ?, ?)""",
                     (str(row.get("id", "")), str(row.get("name", "")),
                      str(row.get("release_date", "")),
                      str(row.get("appearance_condition", "")),
@@ -507,6 +514,7 @@ class NokiaDatabase:
                      str(row.get("remarks", "")),
                      float(row.get("avg_price", 0) or 0),
                      float(row.get("rarity_score", 0) or 0),
+                     str(row.get("description", "") or ""),
                      datetime.now().isoformat())
                 )
                 count += 1

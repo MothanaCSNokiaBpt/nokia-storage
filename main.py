@@ -950,6 +950,24 @@ ScreenManager:
                         text_size: self.size
                         halign: 'left'
                     Label:
+                        text: 'Description:'
+                        font_size: sp(12)
+                        bold: True
+                        color: 0.3, 0.3, 0.3, 1
+                        size_hint_y: None
+                        height: dp(18) if root.p_description else dp(0)
+                        text_size: self.size
+                        halign: 'left'
+                    Label:
+                        text: root.p_description
+                        font_size: sp(11)
+                        color: 0.35, 0.35, 0.4, 1
+                        italic: True
+                        size_hint_y: None
+                        height: self.texture_size[1] + dp(6) if root.p_description else dp(0)
+                        text_size: self.width, None
+                        halign: 'left'
+                    Label:
                         text: 'Remarks:'
                         font_size: sp(12)
                         bold: True
@@ -2242,7 +2260,7 @@ class MainScreen(Screen):
                     phone_appear=p.get("appearance_condition","") or "",
                     phone_working=p.get("working_condition","") or "",
                     phone_image=img or defimg,
-                    phone_price=f"${price:.0f}" if price > 0 else "")
+                    phone_price=f"AED {price:.0f}" if price > 0 else "")
                 card.bind(on_release=partial(self._open_phone, p["id"]))
                 grid.add_widget(card)
         elif self.current_tab == "wall":
@@ -2402,6 +2420,7 @@ class PhoneDetailScreen(Screen):
     p_rarity_text = StringProperty("")
     p_rarity_stars = StringProperty("")
     p_rarity_color = ListProperty([0.5, 0.5, 0.5, 1])
+    p_description = StringProperty("")
 
     def load_phone(self, pid):
         app = App.get_running_app()
@@ -2415,7 +2434,9 @@ class PhoneDetailScreen(Screen):
         # Price and rarity
         avg_p = p.get("avg_price", 0) or 0
         rarity = p.get("rarity_score", 0) or 0
-        self.p_avg_price = f"${avg_p:.0f}" if avg_p > 0 else "N/A"
+        self.p_avg_price = f"AED {avg_p:.0f}" if avg_p > 0 else "N/A"
+        d = p.get("description", "") or ""
+        self.p_description = "" if d in ("None", "none") else d
         self.p_rarity_text = rarity_label(rarity)
         self.p_rarity_stars = rarity_stars(rarity)
         self.p_rarity_color = list(rarity_color(rarity))
@@ -3034,12 +3055,13 @@ class AddPhoneScreen(Screen):
             return
         try:
             cur = app.db.conn.execute(
-                "SELECT release_date, avg_price, rarity_score FROM phones WHERE TRIM(name) = TRIM(?) LIMIT 1", (name,))
+                "SELECT release_date, avg_price, rarity_score, description FROM phones WHERE TRIM(name) = TRIM(?) LIMIT 1", (name,))
             row = cur.fetchone()
             if row:
                 if row[0]: self.ids.input_date.text = str(row[0])
                 self._auto_price = float(row[1] or 0)
                 self._auto_rarity = float(row[2] or 0)
+                self._auto_description = str(row[3] or "")
                 try:
                     if self._auto_price > 0:
                         self.ids.input_price.text = str(self._auto_price)
@@ -3132,7 +3154,8 @@ class AddPhoneScreen(Screen):
                 working=self.ids.input_working.text.strip(),
                 remarks=self.ids.input_remarks.text.strip(),
                 image_bytes=self._image_bytes,
-                avg_price=price_val, rarity_score=rarity_val)
+                avg_price=price_val, rarity_score=rarity_val,
+                description=getattr(self, '_auto_description', ''))
             clear_item_cache(f"p_{pid}", get_app_path())
             app.root.get_screen("main")._data_loaded = False
             app.show_toast("Phone saved!"); self.go_back()
@@ -3994,7 +4017,8 @@ class NokiaStorageApp(App):
                                "appearance_condition":str(i[3]),"working_condition":str(i[4]),
                                "remarks":str(i[5]) if i[5] else "",
                                "avg_price": float(i[6]) if len(i) > 6 else 0,
-                               "rarity_score": float(i[7]) if len(i) > 7 else 0}
+                               "rarity_score": float(i[7]) if len(i) > 7 else 0,
+                               "description": str(i[8]) if len(i) > 8 else ""}
                         if str(i[0]).startswith("XXXX"):
                             wall_rows.append(row)
                         else:
