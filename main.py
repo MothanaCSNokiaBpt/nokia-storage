@@ -123,15 +123,23 @@ def get_img_path_for_wall(wall_id, db):
 # -- Rarity helpers ------------------------------------------------
 def rarity_label(score):
     if score <= 0: return "Unknown"
-    elif score <= 1: return "Very Common"
+    elif score <= 1: return "Very common"
     elif score <= 1.5: return "Common"
-    elif score <= 2: return "Somewhat Common"
-    elif score <= 2.5: return "Uncommon"
-    elif score <= 3: return "Somewhat Rare"
-    elif score <= 3.5: return "Rare"
-    elif score <= 4: return "Very Rare"
-    elif score <= 4.5: return "Extremely Rare"
-    else: return "Ultra Rare"
+    elif score <= 2: return "Average"
+    elif score <= 2.5: return "Above average"
+    elif score <= 3: return "Uncommon"
+    elif score <= 3.5: return "Limited"
+    elif score <= 4: return "Rare"
+    elif score <= 4.5: return "Very rare"
+    else: return "Extremely rare"
+
+def rarity_stars(score):
+    """Return golden star string: full stars + half star."""
+    if score <= 0: return ""
+    full = int(score)
+    half = 1 if (score - full) >= 0.5 else 0
+    empty = 5 - full - half
+    return "\u2605" * full + ("\u00BD" if half else "") + "\u2606" * empty
 
 def rarity_color(score):
     if score <= 1: return (0.5, 0.5, 0.5, 1)      # gray
@@ -818,14 +826,34 @@ ScreenManager:
                             pos: self.pos
                             size: self.size
                             radius: [dp(10)]
-                    Label:
-                        text: root.p_name
-                        font_size: sp(20)
-                        bold: True
-                        color: 0.1, 0.1, 0.18, 1
+                    BoxLayout:
                         size_hint_y: None
-                        height: dp(28)
-                        text_size: self.size
+                        height: dp(30)
+                        spacing: dp(6)
+                        Label:
+                            text: root.p_name
+                            font_size: sp(20)
+                            bold: True
+                            color: 0.1, 0.1, 0.18, 1
+                            size_hint_x: None
+                            width: self.texture_size[0] + dp(4)
+                            text_size: None, self.height
+                        Label:
+                            text: root.p_rarity_stars
+                            font_size: sp(16)
+                            color: 0.85, 0.65, 0.1, 1
+                            text_size: self.size
+                            halign: 'left'
+                            valign: 'middle'
+                        Label:
+                            text: root.p_rarity_text
+                            font_size: sp(10)
+                            color: root.p_rarity_color
+                            size_hint_x: None
+                            width: dp(60)
+                            text_size: self.size
+                            halign: 'left'
+                            valign: 'middle'
                         halign: 'left'
                     Label:
                         text: 'ID: ' + root.p_id
@@ -883,44 +911,23 @@ ScreenManager:
                             valign: 'middle'
                     BoxLayout:
                         size_hint_y: None
-                        height: dp(32)
-                        spacing: dp(10)
-                        BoxLayout:
-                            size_hint_x: 0.5
-                            padding: dp(8), dp(4)
-                            canvas.before:
-                                Color:
-                                    rgba: 0.1, 0.5, 0.3, 0.15
-                                RoundedRectangle:
-                                    pos: self.pos
-                                    size: self.size
-                                    radius: [dp(6)]
-                            Label:
-                                text: 'Price: ' + root.p_avg_price
-                                font_size: sp(12)
-                                bold: True
-                                color: 0.1, 0.5, 0.3, 1
-                                text_size: self.size
-                                halign: 'left'
-                                valign: 'middle'
-                        BoxLayout:
-                            size_hint_x: 0.5
-                            padding: dp(8), dp(4)
-                            canvas.before:
-                                Color:
-                                    rgba: root.p_rarity_color[0], root.p_rarity_color[1], root.p_rarity_color[2], 0.15
-                                RoundedRectangle:
-                                    pos: self.pos
-                                    size: self.size
-                                    radius: [dp(6)]
-                            Label:
-                                text: root.p_rarity_text
-                                font_size: sp(12)
-                                bold: True
-                                color: root.p_rarity_color
-                                text_size: self.size
-                                halign: 'left'
-                                valign: 'middle'
+                        height: dp(28)
+                        padding: dp(8), dp(4)
+                        canvas.before:
+                            Color:
+                                rgba: 0.1, 0.5, 0.3, 0.12
+                            RoundedRectangle:
+                                pos: self.pos
+                                size: self.size
+                                radius: [dp(5)]
+                        Label:
+                            text: 'Average Price: ' + root.p_avg_price
+                            font_size: sp(12)
+                            bold: True
+                            color: 0.1, 0.5, 0.3, 1
+                            text_size: self.size
+                            halign: 'left'
+                            valign: 'middle'
                     Label:
                         text: root.dup_count_text
                         font_size: sp(12)
@@ -2396,6 +2403,7 @@ class PhoneDetailScreen(Screen):
     dup_count_text = StringProperty("")
     p_avg_price = StringProperty("")
     p_rarity_text = StringProperty("")
+    p_rarity_stars = StringProperty("")
     p_rarity_color = ListProperty([0.5, 0.5, 0.5, 1])
 
     def load_phone(self, pid):
@@ -2412,6 +2420,7 @@ class PhoneDetailScreen(Screen):
         rarity = p.get("rarity_score", 0) or 0
         self.p_avg_price = f"${avg_p:.0f}" if avg_p > 0 else "N/A"
         self.p_rarity_text = rarity_label(rarity)
+        self.p_rarity_stars = rarity_stars(rarity)
         self.p_rarity_color = list(rarity_color(rarity))
         # Check if any phone with same name is Fully Working
         try:
@@ -3970,7 +3979,14 @@ class NokiaStorageApp(App):
 
     def _perms(self):
         if platform == "android":
-            try: request_permissions([Permission.CAMERA, Permission.READ_EXTERNAL_STORAGE, Permission.WRITE_EXTERNAL_STORAGE])
+            try:
+                perms = [Permission.CAMERA, Permission.READ_EXTERNAL_STORAGE, Permission.WRITE_EXTERNAL_STORAGE]
+                # Android 13+ requires READ_MEDIA_IMAGES
+                try:
+                    perms.append("android.permission.READ_MEDIA_IMAGES")
+                    perms.append("android.permission.READ_MEDIA_VIDEO")
+                except: pass
+                request_permissions(perms)
             except: pass
 
     def _load_initial(self):
