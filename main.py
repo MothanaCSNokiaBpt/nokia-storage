@@ -111,6 +111,14 @@ def get_img_path_for_spare(spare_id, db):
         return write_blob_to_file(img_data, f"s_{spare_id}", app_path)
     return get_default_image_path(app_path)
 
+def get_img_path_for_wall(item_id, db):
+    """Get displayable image file path for a wall item."""
+    app_path = get_app_path()
+    img_data = db.get_wall_image(item_id)
+    if img_data:
+        return write_blob_to_file(img_data, f"w_{item_id}", app_path)
+    return get_default_image_path(app_path)
+
 
 # -- Rarity helpers ------------------------------------------------
 def rarity_label(score):
@@ -389,6 +397,8 @@ ScreenManager:
         name: 'phone_detail'
     SpareDetailScreen:
         name: 'spare_detail'
+    WallDetailScreen:
+        name: 'wall_detail'
     AddPhoneScreen:
         name: 'add_phone'
     AddSpareScreen:
@@ -550,6 +560,20 @@ ScreenManager:
                     bold: True
                     font_size: sp(13)
                     color: (1,1,1,1) if root.current_tab == 'spares' else (0.3,0.3,0.3,1)
+            ClickableBox:
+                padding: dp(6)
+                on_release: root.switch_tab('wall')
+                canvas.before:
+                    Color:
+                        rgba: (0, 0.314, 0.784, 1) if root.current_tab == 'wall' else (0.92, 0.92, 0.92, 1)
+                    Rectangle:
+                        pos: self.pos
+                        size: self.size
+                Label:
+                    text: 'Wall'
+                    bold: True
+                    font_size: sp(13)
+                    color: (1,1,1,1) if root.current_tab == 'wall' else (0.3,0.3,0.3,1)
         ScrollView:
             id: scroll_view
             do_scroll_x: False
@@ -686,26 +710,8 @@ ScreenManager:
                     height: dp(70)
                     BoxLayout:
                         size_hint: None, None
-                        size: dp(270), dp(56)
-                        spacing: dp(12)
-                        Button:
-                            text: 'Edit'
-                            size_hint: None, None
-                            size: dp(56), dp(56)
-                            font_size: sp(11)
-                            bold: True
-                            background_normal: ''
-                            background_down: ''
-                            background_color: 0, 0, 0, 0
-                            color: 1, 1, 1, 1
-                            canvas.before:
-                                Color:
-                                    rgba: 0, 0.314, 0.784, 1
-                                RoundedRectangle:
-                                    pos: self.pos
-                                    size: self.size
-                                    radius: [100]
-                            on_press: root.edit_phone()
+                        size: dp(390), dp(56)
+                        spacing: dp(8)
                         Button:
                             text: 'Info'
                             size_hint: None, None
@@ -742,6 +748,60 @@ ScreenManager:
                                     size: self.size
                                     radius: [100]
                             on_press: root.google_search()
+                        Button:
+                            text: 'eBay'
+                            size_hint: None, None
+                            size: dp(56), dp(56)
+                            font_size: sp(11)
+                            bold: True
+                            background_normal: ''
+                            background_down: ''
+                            background_color: 0, 0, 0, 0
+                            color: 1, 1, 1, 1
+                            canvas.before:
+                                Color:
+                                    rgba: 0.9, 0.5, 0.1, 1
+                                RoundedRectangle:
+                                    pos: self.pos
+                                    size: self.size
+                                    radius: [100]
+                            on_press: root.ebay_search()
+                        Button:
+                            text: 'YT'
+                            size_hint: None, None
+                            size: dp(56), dp(56)
+                            font_size: sp(11)
+                            bold: True
+                            background_normal: ''
+                            background_down: ''
+                            background_color: 0, 0, 0, 0
+                            color: 1, 1, 1, 1
+                            canvas.before:
+                                Color:
+                                    rgba: 0.8, 0.1, 0.1, 1
+                                RoundedRectangle:
+                                    pos: self.pos
+                                    size: self.size
+                                    radius: [100]
+                            on_press: root.youtube_search()
+                        Button:
+                            text: 'Edit'
+                            size_hint: None, None
+                            size: dp(56), dp(56)
+                            font_size: sp(11)
+                            bold: True
+                            background_normal: ''
+                            background_down: ''
+                            background_color: 0, 0, 0, 0
+                            color: 1, 1, 1, 1
+                            canvas.before:
+                                Color:
+                                    rgba: 0, 0.314, 0.784, 1
+                                RoundedRectangle:
+                                    pos: self.pos
+                                    size: self.size
+                                    radius: [100]
+                            on_press: root.edit_phone()
                         Button:
                             text: 'Del'
                             size_hint: None, None
@@ -856,6 +916,24 @@ ScreenManager:
                             text_size: self.size
                             halign: 'left'
                             valign: 'middle'
+                    Label:
+                        text: root.dup_count_text
+                        font_size: sp(12)
+                        bold: True
+                        color: 0, 0.314, 0.784, 1
+                        size_hint_y: None
+                        height: dp(22) if root.dup_count_text else dp(0)
+                        text_size: self.size
+                        halign: 'left'
+                    Label:
+                        text: root.no_fw_text
+                        font_size: sp(13)
+                        bold: True
+                        color: 0.9, 0.2, 0.2, 1
+                        size_hint_y: None
+                        height: dp(22) if root.no_fw_text else dp(0)
+                        text_size: self.size
+                        halign: 'left'
                     BoxLayout:
                         size_hint_y: None
                         height: dp(28) if root.p_avg_price else dp(0)
@@ -875,6 +953,23 @@ ScreenManager:
                             text_size: self.size
                             halign: 'left'
                             valign: 'middle'
+                    Label:
+                        text: 'Description:'
+                        font_size: sp(12)
+                        bold: True
+                        color: 0.3, 0.3, 0.3, 1
+                        size_hint_y: None
+                        height: dp(18) if root.p_description else dp(0)
+                        text_size: self.size
+                        halign: 'left'
+                    Label:
+                        text: root.p_description or ''
+                        font_size: sp(12)
+                        color: 0.4, 0.4, 0.4, 1
+                        size_hint_y: None
+                        height: (self.texture_size[1] + dp(6)) if root.p_description else dp(0)
+                        text_size: self.width, None
+                        halign: 'left'
                     Label:
                         text: 'Remarks:'
                         font_size: sp(12)
@@ -1129,6 +1224,202 @@ ScreenManager:
                     size_hint_y: None
                     height: dp(30)
 
+<WallDetailScreen>:
+    BoxLayout:
+        orientation: 'vertical'
+        BoxLayout:
+            size_hint_y: None
+            height: dp(52)
+            padding: dp(6)
+            spacing: dp(6)
+            canvas.before:
+                Color:
+                    rgba: 0, 0.314, 0.784, 1
+                Rectangle:
+                    pos: self.pos
+                    size: self.size
+            ClickableLabel:
+                size_hint_x: None
+                width: dp(36)
+                text: '<'
+                font_size: sp(22)
+                bold: True
+                color: 1, 1, 1, 1
+                on_release: root.go_back()
+            Label:
+                text: 'Wall Item Details'
+                font_size: sp(17)
+                bold: True
+                color: 1, 1, 1, 1
+                text_size: self.size
+                halign: 'left'
+                valign: 'middle'
+        ScrollView:
+            do_scroll_x: False
+            BoxLayout:
+                orientation: 'vertical'
+                size_hint_y: None
+                height: self.minimum_height
+                padding: dp(14)
+                spacing: dp(10)
+                ClickableBox:
+                    size_hint_y: None
+                    height: dp(220)
+                    padding: dp(16)
+                    on_release: root.view_main_image()
+                    canvas.before:
+                        Color:
+                            rgba: 0.94, 0.96, 1, 1
+                        RoundedRectangle:
+                            pos: self.pos
+                            size: self.size
+                            radius: [dp(14)]
+                    Image:
+                        id: detail_img
+                        nocache: True
+                        allow_stretch: True
+                        keep_ratio: True
+                AnchorLayout:
+                    anchor_x: 'center'
+                    size_hint_y: None
+                    height: dp(70)
+                    BoxLayout:
+                        size_hint: None, None
+                        size: dp(124), dp(56)
+                        spacing: dp(12)
+                        Button:
+                            text: 'Edit'
+                            size_hint: None, None
+                            size: dp(56), dp(56)
+                            font_size: sp(11)
+                            bold: True
+                            background_normal: ''
+                            background_down: ''
+                            background_color: 0, 0, 0, 0
+                            color: 1, 1, 1, 1
+                            canvas.before:
+                                Color:
+                                    rgba: 0, 0.314, 0.784, 1
+                                RoundedRectangle:
+                                    pos: self.pos
+                                    size: self.size
+                                    radius: [100]
+                            on_press: root.edit_wall_item()
+                        Button:
+                            text: 'Del'
+                            size_hint: None, None
+                            size: dp(56), dp(56)
+                            font_size: sp(11)
+                            bold: True
+                            background_normal: ''
+                            background_down: ''
+                            background_color: 0, 0, 0, 0
+                            color: 1, 1, 1, 1
+                            canvas.before:
+                                Color:
+                                    rgba: 0.8, 0.15, 0.15, 1
+                                RoundedRectangle:
+                                    pos: self.pos
+                                    size: self.size
+                                    radius: [100]
+                            on_press: root.confirm_delete()
+                BoxLayout:
+                    orientation: 'vertical'
+                    size_hint_y: None
+                    height: self.minimum_height
+                    padding: dp(14)
+                    spacing: dp(8)
+                    canvas.before:
+                        Color:
+                            rgba: 1, 1, 1, 1
+                        RoundedRectangle:
+                            pos: self.pos
+                            size: self.size
+                            radius: [dp(10)]
+                    Label:
+                        text: root.w_name
+                        font_size: sp(20)
+                        bold: True
+                        color: 0.1, 0.1, 0.18, 1
+                        size_hint_y: None
+                        height: dp(28)
+                        text_size: self.size
+                        halign: 'left'
+                    Label:
+                        text: 'ID: ' + root.w_id
+                        font_size: sp(13)
+                        color: 0.4, 0.4, 0.4, 1
+                        size_hint_y: None
+                        height: dp(20)
+                        text_size: self.size
+                        halign: 'left'
+                    Label:
+                        text: 'Release: ' + root.w_date
+                        font_size: sp(13)
+                        color: 0.4, 0.4, 0.4, 1
+                        size_hint_y: None
+                        height: dp(20)
+                        text_size: self.size
+                        halign: 'left'
+                    BoxLayout:
+                        size_hint_y: None
+                        height: dp(28)
+                        padding: dp(8), dp(4)
+                        canvas.before:
+                            Color:
+                                rgba: 0.26, 0.63, 0.28, 0.12
+                            RoundedRectangle:
+                                pos: self.pos
+                                size: self.size
+                                radius: [dp(5)]
+                        Label:
+                            text: 'Appearance: ' + root.w_appear
+                            font_size: sp(12)
+                            color: 0.2, 0.5, 0.22, 1
+                            bold: True
+                            text_size: self.size
+                            halign: 'left'
+                            valign: 'middle'
+                    BoxLayout:
+                        size_hint_y: None
+                        height: dp(28)
+                        padding: dp(8), dp(4)
+                        canvas.before:
+                            Color:
+                                rgba: 0, 0.314, 0.784, 0.12
+                            RoundedRectangle:
+                                pos: self.pos
+                                size: self.size
+                                radius: [dp(5)]
+                        Label:
+                            text: 'Working: ' + root.w_working
+                            font_size: sp(12)
+                            color: 0, 0.28, 0.7, 1
+                            bold: True
+                            text_size: self.size
+                            halign: 'left'
+                            valign: 'middle'
+                    Label:
+                        text: 'Remarks:'
+                        font_size: sp(12)
+                        bold: True
+                        color: 0.3, 0.3, 0.3, 1
+                        size_hint_y: None
+                        height: dp(18)
+                        text_size: self.size
+                        halign: 'left'
+                    Label:
+                        text: root.w_remarks or '-'
+                        font_size: sp(12)
+                        color: 0.4, 0.4, 0.4, 1
+                        size_hint_y: None
+                        height: self.texture_size[1] + dp(6)
+                        text_size: self.width, None
+                        halign: 'left'
+                Widget:
+                    size_hint_y: None
+                    height: dp(30)
+
 <AddPhoneScreen>:
     BoxLayout:
         orientation: 'vertical'
@@ -1261,6 +1552,14 @@ ScreenManager:
                 TextInput:
                     id: input_remarks
                     hint_text: 'Remarks'
+                    multiline: True
+                    size_hint_y: None
+                    height: dp(70)
+                    font_size: sp(14)
+                    padding: dp(10), dp(9)
+                TextInput:
+                    id: input_description
+                    hint_text: 'Description'
                     multiline: True
                     size_hint_y: None
                     height: dp(70)
@@ -1744,7 +2043,14 @@ class MainScreen(Screen):
         app = App.get_running_app()
         if not app.db: return
         self._current_page = 0
-        self._raw_items = app.db.get_all_phones() if self.current_tab == "phones" else app.db.get_all_spare_parts()
+        if self.current_tab == "phones":
+            self._raw_items = app.db.get_all_phones()
+        elif self.current_tab == "spares":
+            self._raw_items = app.db.get_all_spare_parts()
+        elif self.current_tab == "wall":
+            self._raw_items = app.db.get_all_wall_items()
+        else:
+            self._raw_items = []
         self._is_search = False
         self._data_loaded = True
         self._apply_sort_filter_internal()
@@ -1756,7 +2062,14 @@ class MainScreen(Screen):
             self.refresh_list()
             return
         self._current_page = 0
-        self._raw_items = app.db.search_phones(text) if self.current_tab == "phones" else app.db.search_spare_parts(text)
+        if self.current_tab == "phones":
+            self._raw_items = app.db.search_phones(text)
+        elif self.current_tab == "spares":
+            self._raw_items = app.db.search_spare_parts(text)
+        elif self.current_tab == "wall":
+            self._raw_items = app.db.search_wall_items(text)
+        else:
+            self._raw_items = []
         self._is_search = True
         self._data_loaded = True
         self._apply_sort_filter_internal()
@@ -1837,7 +2150,8 @@ class MainScreen(Screen):
         items = self._all_items[start:end]
         tp = max(1, (self._total_items + PAGE_SIZE - 1) // PAGE_SIZE)
         cp = self._current_page + 1
-        lt = "found" if self._is_search else ("phones" if self.current_tab == "phones" else "parts")
+        tab_labels = {"phones": "phones", "spares": "parts", "wall": "wall items"}
+        lt = "found" if self._is_search else tab_labels.get(self.current_tab, "items")
         sort_dir = "ASC" if self._sort_ascending else "DESC"
         self.ids.count_label.text = f"{self._total_items} {lt} | Page {cp}/{tp} | {sort_dir}"
         defimg = get_default_image_path(get_app_path())
@@ -1854,13 +2168,23 @@ class MainScreen(Screen):
                     phone_price=f"${price:.0f}" if price > 0 else "")
                 card.bind(on_release=partial(self._open_phone, p["id"]))
                 grid.add_widget(card)
-        else:
+        elif self.current_tab == "spares":
             for s in items:
                 img = get_img_path_for_spare(s["id"], app.db) if s.get("has_image") else defimg
                 card = SpareCard(spare_id=s["id"], spare_name=s["name"],
                     spare_desc=s.get("description","") or "",
                     spare_image=img or defimg)
                 card.bind(on_release=partial(self._open_spare, s["id"]))
+                grid.add_widget(card)
+        elif self.current_tab == "wall":
+            for w in items:
+                img = get_img_path_for_wall(w["id"], app.db) if w.get("has_image") else defimg
+                card = PhoneCard(phone_id=w["id"], phone_name=w["name"],
+                    phone_date=w.get("release_date","") or "",
+                    phone_appear=w.get("appearance_condition","") or "",
+                    phone_working=w.get("working_condition","") or "",
+                    phone_image=img or defimg, phone_price="")
+                card.bind(on_release=partial(self._open_wall, w["id"]))
                 grid.add_widget(card)
 
         # Pagination
@@ -1911,6 +2235,12 @@ class MainScreen(Screen):
         app.root.get_screen("spare_detail").load_spare(sid)
         app.root.transition = SlideTransition(direction="left")
         app.root.current = "spare_detail"
+
+    def _open_wall(self, wid, *a):
+        app = App.get_running_app()
+        app.root.get_screen("wall_detail").load_wall_item(wid)
+        app.root.transition = SlideTransition(direction="left")
+        app.root.current = "wall_detail"
 
     def add_item(self):
         app = App.get_running_app()
@@ -1978,8 +2308,11 @@ class MainScreen(Screen):
 class PhoneDetailScreen(Screen):
     p_id = StringProperty(""); p_name = StringProperty(""); p_date = StringProperty("")
     p_appear = StringProperty(""); p_working = StringProperty(""); p_remarks = StringProperty("")
+    p_description = StringProperty("")
     p_rarity_stars = StringProperty(""); p_rarity_text = StringProperty("")
     p_avg_price = StringProperty(""); p_rarity_color = ListProperty([0.5, 0.5, 0.5, 1])
+    no_fw_text = StringProperty("")
+    dup_count_text = StringProperty("")
 
     def load_phone(self, pid):
         app = App.get_running_app()
@@ -1990,12 +2323,30 @@ class PhoneDetailScreen(Screen):
         self.p_appear = p.get("appearance_condition","") or ""
         self.p_working = p.get("working_condition","") or ""
         r = p.get("remarks","") or ""; self.p_remarks = "" if r in ("None","none") else r
+        d = p.get("description","") or ""; self.p_description = "" if d in ("None","none") else d
         avg_p = p.get("avg_price", 0) or 0
         rscore = p.get("rarity_score", 0) or 0
         self.p_avg_price = f"${avg_p:.0f}" if avg_p > 0 else "N/A"
         self.p_rarity_stars = rarity_stars(rscore)
         self.p_rarity_text = rarity_label(rscore)
         self.p_rarity_color = rarity_color(rscore) if rscore > 0 else [0.5, 0.5, 0.5, 1]
+        # Duplicate count
+        try:
+            cur = app.db.conn.execute(
+                "SELECT COUNT(*) FROM phones WHERE TRIM(name) = TRIM(?)", (self.p_name,))
+            dup_count = cur.fetchone()[0]
+            self.dup_count_text = f"{dup_count} phone(s) with same name" if dup_count > 1 else ""
+        except Exception:
+            self.dup_count_text = ""
+        # No FW warning
+        try:
+            cur = app.db.conn.execute(
+                "SELECT COUNT(*) FROM phones WHERE TRIM(name) = TRIM(?) AND TRIM(working_condition) = 'FW'",
+                (self.p_name,))
+            fw_count = cur.fetchone()[0]
+            self.no_fw_text = "!! No Fully Working Phone !!" if fw_count == 0 else ""
+        except Exception:
+            self.no_fw_text = ""
         img = get_img_path_for_phone(pid, app.db)
         Clock.schedule_once(lambda dt: self._set_img(img), 0.1)
         Clock.schedule_once(lambda dt: self._load_gallery(), 0.15)
@@ -2142,6 +2493,16 @@ class PhoneDetailScreen(Screen):
         """Open Google search for this phone model."""
         import webbrowser
         webbrowser.open(f"https://www.google.com/search?q=Nokia+{self.p_name}")
+
+    def ebay_search(self):
+        """Open eBay search for this phone model."""
+        import webbrowser
+        webbrowser.open(f"https://www.ebay.com/sch/i.html?_nkw=Nokia+{self.p_name}")
+
+    def youtube_search(self):
+        """Open YouTube search for this phone model."""
+        import webbrowser
+        webbrowser.open(f"https://www.youtube.com/results?search_query=Nokia+{self.p_name}")
 
     def show_summary(self):
         """Show a summary popup for all phones with the same name."""
@@ -2386,6 +2747,97 @@ class SpareDetailScreen(Screen):
         app.root.transition = SlideTransition(direction="right"); app.root.current = "main"
 
 
+class WallDetailScreen(Screen):
+    w_id = StringProperty("")
+    w_name = StringProperty("")
+    w_date = StringProperty("")
+    w_appear = StringProperty("")
+    w_working = StringProperty("")
+    w_remarks = StringProperty("")
+
+    _current_img_path = ""
+
+    def load_wall_item(self, wid):
+        app = App.get_running_app()
+        w = app.db.get_wall_item(wid)
+        if not w:
+            return
+        self.w_id = w["id"]
+        self.w_name = w["name"]
+        self.w_date = w.get("release_date", "") or ""
+        self.w_appear = w.get("appearance_condition", "") or ""
+        self.w_working = w.get("working_condition", "") or ""
+        r = w.get("remarks", "") or ""
+        self.w_remarks = "" if r in ("None", "none") else r
+        img = get_img_path_for_wall(wid, app.db)
+        Clock.schedule_once(lambda dt: self._set_img(img), 0.1)
+
+    def _set_img(self, path):
+        try:
+            src = path or get_default_image_path(get_app_path())
+            self._current_img_path = src
+            self.ids.detail_img.source = src
+            self.ids.detail_img.reload()
+        except Exception:
+            pass
+
+    def view_main_image(self):
+        if self._current_img_path:
+            self._show_fullscreen(self._current_img_path)
+
+    def _show_fullscreen(self, img_path, *args):
+        from kivy.uix.button import Button as KButton
+        popup = ModalView(size_hint=(1, 1), background_color=(0, 0, 0, 0.95))
+        content = BoxLayout(orientation="vertical", padding=dp(4))
+        img = Image(source=img_path, nocache=True, allow_stretch=True, keep_ratio=True)
+        content.add_widget(img)
+        close_btn = KButton(text="Close", size_hint_y=None, height=dp(44),
+            font_size=sp(14), background_color=(0.3, 0.3, 0.3, 1))
+        close_btn.bind(on_press=lambda *a: popup.dismiss())
+        content.add_widget(close_btn)
+        popup.add_widget(content)
+        popup.open()
+
+    def edit_wall_item(self):
+        App.get_running_app().show_toast("Wall item editing not yet implemented")
+
+    def confirm_delete(self):
+        popup = ModalView(size_hint=(0.78, None), height=dp(130))
+        c = BoxLayout(orientation="vertical", spacing=dp(10), padding=dp(14))
+        with c.canvas.before:
+            Color(1, 1, 1, 1)
+            c._bg = RoundedRectangle(pos=c.pos, size=c.size, radius=[dp(10)])
+        c.bind(pos=lambda w, v: setattr(w._bg, "pos", v),
+               size=lambda w, v: setattr(w._bg, "size", v))
+        c.add_widget(Label(text=f"Delete {self.w_name}?", font_size=sp(15),
+            color=(0.1, 0.1, 0.18, 1), size_hint_y=None, height=dp(28)))
+        row = BoxLayout(spacing=dp(8), size_hint_y=None, height=dp(40))
+        cb = ClickableBox(padding=(dp(8), dp(5)))
+        cb.add_widget(Label(text="Cancel", font_size=sp(13), color=(0.4, 0.4, 0.4, 1)))
+        cb.bind(on_release=lambda *a: popup.dismiss())
+        db = ClickableBox(padding=(dp(8), dp(5)))
+        with db.canvas.before:
+            Color(0.9, 0.22, 0.21, 1)
+            db._bg = RoundedRectangle(pos=db.pos, size=db.size, radius=[dp(7)])
+        db.bind(pos=lambda w, v: setattr(w._bg, "pos", v),
+                size=lambda w, v: setattr(w._bg, "size", v))
+        db.add_widget(Label(text="Delete", font_size=sp(13), color=(1, 1, 1, 1), bold=True))
+        db.bind(on_release=lambda *a: (
+            App.get_running_app().db.delete_wall_item(self.w_id),
+            setattr(App.get_running_app().root.get_screen("main"), "_data_loaded", False),
+            popup.dismiss(), self.go_back()))
+        row.add_widget(cb)
+        row.add_widget(db)
+        c.add_widget(row)
+        popup.add_widget(c)
+        popup.open()
+
+    def go_back(self):
+        app = App.get_running_app()
+        app.root.transition = SlideTransition(direction="right")
+        app.root.current = "main"
+
+
 class AddPhoneScreen(Screen):
     edit_mode = BooleanProperty(False)
     screen_title = StringProperty("Add Phone")
@@ -2404,8 +2856,10 @@ class AddPhoneScreen(Screen):
 
     def _clear(self, *a):
         try:
-            for fid in ["input_id","input_name","input_date","input_appear","input_working","input_remarks","input_price","input_rarity"]:
+            for fid in ["input_id","input_name","input_date","input_appear","input_working","input_remarks","input_description","input_price","input_rarity"]:
                 self.ids[fid].text = ""
+            self.ids.input_id.readonly = False
+            self.ids.input_id.background_color = (1, 1, 1, 1)
             self.ids.preview_img.source = get_default_image_path(get_app_path())
         except: pass
 
@@ -2424,12 +2878,17 @@ class AddPhoneScreen(Screen):
             self.ids.input_appear.text = p.get("appearance_condition","") or ""
             self.ids.input_working.text = p.get("working_condition","") or ""
             r = p.get("remarks","") or ""; self.ids.input_remarks.text = "" if r in ("None","none") else r
+            d = p.get("description","") or ""; self.ids.input_description.text = "" if d in ("None","none") else d
             avg_p = p.get("avg_price", 0) or 0
             rar = p.get("rarity_score", 0) or 0
             self.ids.input_price.text = str(avg_p) if avg_p > 0 else ""
             self.ids.input_rarity.text = str(rar) if rar > 0 else ""
             self._auto_price = avg_p
             self._auto_rarity = rar
+            # Make ID readonly in edit mode
+            if self.edit_mode:
+                self.ids.input_id.readonly = True
+                self.ids.input_id.background_color = (0.9, 0.9, 0.9, 1)
             self.ids.preview_img.source = img_path or get_default_image_path(get_app_path())
         except: pass
 
@@ -2440,7 +2899,7 @@ class AddPhoneScreen(Screen):
             return
         try:
             cur = app.db.conn.execute(
-                "SELECT release_date, avg_price, rarity_score FROM phones WHERE TRIM(name) = TRIM(?) LIMIT 1",
+                "SELECT release_date, avg_price, rarity_score, description FROM phones WHERE TRIM(name) = TRIM(?) LIMIT 1",
                 (name,))
             row = cur.fetchone()
             if row:
@@ -2452,6 +2911,9 @@ class AddPhoneScreen(Screen):
                     self.ids.input_price.text = str(self._auto_price)
                 if self._auto_rarity > 0 and not self.ids.input_rarity.text.strip():
                     self.ids.input_rarity.text = str(self._auto_rarity)
+                desc = str(row[3] or "")
+                if desc and desc != "None" and not self.ids.input_description.text.strip():
+                    self.ids.input_description.text = desc
         except: pass
 
     def pick_from_gallery(self):
@@ -2483,6 +2945,13 @@ class AddPhoneScreen(Screen):
         except: return
         if not pid or not name:
             app.show_toast("ID and Name required"); return
+        # Duplicate ID check (only when adding, not editing)
+        if not self.edit_mode:
+            try:
+                cur = app.db.conn.execute("SELECT COUNT(*) FROM phones WHERE id = ?", (pid,))
+                if cur.fetchone()[0] > 0:
+                    app.show_toast("ID already exists!"); return
+            except: pass
         try:
             price_text = self.ids.input_price.text.strip()
             price_val = float(price_text) if price_text else self._auto_price
@@ -2491,11 +2960,15 @@ class AddPhoneScreen(Screen):
             rarity_text = self.ids.input_rarity.text.strip()
             rarity_val = float(rarity_text) if rarity_text else self._auto_rarity
         except: rarity_val = self._auto_rarity
+        desc_text = ""
+        try: desc_text = self.ids.input_description.text.strip()
+        except: pass
         app.db.add_phone(phone_id=pid, name=name,
             release_date=self.ids.input_date.text.strip(),
             appearance=self.ids.input_appear.text.strip(),
             working=self.ids.input_working.text.strip(),
             remarks=self.ids.input_remarks.text.strip(),
+            description=desc_text,
             image_bytes=self._image_bytes,
             avg_price=price_val, rarity_score=rarity_val)
         clear_item_cache(f"p_{pid}", get_app_path())
@@ -2815,7 +3288,7 @@ class SearchAllScreen(Screen):
         if not text.strip():
             grid.add_widget(Label(text="Type and press Enter", font_size=sp(13), color=(0.5,0.5,0.5,1), size_hint_y=None, height=dp(36)))
             return
-        phones, spares = app.db.search_all(text)
+        phones, spares, wall_items = app.db.search_all(text)
         defimg = get_default_image_path(get_app_path())
         if phones:
             grid.add_widget(Label(text=f"Phones ({len(phones)})", font_size=sp(14), bold=True, color=(0,0.314,0.784,1), size_hint_y=None, height=dp(26), text_size=(dp(300),None), halign="left"))
@@ -2833,7 +3306,15 @@ class SearchAllScreen(Screen):
                 card = SpareCard(spare_id=s["id"], spare_name=s["name"], spare_desc=s.get("description","") or "",
                     spare_image=img or defimg)
                 card.bind(on_release=partial(self._os, s["id"])); grid.add_widget(card)
-        if not phones and not spares:
+        if wall_items:
+            grid.add_widget(Label(text=f"Wall Items ({len(wall_items)})", font_size=sp(14), bold=True, color=(0,0.314,0.784,1), size_hint_y=None, height=dp(26), text_size=(dp(300),None), halign="left"))
+            for w in wall_items[:PAGE_SIZE]:
+                img = get_img_path_for_wall(w["id"], app.db) if w.get("has_image") else defimg
+                card = PhoneCard(phone_id=w["id"], phone_name=w["name"], phone_date=w.get("release_date","") or "",
+                    phone_appear=w.get("appearance_condition","") or "", phone_working=w.get("working_condition","") or "",
+                    phone_image=img or defimg, phone_price="")
+                card.bind(on_release=partial(self._ow, w["id"])); grid.add_widget(card)
+        if not phones and not spares and not wall_items:
             grid.add_widget(Label(text="No results", font_size=sp(13), color=(0.5,0.5,0.5,1), size_hint_y=None, height=dp(36)))
 
     def _op(self, pid, *a):
@@ -2844,6 +3325,10 @@ class SearchAllScreen(Screen):
         app = App.get_running_app()
         app.root.get_screen("spare_detail").load_spare(sid)
         app.root.transition = SlideTransition(direction="left"); app.root.current = "spare_detail"
+    def _ow(self, wid, *a):
+        app = App.get_running_app()
+        app.root.get_screen("wall_detail").load_wall_item(wid)
+        app.root.transition = SlideTransition(direction="left"); app.root.current = "wall_detail"
     def go_back(self):
         App.get_running_app().root.transition = SlideTransition(direction="right")
         App.get_running_app().root.current = "main"
@@ -3170,12 +3655,22 @@ class NokiaStorageApp(App):
                        os.path.join(get_app_path(), "initial_data.json")]:
                 if os.path.exists(jp):
                     with open(jp, "r", encoding="utf-8") as f: data = json.load(f)
-                    rows = [{"id":str(i[0]),"name":str(i[1]),"release_date":str(i[2]),
-                             "appearance_condition":str(i[3]),"working_condition":str(i[4]),
-                             "remarks":str(i[5]) if i[5] else "",
-                             "avg_price":float(i[6]) if len(i) > 6 else 0,
-                             "rarity_score":float(i[7]) if len(i) > 7 else 0} for i in data]
-                    self.db.import_phones_from_rows(rows); break
+                    phone_rows = []
+                    wall_rows = []
+                    for i in data:
+                        row = {"id":str(i[0]),"name":str(i[1]),"release_date":str(i[2]),
+                               "appearance_condition":str(i[3]),"working_condition":str(i[4]),
+                               "remarks":str(i[5]) if i[5] else "",
+                               "avg_price":float(i[6]) if len(i) > 6 else 0,
+                               "rarity_score":float(i[7]) if len(i) > 7 else 0}
+                        if str(i[0]).startswith("XXXX"):
+                            wall_rows.append(row)
+                        else:
+                            phone_rows.append(row)
+                    self.db.import_phones_from_rows(phone_rows)
+                    if wall_rows:
+                        self.db.import_wall_from_rows(wall_rows)
+                    break
         except Exception as e: print(f"Init: {e}")
 
     def show_toast(self, text):
