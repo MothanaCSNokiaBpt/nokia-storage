@@ -18,7 +18,7 @@ from kivy.graphics import Color, Rectangle, RoundedRectangle
 from kivy.lang import Builder
 from kivy.metrics import dp, sp
 from kivy.properties import (
-    StringProperty, ObjectProperty, NumericProperty, BooleanProperty
+    StringProperty, ObjectProperty, NumericProperty, BooleanProperty, ListProperty
 )
 from kivy.uix.behaviors import ButtonBehavior
 from kivy.uix.boxlayout import BoxLayout
@@ -120,6 +120,27 @@ def get_img_path_for_wall(wall_id, db):
     return get_default_image_path(app_path)
 
 
+# -- Rarity helpers ------------------------------------------------
+def rarity_label(score):
+    if score <= 0: return "Unknown"
+    elif score <= 1: return "Very Common"
+    elif score <= 1.5: return "Common"
+    elif score <= 2: return "Somewhat Common"
+    elif score <= 2.5: return "Uncommon"
+    elif score <= 3: return "Somewhat Rare"
+    elif score <= 3.5: return "Rare"
+    elif score <= 4: return "Very Rare"
+    elif score <= 4.5: return "Extremely Rare"
+    else: return "Ultra Rare"
+
+def rarity_color(score):
+    if score <= 1: return (0.5, 0.5, 0.5, 1)      # gray
+    elif score <= 2: return (0.3, 0.6, 0.3, 1)     # green
+    elif score <= 3: return (0.8, 0.6, 0.1, 1)     # orange
+    elif score <= 4: return (0.8, 0.2, 0.2, 1)     # red
+    else: return (0.6, 0.1, 0.6, 1)                # purple
+
+
 # -- XLSX Creator (pure Python, no openpyxl) -----------------------
 def create_xlsx(sheets_data, filepath):
     import zipfile as zf_mod
@@ -175,6 +196,7 @@ class PhoneCard(ButtonBehavior, BoxLayout):
     phone_appear = StringProperty("")
     phone_working = StringProperty("")
     phone_image = StringProperty("")
+    phone_price = StringProperty("")
 
 class SpareCard(ButtonBehavior, BoxLayout):
     spare_id = NumericProperty(0)
@@ -208,7 +230,7 @@ KV = """
 
 <PhoneCard>:
     size_hint_y: None
-    height: dp(94)
+    height: dp(108)
     padding: dp(6)
     spacing: dp(8)
     orientation: 'horizontal'
@@ -268,6 +290,15 @@ KV = """
             valign: 'middle'
             size_hint_y: None
             height: dp(16)
+        Label:
+            text: root.phone_price
+            font_size: sp(10)
+            color: 0.1, 0.5, 0.3, 1
+            text_size: self.size
+            halign: 'left'
+            valign: 'middle'
+            size_hint_y: None
+            height: dp(14)
 
 <SpareCard>:
     size_hint_y: None
@@ -850,6 +881,46 @@ ScreenManager:
                             text_size: self.size
                             halign: 'left'
                             valign: 'middle'
+                    BoxLayout:
+                        size_hint_y: None
+                        height: dp(32)
+                        spacing: dp(10)
+                        BoxLayout:
+                            size_hint_x: 0.5
+                            padding: dp(8), dp(4)
+                            canvas.before:
+                                Color:
+                                    rgba: 0.1, 0.5, 0.3, 0.15
+                                RoundedRectangle:
+                                    pos: self.pos
+                                    size: self.size
+                                    radius: [dp(6)]
+                            Label:
+                                text: 'Price: ' + root.p_avg_price
+                                font_size: sp(12)
+                                bold: True
+                                color: 0.1, 0.5, 0.3, 1
+                                text_size: self.size
+                                halign: 'left'
+                                valign: 'middle'
+                        BoxLayout:
+                            size_hint_x: 0.5
+                            padding: dp(8), dp(4)
+                            canvas.before:
+                                Color:
+                                    rgba: root.p_rarity_color[0], root.p_rarity_color[1], root.p_rarity_color[2], 0.15
+                                RoundedRectangle:
+                                    pos: self.pos
+                                    size: self.size
+                                    radius: [dp(6)]
+                            Label:
+                                text: root.p_rarity_text
+                                font_size: sp(12)
+                                bold: True
+                                color: root.p_rarity_color
+                                text_size: self.size
+                                halign: 'left'
+                                valign: 'middle'
                     Label:
                         text: root.dup_count_text
                         font_size: sp(12)
@@ -1460,6 +1531,24 @@ ScreenManager:
                     height: dp(70)
                     font_size: sp(14)
                     padding: dp(10), dp(9)
+                TextInput:
+                    id: input_price
+                    hint_text: 'Average Price (USD)'
+                    multiline: False
+                    size_hint_y: None
+                    height: dp(42)
+                    font_size: sp(14)
+                    padding: dp(10), dp(9)
+                    input_filter: 'float'
+                TextInput:
+                    id: input_rarity
+                    hint_text: 'Rarity Score (1-5)'
+                    multiline: False
+                    size_hint_y: None
+                    height: dp(42)
+                    font_size: sp(14)
+                    padding: dp(10), dp(9)
+                    input_filter: 'float'
                 ClickableBox:
                     size_hint_y: None
                     height: dp(46)
@@ -2143,11 +2232,13 @@ class MainScreen(Screen):
         if self.current_tab == "phones":
             for p in items:
                 img = get_img_path_for_phone(p["id"], app.db) if p.get("has_image") else defimg
+                price = p.get("avg_price", 0) or 0
                 card = PhoneCard(phone_id=p["id"], phone_name=p["name"],
                     phone_date=p.get("release_date","") or "",
                     phone_appear=p.get("appearance_condition","") or "",
                     phone_working=p.get("working_condition","") or "",
-                    phone_image=img or defimg)
+                    phone_image=img or defimg,
+                    phone_price=f"${price:.0f}" if price > 0 else "")
                 card.bind(on_release=partial(self._open_phone, p["id"]))
                 grid.add_widget(card)
         elif self.current_tab == "wall":
@@ -2303,6 +2394,9 @@ class PhoneDetailScreen(Screen):
     p_appear = StringProperty(""); p_working = StringProperty(""); p_remarks = StringProperty("")
     no_fw_text = StringProperty("")
     dup_count_text = StringProperty("")
+    p_avg_price = StringProperty("")
+    p_rarity_text = StringProperty("")
+    p_rarity_color = ListProperty([0.5, 0.5, 0.5, 1])
 
     def load_phone(self, pid):
         app = App.get_running_app()
@@ -2313,6 +2407,12 @@ class PhoneDetailScreen(Screen):
         self.p_appear = p.get("appearance_condition","") or ""
         self.p_working = p.get("working_condition","") or ""
         r = p.get("remarks","") or ""; self.p_remarks = "" if r in ("None","none") else r
+        # Price and rarity
+        avg_p = p.get("avg_price", 0) or 0
+        rarity = p.get("rarity_score", 0) or 0
+        self.p_avg_price = f"${avg_p:.0f}" if avg_p > 0 else "N/A"
+        self.p_rarity_text = rarity_label(rarity)
+        self.p_rarity_color = list(rarity_color(rarity))
         # Check if any phone with same name is Fully Working
         try:
             cur = app.db.conn.execute(
@@ -2864,13 +2964,15 @@ class AddPhoneScreen(Screen):
 
     def _clear(self, *a):
         try:
-            for fid in ["input_id","input_name","input_date","input_appear","input_working","input_remarks"]:
+            for fid in ["input_id","input_name","input_date","input_appear","input_working","input_remarks","input_price","input_rarity"]:
                 self.ids[fid].text = ""
             self.ids.preview_img.source = get_default_image_path(get_app_path())
             # CHANGE 1: Reset readonly for new phone mode
             self.ids.input_id.readonly = False
             self.ids.input_id.background_color = (1, 1, 1, 1)
         except: pass
+        self._auto_price = 0
+        self._auto_rarity = 0
         # CHANGE 3: Populate condition spinners
         Clock.schedule_once(lambda dt: self._populate_condition_spinners(), 0.1)
 
@@ -2904,22 +3006,40 @@ class AddPhoneScreen(Screen):
             # CHANGE 1: Make ID readonly in edit mode
             self.ids.input_id.readonly = True
             self.ids.input_id.background_color = (0.9, 0.9, 0.9, 1)
+            # Price and rarity
+            avg_p = p.get("avg_price", 0) or 0
+            rar = p.get("rarity_score", 0) or 0
+            self.ids.input_price.text = str(avg_p) if avg_p > 0 else ""
+            self.ids.input_rarity.text = str(rar) if rar > 0 else ""
+            self._auto_price = avg_p
+            self._auto_rarity = rar
         except: pass
         # CHANGE 3: Populate condition spinners after filling
         Clock.schedule_once(lambda dt: self._populate_condition_spinners(), 0.1)
 
+    _auto_price = 0
+    _auto_rarity = 0
+
     def auto_fill_from_name(self):
-        """CHANGE 2: Auto-fill release date from existing phone with same name."""
+        """Auto-fill release date, price, rarity from existing phone with same name."""
         app = App.get_running_app()
         name = self.ids.input_name.text.strip()
         if not name or self.edit_mode:
             return
         try:
             cur = app.db.conn.execute(
-                "SELECT release_date FROM phones WHERE TRIM(name) = TRIM(?) LIMIT 1", (name,))
+                "SELECT release_date, avg_price, rarity_score FROM phones WHERE TRIM(name) = TRIM(?) LIMIT 1", (name,))
             row = cur.fetchone()
-            if row and row[0]:
-                self.ids.input_date.text = str(row[0])
+            if row:
+                if row[0]: self.ids.input_date.text = str(row[0])
+                self._auto_price = float(row[1] or 0)
+                self._auto_rarity = float(row[2] or 0)
+                try:
+                    if self._auto_price > 0:
+                        self.ids.input_price.text = str(self._auto_price)
+                    if self._auto_rarity > 0:
+                        self.ids.input_rarity.text = str(self._auto_rarity)
+                except: pass
         except: pass
 
     def _populate_condition_spinners(self):
@@ -2979,6 +3099,16 @@ class AddPhoneScreen(Screen):
             if existing:
                 app.show_toast("ID already exists! Change the ID.")
                 return
+        # Read price and rarity from form or auto-fill
+        try:
+            price_text = self.ids.input_price.text.strip()
+            price_val = float(price_text) if price_text else self._auto_price
+        except: price_val = self._auto_price
+        try:
+            rarity_text = self.ids.input_rarity.text.strip()
+            rarity_val = float(rarity_text) if rarity_text else self._auto_rarity
+        except: rarity_val = self._auto_rarity
+
         if self._save_to_wall:
             app.db.add_wall_item(item_id=pid, name=name,
                 release_date=self.ids.input_date.text.strip(),
@@ -2995,7 +3125,8 @@ class AddPhoneScreen(Screen):
                 appearance=self.ids.input_appear.text.strip(),
                 working=self.ids.input_working.text.strip(),
                 remarks=self.ids.input_remarks.text.strip(),
-                image_bytes=self._image_bytes)
+                image_bytes=self._image_bytes,
+                avg_price=price_val, rarity_score=rarity_val)
             clear_item_cache(f"p_{pid}", get_app_path())
             app.root.get_screen("main")._data_loaded = False
             app.show_toast("Phone saved!"); self.go_back()
@@ -3603,6 +3734,68 @@ class ReportScreen(Screen):
         except:
             pass
 
+        # Price and Rarity report sections
+        try:
+            total_value = 0
+            priced_phones = []
+            no_price_phones = []
+            no_rarity_phones = []
+            rarity_sum = 0
+            rarity_count = 0
+            for p in all_phones:
+                ap = p.get('avg_price', 0) or 0
+                rs = p.get('rarity_score', 0) or 0
+                total_value += ap
+                if ap > 0:
+                    priced_phones.append(p)
+                else:
+                    no_price_phones.append(p)
+                if rs > 0:
+                    rarity_sum += rs
+                    rarity_count += 1
+                else:
+                    no_rarity_phones.append(p)
+
+            avg_phone_price = (total_value / len(priced_phones)) if priced_phones else 0
+            avg_rarity = (rarity_sum / rarity_count) if rarity_count > 0 else 0
+
+            sec("Collection Value")
+            g.add_widget(stat_card_plain("Total Collection Value", f"${total_value:,.0f}", (0.1, 0.5, 0.3, 1)))
+            g.add_widget(stat_card_plain("Average Phone Price", f"${avg_phone_price:,.0f}" if avg_phone_price > 0 else "N/A", (0.2, 0.45, 0.25, 1)))
+            g.add_widget(stat_card_plain("Average Rarity", f"{avg_rarity:.1f} - {rarity_label(avg_rarity)}" if avg_rarity > 0 else "N/A", (0.5, 0.2, 0.5, 1)))
+
+            if no_price_phones:
+                sec(f"No Pricing ({len(no_price_phones)})")
+                for np_phone in no_price_phones[:30]:
+                    np_name = np_phone.get('name', 'Unknown')
+                    row = ClickableBox(size_hint_y=None, height=dp(24), padding=(dp(8),dp(1)))
+                    with row.canvas.before:
+                        Color(1, 0.96, 0.9, 1)
+                        row._bg = RoundedRectangle(pos=row.pos, size=row.size, radius=[dp(4)])
+                    row.bind(pos=lambda w,v: setattr(w._bg,"pos",v), size=lambda w,v: setattr(w._bg,"size",v))
+                    row.add_widget(Label(text=str(np_name), font_size=sp(12), color=(0.6,0.4,0.1,1),
+                        text_size=(dp(250),None), halign="left"))
+                    mn = str(np_name)
+                    row.bind(on_release=lambda *a, m=mn: self._nav_search(m))
+                    g.add_widget(row)
+
+            if no_rarity_phones:
+                sec(f"No Rarity Score ({len(no_rarity_phones)})")
+                for nr_phone in no_rarity_phones[:30]:
+                    nr_name = nr_phone.get('name', 'Unknown')
+                    row = ClickableBox(size_hint_y=None, height=dp(24), padding=(dp(8),dp(1)))
+                    with row.canvas.before:
+                        Color(0.95, 0.92, 1, 1)
+                        row._bg = RoundedRectangle(pos=row.pos, size=row.size, radius=[dp(4)])
+                    row.bind(pos=lambda w,v: setattr(w._bg,"pos",v), size=lambda w,v: setattr(w._bg,"size",v))
+                    row.add_widget(Label(text=str(nr_name), font_size=sp(12), color=(0.4,0.2,0.6,1),
+                        text_size=(dp(250),None), halign="left"))
+                    mn2 = str(nr_name)
+                    row.bind(on_release=lambda *a, m=mn2: self._nav_search(m))
+                    g.add_widget(row)
+        except:
+            pass
+
         g.add_widget(Widget(size_hint_y=None, height=dp(30)))
 
     def go_back(self):
@@ -3792,7 +3985,9 @@ class NokiaStorageApp(App):
                     for i in data:
                         row = {"id":str(i[0]),"name":str(i[1]),"release_date":str(i[2]),
                                "appearance_condition":str(i[3]),"working_condition":str(i[4]),
-                               "remarks":str(i[5]) if i[5] else ""}
+                               "remarks":str(i[5]) if i[5] else "",
+                               "avg_price": float(i[6]) if len(i) > 6 else 0,
+                               "rarity_score": float(i[7]) if len(i) > 7 else 0}
                         if str(i[0]).startswith("XXXX"):
                             wall_rows.append(row)
                         else:

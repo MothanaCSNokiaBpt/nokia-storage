@@ -33,6 +33,8 @@ class NokiaDatabase:
                 remarks TEXT,
                 image_path TEXT,
                 image_data BLOB,
+                avg_price REAL DEFAULT 0,
+                rarity_score REAL DEFAULT 0,
                 created_at TEXT DEFAULT (datetime('now'))
             );
 
@@ -102,6 +104,14 @@ class NokiaDatabase:
                 self.conn.execute("ALTER TABLE spare_parts ADD COLUMN image_data BLOB")
             except Exception:
                 pass
+        # Add price/rarity columns if upgrading
+        for col in ['avg_price', 'rarity_score']:
+            try:
+                self.conn.execute(f"SELECT {col} FROM phones LIMIT 1")
+            except Exception:
+                try:
+                    self.conn.execute(f"ALTER TABLE phones ADD COLUMN {col} REAL DEFAULT 0")
+                except: pass
         self.conn.commit()
 
     # ── Image helpers ───────────────────────────────────────────
@@ -150,7 +160,8 @@ class NokiaDatabase:
     # ── Phone CRUD ──────────────────────────────────────────────
 
     def add_phone(self, phone_id, name, release_date="", appearance="",
-                  working="", remarks="", image_path="", image_bytes=None):
+                  working="", remarks="", image_path="", image_bytes=None,
+                  avg_price=0, rarity_score=0):
         if not image_bytes and image_path:
             image_bytes = self.read_image_file(image_path)
             if image_bytes:
@@ -158,17 +169,20 @@ class NokiaDatabase:
         self.conn.execute(
             """INSERT OR REPLACE INTO phones
                (id, name, release_date, appearance_condition,
-                working_condition, remarks, image_path, image_data, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                working_condition, remarks, image_path, image_data,
+                avg_price, rarity_score, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (phone_id, name, release_date, appearance, working,
              remarks, image_path or "", image_bytes,
+             avg_price or 0, rarity_score or 0,
              datetime.now().isoformat())
         )
         self.conn.commit()
 
     def update_phone(self, phone_id, **kwargs):
         allowed = {"name", "release_date", "appearance_condition",
-                    "working_condition", "remarks", "image_path"}
+                    "working_condition", "remarks", "image_path",
+                    "avg_price", "rarity_score"}
         fields = {k: v for k, v in kwargs.items() if k in allowed}
         # Handle image update
         if "image_path" in kwargs:
@@ -201,7 +215,8 @@ class NokiaDatabase:
         cur = self.conn.execute(
             """SELECT id, name, release_date, appearance_condition,
                       working_condition, remarks, image_path,
-                      CASE WHEN image_data IS NOT NULL THEN 1 ELSE 0 END as has_image
+                      CASE WHEN image_data IS NOT NULL THEN 1 ELSE 0 END as has_image,
+                      avg_price, rarity_score
                FROM phones ORDER BY name, id"""
         )
         return [dict(r) for r in cur.fetchall()]
@@ -221,7 +236,8 @@ class NokiaDatabase:
         cur = self.conn.execute(
             """SELECT id, name, release_date, appearance_condition,
                       working_condition, remarks, image_path,
-                      CASE WHEN image_data IS NOT NULL THEN 1 ELSE 0 END as has_image
+                      CASE WHEN image_data IS NOT NULL THEN 1 ELSE 0 END as has_image,
+                      avg_price, rarity_score
                FROM phones
                WHERE name LIKE ? OR id LIKE ? OR release_date LIKE ?
                ORDER BY name, id""",
@@ -481,13 +497,16 @@ class NokiaDatabase:
                 self.conn.execute(
                     """INSERT OR IGNORE INTO phones
                        (id, name, release_date, appearance_condition,
-                        working_condition, remarks, image_path, created_at)
-                       VALUES (?, ?, ?, ?, ?, ?, '', ?)""",
+                        working_condition, remarks, image_path,
+                        avg_price, rarity_score, created_at)
+                       VALUES (?, ?, ?, ?, ?, ?, '', ?, ?, ?)""",
                     (str(row.get("id", "")), str(row.get("name", "")),
                      str(row.get("release_date", "")),
                      str(row.get("appearance_condition", "")),
                      str(row.get("working_condition", "")),
                      str(row.get("remarks", "")),
+                     float(row.get("avg_price", 0) or 0),
+                     float(row.get("rarity_score", 0) or 0),
                      datetime.now().isoformat())
                 )
                 count += 1
