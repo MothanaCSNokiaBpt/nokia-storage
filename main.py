@@ -134,12 +134,11 @@ def rarity_label(score):
     else: return "Extremely rare"
 
 def rarity_stars(score):
-    """Return golden star string: full stars + half star."""
+    """Return star string using simple ASCII."""
     if score <= 0: return ""
     full = int(score)
     half = 1 if (score - full) >= 0.5 else 0
-    empty = 5 - full - half
-    return "\u2605" * full + ("\u00BD" if half else "") + "\u2606" * empty
+    return "*" * full + ("+" if half else "")
 
 def rarity_color(score):
     if score <= 1: return (0.5, 0.5, 0.5, 1)      # gray
@@ -513,12 +512,12 @@ ScreenManager:
                 on_press: root.show_menu()
         SearchBar:
             id: search_bar
-        # Sort & Filter bar
+        # Sort row
         BoxLayout:
             size_hint_y: None
-            height: dp(38)
-            padding: dp(8), dp(3)
-            spacing: dp(6)
+            height: dp(34)
+            padding: dp(6), dp(2)
+            spacing: dp(4)
             canvas.before:
                 Color:
                     rgba: 0.94, 0.95, 0.98, 1
@@ -530,19 +529,53 @@ ScreenManager:
                 text: 'Sort: Name'
                 values: ['Sort: Name', 'Sort: ID', 'Sort: Year']
                 size_hint_x: None
-                width: dp(100)
-                font_size: sp(12)
+                width: dp(95)
+                font_size: sp(11)
                 background_color: 0, 0.314, 0.784, 1
                 color: 1, 1, 1, 1
                 option_cls: 'BlueSpinnerOption'
                 on_text: root.apply_sort_filter()
+            CheckBox:
+                id: sort_desc_check
+                size_hint_x: None
+                width: dp(30)
+                active: False
+                on_active: root.apply_sort_filter()
+            Label:
+                text: 'DESC' if sort_desc_check.active else 'ASC'
+                size_hint_x: None
+                width: dp(32)
+                font_size: sp(10)
+                color: 0.3, 0.3, 0.3, 1
+            Spinner:
+                id: year_spinner
+                text: 'All Years'
+                values: ['All Years']
+                size_hint_x: None
+                width: dp(85)
+                font_size: sp(11)
+                background_color: 0, 0.314, 0.784, 1
+                color: 1, 1, 1, 1
+                option_cls: 'BlueSpinnerOption'
+                on_text: root.apply_sort_filter()
+        # Filter row
+        BoxLayout:
+            size_hint_y: None
+            height: dp(34)
+            padding: dp(6), dp(2)
+            spacing: dp(4)
+            canvas.before:
+                Color:
+                    rgba: 0.92, 0.93, 0.96, 1
+                Rectangle:
+                    pos: self.pos
+                    size: self.size
             Spinner:
                 id: filter_field
                 text: 'Filter: All'
                 values: ['Filter: All', 'Filter: Appearance', 'Filter: Working', 'Filter: With Images', 'Filter: Without Images', 'Filter: Unique Models']
-                size_hint_x: None
-                width: dp(120)
-                font_size: sp(12)
+                size_hint_x: 0.45
+                font_size: sp(11)
                 background_color: 0.2, 0.2, 0.25, 1
                 color: 1, 1, 1, 1
                 option_cls: 'BlueSpinnerOption'
@@ -551,39 +584,9 @@ ScreenManager:
                 id: filter_value_spinner
                 text: 'All'
                 values: ['All']
-                size_hint_x: None
-                width: dp(120)
+                size_hint_x: 0.55
                 font_size: sp(11)
                 background_color: 0.2, 0.2, 0.25, 1
-                color: 1, 1, 1, 1
-                option_cls: 'BlueSpinnerOption'
-                on_text: root.apply_sort_filter()
-        # Year slider row
-        BoxLayout:
-            size_hint_y: None
-            height: dp(34)
-            padding: dp(8), dp(2)
-            spacing: dp(4)
-            canvas.before:
-                Color:
-                    rgba: 0.92, 0.93, 0.96, 1
-                Rectangle:
-                    pos: self.pos
-                    size: self.size
-            Label:
-                text: 'Year:'
-                size_hint_x: None
-                width: dp(34)
-                font_size: sp(11)
-                color: 0.3, 0.3, 0.3, 1
-            Spinner:
-                id: year_spinner
-                text: 'All Years'
-                values: ['All Years']
-                size_hint_x: None
-                width: dp(110)
-                font_size: sp(11)
-                background_color: 0, 0.314, 0.784, 1
                 color: 1, 1, 1, 1
                 option_cls: 'BlueSpinnerOption'
                 on_text: root.apply_sort_filter()
@@ -1994,9 +1997,14 @@ class MainScreen(Screen):
     _total_items = 0
     _is_search = False
     _data_loaded = False
-    _sort_ascending = True
-    _last_sort_field = ""
-    _filter_values_cache = {}  # Cache for unique filter values
+    _filter_values_cache = {}
+
+    def _is_desc(self):
+        """Check if DESC checkbox is active."""
+        try:
+            return self.ids.sort_desc_check.active
+        except:
+            return False
 
     def on_enter(self):
         if not self._data_loaded:
@@ -2095,21 +2103,10 @@ class MainScreen(Screen):
             if ymin > ymax:
                 # Swap them visually
                 pass
-            self.ids.year_range_label.text = f'{ymin} - {ymax}'
+            pass  # year range label removed
         except:
             pass
 
-        # Toggle sort direction if same sort value selected again
-        try:
-            current_sort = self.ids.sort_spinner.text
-            sort_field = current_sort.replace('Sort: ', '')
-            if sort_field == self._last_sort_field:
-                self._sort_ascending = not self._sort_ascending
-            else:
-                self._sort_ascending = True
-                self._last_sort_field = sort_field
-        except:
-            pass
         self._current_page = 0
         self._apply_sort_filter_internal()
 
@@ -2195,13 +2192,13 @@ class MainScreen(Screen):
             sort_by = self.ids.sort_spinner.text.replace('Sort: ', '')
             if self.current_tab in ("phones", "wall"):
                 if sort_by == 'Name':
-                    items.sort(key=lambda x: (x.get('name', '') or '').lower(), reverse=not self._sort_ascending)
+                    items.sort(key=lambda x: (x.get('name', '') or '').lower(), reverse=self._is_desc())
                 elif sort_by == 'ID':
-                    items.sort(key=lambda x: x.get('id', '') or '', reverse=not self._sort_ascending)
+                    items.sort(key=lambda x: x.get('id', '') or '', reverse=self._is_desc())
                 elif sort_by == 'Year':
-                    items.sort(key=lambda x: x.get('release_date', '') or '', reverse=not self._sort_ascending)
+                    items.sort(key=lambda x: x.get('release_date', '') or '', reverse=self._is_desc())
             else:
-                items.sort(key=lambda x: (x.get('name', '') or '').lower(), reverse=not self._sort_ascending)
+                items.sort(key=lambda x: (x.get('name', '') or '').lower(), reverse=self._is_desc())
         except: pass
 
         self._all_items = items
@@ -2232,7 +2229,7 @@ class MainScreen(Screen):
             lt = "wall"
         else:
             lt = "parts"
-        sort_dir = "ASC" if self._sort_ascending else "DESC"
+        sort_dir = "DESC" if self._is_desc() else "ASC"
         self.ids.count_label.text = f"{self._total_items} {lt} | Page {cp}/{tp} | {sort_dir}"
         defimg = get_default_image_path(get_app_path())
 
@@ -2347,8 +2344,8 @@ class MainScreen(Screen):
         """Reset everything and go to main screen."""
         self._data_loaded = False
         self._current_page = 0
-        self._sort_ascending = True
-        self._last_sort_field = ""
+        try: self.ids.sort_desc_check.active = False
+        except: pass
         try:
             self.ids.search_bar.ids.search_input.text = ""
             self.ids.filter_value_spinner.text = "All"
@@ -3980,13 +3977,7 @@ class NokiaStorageApp(App):
     def _perms(self):
         if platform == "android":
             try:
-                perms = [Permission.CAMERA, Permission.READ_EXTERNAL_STORAGE, Permission.WRITE_EXTERNAL_STORAGE]
-                # Android 13+ requires READ_MEDIA_IMAGES
-                try:
-                    perms.append("android.permission.READ_MEDIA_IMAGES")
-                    perms.append("android.permission.READ_MEDIA_VIDEO")
-                except: pass
-                request_permissions(perms)
+                request_permissions([Permission.CAMERA, Permission.READ_EXTERNAL_STORAGE, Permission.WRITE_EXTERNAL_STORAGE])
             except: pass
 
     def _load_initial(self):
