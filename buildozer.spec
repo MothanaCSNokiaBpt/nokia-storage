@@ -12,7 +12,7 @@ requirements = python3,kivy==2.3.0,plyer,pyjnius,android,androidstorage4kivy
 orientation = portrait
 fullscreen = 0
 
-android.permissions = INTERNET,CAMERA,READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE,READ_MEDIA_IMAGES
+android.permissions = INTERNET,CAMERA,READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE,READ_MEDIA_IMAGES,READ_MEDIA_VIDEO
 
 android.api = 33
 android.minapi = 21

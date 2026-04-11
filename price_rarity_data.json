@@ -1,0 +1,1182 @@
+{
+  "1100": {
+    "price": 30.0,
+    "rarity": 1.0
+  },
+  "1101": {
+    "price": 30.0,
+    "rarity": 2.0
+  },
+  "1108": {
+    "price": 30.0,
+    "rarity": 3.0
+  },
+  "111": {
+    "price": 30.0,
+    "rarity": 2.0
+  },
+  "1110i": {
+    "price": 30.0,
+    "rarity": 2.0
+  },
+  "1112": {
+    "price": 30.0,
+    "rarity": 1.0
+  },
+  "1200": {
+    "price": 30.0,
+    "rarity": 1.0
+  },
+  "1202": {
+    "price": 30.0,
+    "rarity": 1.0
+  },
+  "1203": {
+    "price": 30.0,
+    "rarity": 1.0
+  },
+  "1208": {
+    "price": 30.0,
+    "rarity": 1.0
+  },
+  "1209": {
+    "price": 30.0,
+    "rarity": 1.0
+  },
+  "1600": {
+    "price": 30.0,
+    "rarity": 1.0
+  },
+  "1616": {
+    "price": 30.0,
+    "rarity": 1.0
+  },
+  "1650": {
+    "price": 30.0,
+    "rarity": 1.0
+  },
+  "1800": {
+    "price": 30.0,
+    "rarity": 1.0
+  },
+  "202": {
+    "price": 30.0,
+    "rarity": 1.0
+  },
+  "205": {
+    "price": 30.0,
+    "rarity": 1.0
+  },
+  "210": {
+    "price": 30.0,
+    "rarity": 1.0
+  },
+  "2100": {
+    "price": 30.0,
+    "rarity": 1.0
+  },
+  "2115i": {
+    "price": 30.0,
+    "rarity": 1.0
+  },
+  "2126": {
+    "price": 30.0,
+    "rarity": 1.0
+  },
+  "2160": {
+    "price": 30.0,
+    "rarity": 1.0
+  },
+  "2220s": {
+    "price": 30.0,
+    "rarity": 1.0
+  },
+  "2260": {
+    "price": 30.0,
+    "rarity": 1.0
+  },
+  "2285": {
+    "price": 30.0,
+    "rarity": 1.0
+  },
+  "2300": {
+    "price": 30.0,
+    "rarity": 1.0
+  },
+  "2310": {
+    "price": 30.0,
+    "rarity": 1.0
+  },
+  "2330c": {
+    "price": 30.0,
+    "rarity": 1.0
+  },
+  "252": {
+    "price": 30.0,
+    "rarity": 1.0
+  },
+  "2600": {
+    "price": 30.0,
+    "rarity": 1.0
+  },
+  "2600c": {
+    "price": 30.0,
+    "rarity": 1.0
+  },
+  "2610": {
+    "price": 30.0,
+    "rarity": 1.0
+  },
+  "2630": {
+    "price": 30.0,
+    "rarity": 1.0
+  },
+  "2650": {
+    "price": 30.0,
+    "rarity": 1.0
+  },
+  "2680s": {
+    "price": 30.0,
+    "rarity": 1.0
+  },
+  "2690c": {
+    "price": 30.0,
+    "rarity": 1.0
+  },
+  "2700c": {
+    "price": 30.0,
+    "rarity": 1.0
+  },
+  "2720a": {
+    "price": 30.0,
+    "rarity": 1.0
+  },
+  "2760h": {
+    "price": 30.0,
+    "rarity": 1.0
+  },
+  "300": {
+    "price": 30.0,
+    "rarity": 1.0
+  },
+  "302": {
+    "price": 30.0,
+    "rarity": 1.0
+  },
+  "306": {
+    "price": 30.0,
+    "rarity": 1.0
+  },
+  "309": {
+    "price": 30.0,
+    "rarity": 1.0
+  },
+  "3100": {
+    "price": 30.0,
+    "rarity": 1.0
+  },
+  "3105": {
+    "price": 30.0,
+    "rarity": 1.0
+  },
+  "3109c": {
+    "price": 30.0,
+    "rarity": 1.0
+  },
+  "3110c": {
+    "price": 30.0,
+    "rarity": 1.0
+  },
+  "3120": {
+    "price": 30.0,
+    "rarity": 1.0
+  },
+  "3120 Gaming": {
+    "price": 200.0,
+    "rarity": 5.0
+  },
+  "3120c": {
+    "price": 30.0,
+    "rarity": 1.0
+  },
+  "3200": {
+    "price": 30.0,
+    "rarity": 1.0
+  },
+  "3200b": {
+    "price": 30.0,
+    "rarity": 2.0
+  },
+  "3210": {
+    "price": 40.0,
+    "rarity": 2.0
+  },
+  "3220": {
+    "price": 35.0,
+    "rarity": 2.0
+  },
+  "3230": {
+    "price": 50.0,
+    "rarity": 2.0
+  },
+  "3250": {
+    "price": 50.0,
+    "rarity": 2.0
+  },
+  "3285v": {
+    "price": 50.0,
+    "rarity": 3.0
+  },
+  "3300a": {
+    "price": 50.0,
+    "rarity": 4.0
+  },
+  "3300b": {
+    "price": 70.0,
+    "rarity": 4.5
+  },
+  "3310": {
+    "price": 25.0,
+    "rarity": 1.0
+  },
+  "3315": {
+    "price": 25.0,
+    "rarity": 2.0
+  },
+  "3330": {
+    "price": 30.0,
+    "rarity": 2.0
+  },
+  "3360": {
+    "price": 30.0,
+    "rarity": 2.0
+  },
+  "3390b": {
+    "price": 30.0,
+    "rarity": 2.0
+  },
+  "3410": {
+    "price": 35.0,
+    "rarity": 2.0
+  },
+  "3510": {
+    "price": 30.0,
+    "rarity": 1.0
+  },
+  "3510i": {
+    "price": 30.0,
+    "rarity": 1.0
+  },
+  "3560": {
+    "price": 30.0,
+    "rarity": 1.0
+  },
+  "3587i": {
+    "price": 40.0,
+    "rarity": 2.0
+  },
+  "3589i": {
+    "price": 40.0,
+    "rarity": 2.0
+  },
+  "3590": {
+    "price": 40.0,
+    "rarity": 2.0
+  },
+  "3595": {
+    "price": 40.0,
+    "rarity": 2.0
+  },
+  "3600s": {
+    "price": 40.0,
+    "rarity": 2.0
+  },
+  "3610": {
+    "price": 50.0,
+    "rarity": 2.0
+  },
+  "3610a": {
+    "price": 30.0,
+    "rarity": 2.0
+  },
+  "3650": {
+    "price": 60.0,
+    "rarity": 3.0
+  },
+  "3660": {
+    "price": 60.0,
+    "rarity": 3.0
+  },
+  "3710a": {
+    "price": 40.0,
+    "rarity": 2.0
+  },
+  "500": {
+    "price": 25.0,
+    "rarity": 2.0
+  },
+  "5000": {
+    "price": 40.0,
+    "rarity": 3.0
+  },
+  "5030c": {
+    "price": 25.0,
+    "rarity": 2.0
+  },
+  "5100": {
+    "price": 50.0,
+    "rarity": 4.0
+  },
+  "5125": {
+    "price": 35.0,
+    "rarity": 3.0
+  },
+  "5130": {
+    "price": 35.0,
+    "rarity": 2.0
+  },
+  "5130c": {
+    "price": 30.0,
+    "rarity": 2.0
+  },
+  "5140i": {
+    "price": 50.0,
+    "rarity": 4.0
+  },
+  "5160i": {
+    "price": 30.0,
+    "rarity": 2.0
+  },
+  "5165": {
+    "price": 30.0,
+    "rarity": 2.0
+  },
+  "520": {
+    "price": 30.0,
+    "rarity": 2.0
+  },
+  "5200": {
+    "price": 40.0,
+    "rarity": 2.0
+  },
+  "5210": {
+    "price": 50.0,
+    "rarity": 2.0
+  },
+  "5220": {
+    "price": 30.0,
+    "rarity": 2.0
+  },
+  "5233": {
+    "price": 25.0,
+    "rarity": 2.0
+  },
+  "5250": {
+    "price": 25.0,
+    "rarity": 2.0
+  },
+  "5300": {
+    "price": 40.0,
+    "rarity": 2.0
+  },
+  "5310": {
+    "price": 30.0,
+    "rarity": 2.0
+  },
+  "5320d": {
+    "price": 30.0,
+    "rarity": 2.0
+  },
+  "5330": {
+    "price": 30.0,
+    "rarity": 2.0
+  },
+  "5500d": {
+    "price": 50.0,
+    "rarity": 3.0
+  },
+  "5510": {
+    "price": 70.0,
+    "rarity": 3.5
+  },
+  "5530": {
+    "price": 35.0,
+    "rarity": 2.0
+  },
+  "5610d": {
+    "price": 30.0,
+    "rarity": 2.0
+  },
+  "5630d": {
+    "price": 30.0,
+    "rarity": 2.0
+  },
+  "5700": {
+    "price": 70.0,
+    "rarity": 4.0
+  },
+  "5710": {
+    "price": 25.0,
+    "rarity": 1.0
+  },
+  "5730": {
+    "price": 50.0,
+    "rarity": 4.0
+  },
+  "5800": {
+    "price": 30.0,
+    "rarity": 2.0
+  },
+  "6010": {
+    "price": 35.0,
+    "rarity": 2.5
+  },
+  "6016i": {
+    "price": 35.0,
+    "rarity": 2.5
+  },
+  "6019i": {
+    "price": 35.0,
+    "rarity": 2.5
+  },
+  "6020": {
+    "price": 35.0,
+    "rarity": 2.5
+  },
+  "6021": {
+    "price": 35.0,
+    "rarity": 2.5
+  },
+  "6030": {
+    "price": 35.0,
+    "rarity": 2.5
+  },
+  "6060": {
+    "price": 35.0,
+    "rarity": 2.5
+  },
+  "6070": {
+    "price": 35.0,
+    "rarity": 2.5
+  },
+  "6080": {
+    "price": 35.0,
+    "rarity": 2.5
+  },
+  "6085": {
+    "price": 35.0,
+    "rarity": 2.5
+  },
+  "6088": {
+    "price": 35.0,
+    "rarity": 2.5
+  },
+  "6100": {
+    "price": 35.0,
+    "rarity": 2.5
+  },
+  "6103": {
+    "price": 35.0,
+    "rarity": 2.5
+  },
+  "6103b": {
+    "price": 35.0,
+    "rarity": 2.5
+  },
+  "6108": {
+    "price": 80.0,
+    "rarity": 4.0
+  },
+  "6110 Navigator": {
+    "price": 50.0,
+    "rarity": 3.0
+  },
+  "6111": {
+    "price": 35.0,
+    "rarity": 2.5
+  },
+  "6120c": {
+    "price": 30.0,
+    "rarity": 2.5
+  },
+  "6124c": {
+    "price": 30.0,
+    "rarity": 2.5
+  },
+  "6133h": {
+    "price": 40.0,
+    "rarity": 2.5
+  },
+  "6151": {
+    "price": 30.0,
+    "rarity": 2.5
+  },
+  "6161": {
+    "price": 40.0,
+    "rarity": 2.5
+  },
+  "6161i": {
+    "price": 40.0,
+    "rarity": 2.5
+  },
+  "6170": {
+    "price": 50.0,
+    "rarity": 2.5
+  },
+  "6200": {
+    "price": 50.0,
+    "rarity": 3.0
+  },
+  "6210": {
+    "price": 40.0,
+    "rarity": 2.0
+  },
+  "6210s Navigator": {
+    "price": 50.0,
+    "rarity": 2.0
+  },
+  "6220": {
+    "price": 40.0,
+    "rarity": 2.0
+  },
+  "6220c": {
+    "price": 35.0,
+    "rarity": 2.0
+  },
+  "6225": {
+    "price": 40.0,
+    "rarity": 2.0
+  },
+  "6230": {
+    "price": 40.0,
+    "rarity": 2.0
+  },
+  "6230i": {
+    "price": 40.0,
+    "rarity": 1.0
+  },
+  "6233": {
+    "price": 30.0,
+    "rarity": 2.0
+  },
+  "6235i": {
+    "price": 40.0,
+    "rarity": 2.0
+  },
+  "6250": {
+    "price": 120.0,
+    "rarity": 5.0
+  },
+  "6255i": {
+    "price": 50.0,
+    "rarity": 2.0
+  },
+  "6260": {
+    "price": 50.0,
+    "rarity": 2.0
+  },
+  "6260s": {
+    "price": 40.0,
+    "rarity": 2.0
+  },
+  "6270": {
+    "price": 40.0,
+    "rarity": 2.0
+  },
+  "6280": {
+    "price": 40.0,
+    "rarity": 2.0
+  },
+  "6288": {
+    "price": 40.0,
+    "rarity": 2.0
+  },
+  "6300": {
+    "price": 30.0,
+    "rarity": 1.0
+  },
+  "6303c": {
+    "price": 25.0,
+    "rarity": 1.0
+  },
+  "6303cl": {
+    "price": 25.0,
+    "rarity": 1.0
+  },
+  "6310": {
+    "price": 40.0,
+    "rarity": 2.5
+  },
+  "6310i": {
+    "price": 40.0,
+    "rarity": 2.5
+  },
+  "6315i": {
+    "price": 40.0,
+    "rarity": 3.0
+  },
+  "6360": {
+    "price": 40.0,
+    "rarity": 2.5
+  },
+  "6500c": {
+    "price": 50.0,
+    "rarity": 2.5
+  },
+  "6500s": {
+    "price": 40.0,
+    "rarity": 2.5
+  },
+  "6510": {
+    "price": 50.0,
+    "rarity": 2.5
+  },
+  "6560": {
+    "price": 40.0,
+    "rarity": 2.5
+  },
+  "6600": {
+    "price": 50.0,
+    "rarity": 1.0
+  },
+  "6600f": {
+    "price": 40.0,
+    "rarity": 2.5
+  },
+  "6600s": {
+    "price": 50.0,
+    "rarity": 2.5
+  },
+  "6610": {
+    "price": 40.0,
+    "rarity": 2.0
+  },
+  "6610i": {
+    "price": 40.0,
+    "rarity": 2.0
+  },
+  "6630": {
+    "price": 50.0,
+    "rarity": 1.0
+  },
+  "6650": {
+    "price": 100.0,
+    "rarity": 4.5
+  },
+  "6670": {
+    "price": 40.0,
+    "rarity": 2.0
+  },
+  "6680": {
+    "price": 40.0,
+    "rarity": 2.0
+  },
+  "6681": {
+    "price": 40.0,
+    "rarity": 2.0
+  },
+  "6700c": {
+    "price": 30.0,
+    "rarity": 2.0
+  },
+  "6700s": {
+    "price": 40.0,
+    "rarity": 2.0
+  },
+  "6710s": {
+    "price": 40.0,
+    "rarity": 2.0
+  },
+  "6760s": {
+    "price": 50.0,
+    "rarity": 2.0
+  },
+  "6800": {
+    "price": 70.0,
+    "rarity": 3.5
+  },
+  "6810": {
+    "price": 100.0,
+    "rarity": 4.0
+  },
+  "6822": {
+    "price": 70.0,
+    "rarity": 3.0
+  },
+  "700": {
+    "price": 30.0,
+    "rarity": 1.0
+  },
+  "7020a": {
+    "price": 30.0,
+    "rarity": 2.0
+  },
+  "7070 Prism": {
+    "price": 60.0,
+    "rarity": 2.0
+  },
+  "7100s": {
+    "price": 40.0,
+    "rarity": 2.0
+  },
+  "7110": {
+    "price": 50.0,
+    "rarity": 2.0
+  },
+  "7200": {
+    "price": 50.0,
+    "rarity": 3.0
+  },
+  "7210": {
+    "price": 40.0,
+    "rarity": 2.0
+  },
+  "7210 Supernova": {
+    "price": 40.0,
+    "rarity": 2.0
+  },
+  "7230": {
+    "price": 30.0,
+    "rarity": 2.0
+  },
+  "7250": {
+    "price": 40.0,
+    "rarity": 2.0
+  },
+  "7250i": {
+    "price": 40.0,
+    "rarity": 2.0
+  },
+  "7260": {
+    "price": 40.0,
+    "rarity": 3.0
+  },
+  "7270": {
+    "price": 50.0,
+    "rarity": 3.0
+  },
+  "7310 Supernova": {
+    "price": 40.0,
+    "rarity": 2.0
+  },
+  "7360": {
+    "price": 50.0,
+    "rarity": 3.0
+  },
+  "7370": {
+    "price": 50.0,
+    "rarity": 3.0
+  },
+  "7373": {
+    "price": 50.0,
+    "rarity": 3.0
+  },
+  "7390": {
+    "price": 50.0,
+    "rarity": 3.0
+  },
+  "7500 Prism": {
+    "price": 50.0,
+    "rarity": 3.0
+  },
+  "7600": {
+    "price": 80.0,
+    "rarity": 4.0
+  },
+  "7610": {
+    "price": 50.0,
+    "rarity": 1.0
+  },
+  "7610 Supernova": {
+    "price": 40.0,
+    "rarity": 2.0
+  },
+  "7650": {
+    "price": 100.0,
+    "rarity": 4.0
+  },
+  "770": {
+    "price": 100.0,
+    "rarity": 2.0
+  },
+  "7705 twist": {
+    "price": 100.0,
+    "rarity": 4.5
+  },
+  "7710": {
+    "price": 100.0,
+    "rarity": 4.5
+  },
+  "7900 Prism": {
+    "price": 50.0,
+    "rarity": 3.0
+  },
+  "8210": {
+    "price": 50.0,
+    "rarity": 1.0
+  },
+  "8250": {
+    "price": 50.0,
+    "rarity": 2.0
+  },
+  "8260": {
+    "price": 50.0,
+    "rarity": 2.0
+  },
+  "8265": {
+    "price": 50.0,
+    "rarity": 2.0
+  },
+  "8290": {
+    "price": 50.0,
+    "rarity": 2.0
+  },
+  "8310": {
+    "price": 50.0,
+    "rarity": 2.0
+  },
+  "8600 Luna": {
+    "price": 60.0,
+    "rarity": 3.0
+  },
+  "8800": {
+    "price": 150.0,
+    "rarity": 3.0
+  },
+  "8800 Arte": {
+    "price": 250.0,
+    "rarity": 4.0
+  },
+  "8800 Sirocco": {
+    "price": 150.0,
+    "rarity": 3.0
+  },
+  "8800d Sirocco": {
+    "price": 150.0,
+    "rarity": 3.0
+  },
+  "8850": {
+    "price": 100.0,
+    "rarity": 3.5
+  },
+  "8890": {
+    "price": 100.0,
+    "rarity": 2.5
+  },
+  "8910": {
+    "price": 300.0,
+    "rarity": 3.5
+  },
+  "8910i": {
+    "price": 350.0,
+    "rarity": 4.0
+  },
+  "9000": {
+    "price": 120.0,
+    "rarity": 2.5
+  },
+  "9110": {
+    "price": 120.0,
+    "rarity": 2.5
+  },
+  "918": {
+    "price": 50.0,
+    "rarity": 2.0
+  },
+  "9210": {
+    "price": 120.0,
+    "rarity": 2.5
+  },
+  "9210i": {
+    "price": 120.0,
+    "rarity": 2.5
+  },
+  "9300": {
+    "price": 100.0,
+    "rarity": 2.5
+  },
+  "9300i": {
+    "price": 100.0,
+    "rarity": 3.0
+  },
+  "9500": {
+    "price": 120.0,
+    "rarity": 2.5
+  },
+  "C1-01": {
+    "price": 40.0,
+    "rarity": 1.5
+  },
+  "C2": {
+    "price": 40.0,
+    "rarity": 1.5
+  },
+  "C2-00": {
+    "price": 40.0,
+    "rarity": 1.5
+  },
+  "C2-01": {
+    "price": 40.0,
+    "rarity": 1.5
+  },
+  "C2-03": {
+    "price": 40.0,
+    "rarity": 1.5
+  },
+  "C2-06": {
+    "price": 40.0,
+    "rarity": 1.5
+  },
+  "C3": {
+    "price": 40.0,
+    "rarity": 1.5
+  },
+  "C5-00": {
+    "price": 40.0,
+    "rarity": 1.5
+  },
+  "C6": {
+    "price": 40.0,
+    "rarity": 1.5
+  },
+  "C7": {
+    "price": 40.0,
+    "rarity": 1.5
+  },
+  "E5": {
+    "price": 40.0,
+    "rarity": 2.0
+  },
+  "E50": {
+    "price": 40.0,
+    "rarity": 2.0
+  },
+  "E51": {
+    "price": 40.0,
+    "rarity": 2.0
+  },
+  "E51 Without Camera": {
+    "price": 50.0,
+    "rarity": 3.0
+  },
+  "E52": {
+    "price": 40.0,
+    "rarity": 2.0
+  },
+  "E6": {
+    "price": 70.0,
+    "rarity": 3.0
+  },
+  "E60": {
+    "price": 50.0,
+    "rarity": 3.0
+  },
+  "E61": {
+    "price": 60.0,
+    "rarity": 3.0
+  },
+  "E61i": {
+    "price": 70.0,
+    "rarity": 3.0
+  },
+  "E63": {
+    "price": 40.0,
+    "rarity": 2.0
+  },
+  "E65": {
+    "price": 50.0,
+    "rarity": 3.0
+  },
+  "E66": {
+    "price": 40.0,
+    "rarity": 3.0
+  },
+  "E7": {
+    "price": 70.0,
+    "rarity": 3.5
+  },
+  "E70": {
+    "price": 70.0,
+    "rarity": 2.5
+  },
+  "E71": {
+    "price": 40.0,
+    "rarity": 2.5
+  },
+  "E72": {
+    "price": 40.0,
+    "rarity": 2.5
+  },
+  "E75": {
+    "price": 50.0,
+    "rarity": 2.5
+  },
+  "E90": {
+    "price": 100.0,
+    "rarity": 2.0
+  },
+  "EADS": {
+    "price": 50.0,
+    "rarity": 3.0
+  },
+  "N70": {
+    "price": 50.0,
+    "rarity": 2.0
+  },
+  "N71": {
+    "price": 70.0,
+    "rarity": 2.0
+  },
+  "N72": {
+    "price": 50.0,
+    "rarity": 2.0
+  },
+  "N73": {
+    "price": 50.0,
+    "rarity": 2.0
+  },
+  "N75": {
+    "price": 70.0,
+    "rarity": 3.0
+  },
+  "N76": {
+    "price": 70.0,
+    "rarity": 3.0
+  },
+  "N78": {
+    "price": 60.0,
+    "rarity": 2.0
+  },
+  "N79": {
+    "price": 70.0,
+    "rarity": 3.0
+  },
+  "N8": {
+    "price": 70.0,
+    "rarity": 2.0
+  },
+  "N80": {
+    "price": 60.0,
+    "rarity": 2.0
+  },
+  "N800": {
+    "price": 100.0,
+    "rarity": 3.0
+  },
+  "N81": {
+    "price": 70.0,
+    "rarity": 2.0
+  },
+  "N81 8GP": {
+    "price": 70.0,
+    "rarity": 2.0
+  },
+  "N810": {
+    "price": 100.0,
+    "rarity": 3.0
+  },
+  "N82": {
+    "price": 70.0,
+    "rarity": 2.0
+  },
+  "N85": {
+    "price": 70.0,
+    "rarity": 2.0
+  },
+  "N86": {
+    "price": 70.0,
+    "rarity": 2.0
+  },
+  "N9": {
+    "price": 70.0,
+    "rarity": 3.0
+  },
+  "N90": {
+    "price": 100.0,
+    "rarity": 3.0
+  },
+  "N900": {
+    "price": 70.0,
+    "rarity": 2.0
+  },
+  "N91": {
+    "price": 100.0,
+    "rarity": 3.0
+  },
+  "N92": {
+    "price": 300.0,
+    "rarity": 5.0
+  },
+  "N93": {
+    "price": 200.0,
+    "rarity": 3.0
+  },
+  "N93i": {
+    "price": 200.0,
+    "rarity": 3.0
+  },
+  "N95": {
+    "price": 70.0,
+    "rarity": 2.0
+  },
+  "N95 8GB": {
+    "price": 70.0,
+    "rarity": 2.0
+  },
+  "N96": {
+    "price": 70.0,
+    "rarity": 2.0
+  },
+  "N97": {
+    "price": 70.0,
+    "rarity": 2.0
+  },
+  "N97 Mini": {
+    "price": 70.0,
+    "rarity": 2.0
+  },
+  "N-Gage": {
+    "price": 100.0,
+    "rarity": 3.0
+  },
+  "N-Gage QD": {
+    "price": 100.0,
+    "rarity": 3.0
+  },
+  "NHK-6RY": {
+    "price": 70.0,
+    "rarity": 2.0
+  },
+  "X1-01": {
+    "price": 40.0,
+    "rarity": 2.0
+  },
+  "x2": {
+    "price": 40.0,
+    "rarity": 2.0
+  },
+  "X2-01": {
+    "price": 40.0,
+    "rarity": 2.0
+  },
+  "X2-02": {
+    "price": 40.0,
+    "rarity": 2.0
+  },
+  "X3": {
+    "price": 40.0,
+    "rarity": 2.0
+  },
+  "X3-02": {
+    "price": 40.0,
+    "rarity": 2.0
+  },
+  "X6": {
+    "price": 40.0,
+    "rarity": 2.0
+  },
+  "X7": {
+    "price": 40.0,
+    "rarity": 2.0
+  }
+}
