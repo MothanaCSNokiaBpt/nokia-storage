@@ -133,19 +133,20 @@ def rarity_label(score):
     elif score <= 4.5: return "Very rare"
     else: return "Extremely rare"
 
-def rarity_stars(score):
-    """Return star string using simple ASCII."""
-    if score <= 0: return ""
-    full = int(score)
-    half = 1 if (score - full) >= 0.5 else 0
-    return "*" * full + ("+" if half else "")
-
 def rarity_color(score):
     if score <= 1: return (0.5, 0.5, 0.5, 1)      # gray
     elif score <= 2: return (0.3, 0.6, 0.3, 1)     # green
     elif score <= 3: return (0.8, 0.6, 0.1, 1)     # orange
     elif score <= 4: return (0.8, 0.2, 0.2, 1)     # red
     else: return (0.6, 0.1, 0.6, 1)                # purple
+
+def rarity_color_hex(score):
+    """Return color as hex string for markup."""
+    if score <= 1: return "808080"
+    elif score <= 2: return "4d994d"
+    elif score <= 3: return "cc9919"
+    elif score <= 4: return "cc3333"
+    else: return "991a99"
 
 
 # -- XLSX Creator (pure Python, no openpyxl) -----------------------
@@ -527,7 +528,7 @@ ScreenManager:
             Spinner:
                 id: sort_spinner
                 text: 'Sort: Name'
-                values: ['Sort: Name', 'Sort: ID', 'Sort: Year']
+                values: ['Sort: Name', 'Sort: ID', 'Sort: Year', 'Sort: Price']
                 size_hint_x: None
                 width: dp(95)
                 font_size: sp(11)
@@ -2215,6 +2216,8 @@ class MainScreen(Screen):
                     items.sort(key=lambda x: x.get('id', '') or '', reverse=self._is_desc())
                 elif sort_by == 'Year':
                     items.sort(key=lambda x: x.get('release_date', '') or '', reverse=self._is_desc())
+                elif sort_by == 'Price':
+                    items.sort(key=lambda x: float(x.get('avg_price', 0) or 0), reverse=self._is_desc())
             else:
                 items.sort(key=lambda x: (x.get('name', '') or '').lower(), reverse=self._is_desc())
         except: pass
@@ -2371,7 +2374,6 @@ class MainScreen(Screen):
             self.ids.filter_field.text = "Filter: All"
             self.ids.sort_spinner.text = "Sort: Name"
             self.ids.year_spinner.text = 'All Years'
-            self.ids.year_range_label.text = '1998 - 2025'
         except: pass
         self.refresh_list()
 
@@ -2438,7 +2440,7 @@ class PhoneDetailScreen(Screen):
         d = p.get("description", "") or ""
         self.p_description = "" if d in ("None", "none") else d
         self.p_rarity_text = rarity_label(rarity)
-        self.p_rarity_stars = rarity_stars(rarity)
+        self.p_rarity_stars = f"{rarity}/5" if rarity > 0 else ""
         self.p_rarity_color = list(rarity_color(rarity))
         # Check if any phone with same name is Fully Working
         try:
@@ -3000,6 +3002,7 @@ class AddPhoneScreen(Screen):
         except: pass
         self._auto_price = 0
         self._auto_rarity = 0
+        self._auto_description = ""
         # CHANGE 3: Populate condition spinners
         Clock.schedule_once(lambda dt: self._populate_condition_spinners(), 0.1)
 
@@ -3046,6 +3049,7 @@ class AddPhoneScreen(Screen):
 
     _auto_price = 0
     _auto_rarity = 0
+    _auto_description = ""
 
     def auto_fill_from_name(self):
         """Auto-fill release date, price, rarity from existing phone with same name."""
