@@ -34,14 +34,18 @@ from kivy.uix.textinput import TextInput
 from kivy.uix.widget import Widget
 from kivy.utils import platform
 
+print("HINT-1: imports done")
+
 from database import NokiaDatabase
+print("HINT-2: database imported")
 
 if platform == "android":
     try:
         from android.permissions import request_permissions, Permission
         from android.storage import primary_external_storage_path, app_storage_path
-    except Exception:
-        pass
+        print("HINT-3: android imports done")
+    except Exception as e:
+        print(f"HINT-3-ERR: {e}")
 
 PAGE_SIZE = 50
 
@@ -3974,21 +3978,45 @@ class NokiaStorageApp(App):
     _last_back = 0
 
     def build(self):
+        print("HINT-10: build() started")
         Window.clearcolor = (1, 1, 1, 1)
-        try: self.db = NokiaDatabase(get_db_path())
-        except Exception as e: print(f"DB: {e}")
+        try:
+            self.db = NokiaDatabase(get_db_path())
+            print("HINT-11: DB opened")
+        except Exception as e:
+            print(f"HINT-11-ERR: DB: {e}")
         if platform == "android":
             Clock.schedule_once(lambda dt: self._perms(), 1)
-            # Bind activity result ONCE at startup (like official Kivy example)
             try:
                 from android import activity as android_activity
                 android_activity.bind(on_activity_result=self._on_android_activity_result)
+                print("HINT-12: activity bound")
             except Exception as e:
-                print(f"Activity bind error: {e}")
+                print(f"HINT-12-ERR: {e}")
+        print("HINT-13: loading initial data")
         self._load_initial()
+        print("HINT-14: binding keyboard")
         Window.bind(on_keyboard=self._kb)
-        root = Builder.load_string(KV)
-        root.current = "splash"
+        print("HINT-15: loading KV")
+        try:
+            root = Builder.load_string(KV)
+            print("HINT-16: KV loaded OK")
+        except Exception as e:
+            print(f"HINT-16-ERR: KV FAILED: {e}")
+            import traceback
+            traceback.print_exc()
+            # Show error on screen instead of crashing
+            from kivy.uix.label import Label as ErrLabel
+            root = ScreenManager()
+            err_screen = Screen(name="error")
+            err_screen.add_widget(ErrLabel(text=f"KV ERROR:\n{str(e)}", color=(1,0,0,1), font_size=sp(14), text_size=(dp(300), None), halign="center"))
+            root.add_screen(err_screen)
+            return root
+        try:
+            root.current = "splash"
+        except Exception as e:
+            print(f"HINT-17-ERR: splash screen: {e}")
+            root.current = "main"
         return root
 
     def _kb(self, win, key, *a):
