@@ -2408,11 +2408,16 @@ class PhoneDetailScreen(Screen):
         if self._current_img_path:
             self._show_fullscreen(self._current_img_path)
 
+    _gallery_paths = []  # list of image paths for viewer navigation
+    _viewer_index = 0
+    _viewer_popup = None
+
     def _load_gallery(self):
         """Load gallery images from phone_gallery table with delete buttons."""
         app = App.get_running_app()
         grid = self.ids.gallery_grid
         grid.clear_widgets()
+        self._gallery_paths = []
         images = app.db.get_gallery_images(self.p_id)
         if not images:
             grid.add_widget(Label(text="No gallery photos", font_size=sp(12),
@@ -2422,12 +2427,14 @@ class PhoneDetailScreen(Screen):
         for gal_id, img_data in images:
             img_path = write_blob_to_file(img_data, f"gal_{gal_id}", get_app_path())
             if img_path:
+                idx = len(self._gallery_paths)
+                self._gallery_paths.append(img_path)
                 box = BoxLayout(orientation="vertical", size_hint_y=None, height=dp(230), padding=dp(2))
                 img_btn = ClickableBox(size_hint_y=None, height=dp(200))
                 img_widget = Image(source=img_path, nocache=True,
                     allow_stretch=True, keep_ratio=True)
                 img_btn.add_widget(img_widget)
-                img_btn.bind(on_release=partial(self._show_fullscreen, img_path))
+                img_btn.bind(on_release=partial(self._open_gallery_viewer, idx))
                 box.add_widget(img_btn)
                 del_btn = KBtn(text="Delete", size_hint_y=None, height=dp(26),
                     font_size=sp(10), background_color=(0.85, 0.2, 0.2, 1), color=(1,1,1,1))
@@ -2462,8 +2469,59 @@ class PhoneDetailScreen(Screen):
         app.show_toast("Photo deleted")
         self._load_gallery()
 
+    def _open_gallery_viewer(self, index, *a):
+        """Open full-screen gallery viewer at given index."""
+        if not self._gallery_paths:
+            return
+        self._viewer_index = index
+        self._show_gallery_viewer()
+
+    def _show_gallery_viewer(self):
+        from kivy.uix.button import Button as KBtn
+        if self._viewer_popup:
+            try: self._viewer_popup.dismiss()
+            except Exception: pass
+
+        idx = self._viewer_index
+        if idx < 0 or idx >= len(self._gallery_paths):
+            return
+        img_path = self._gallery_paths[idx]
+        total = len(self._gallery_paths)
+
+        self._viewer_popup = ModalView(size_hint=(1, 1), background_color=(0, 0, 0, 0.95))
+        c = BoxLayout(orientation="vertical", padding=dp(4), spacing=dp(4))
+
+        # Counter
+        c.add_widget(Label(text=f"{idx+1} / {total}", font_size=sp(14), color=(1,1,1,1),
+            size_hint_y=None, height=dp(28)))
+
+        # Image
+        c.add_widget(Image(source=img_path, nocache=True, allow_stretch=True, keep_ratio=True))
+
+        # Navigation buttons
+        nav = BoxLayout(size_hint_y=None, height=dp(46), spacing=dp(6))
+        prev_btn = KBtn(text="< Prev", font_size=sp(14), background_color=(0.3,0.3,0.3,1),
+            disabled=(idx == 0))
+        prev_btn.bind(on_press=lambda *a: self._nav_gallery_viewer(-1))
+        close_btn = KBtn(text="Close", font_size=sp(14), background_color=(0.5,0.1,0.1,1))
+        close_btn.bind(on_press=lambda *a: self._viewer_popup.dismiss())
+        next_btn = KBtn(text="Next >", font_size=sp(14), background_color=(0.3,0.3,0.3,1),
+            disabled=(idx >= total - 1))
+        next_btn.bind(on_press=lambda *a: self._nav_gallery_viewer(1))
+        nav.add_widget(prev_btn); nav.add_widget(close_btn); nav.add_widget(next_btn)
+        c.add_widget(nav)
+
+        self._viewer_popup.add_widget(c)
+        self._viewer_popup.open()
+
+    def _nav_gallery_viewer(self, direction):
+        self._viewer_index += direction
+        self._viewer_index = max(0, min(self._viewer_index, len(self._gallery_paths) - 1))
+        self._viewer_popup.dismiss()
+        Clock.schedule_once(lambda dt: self._show_gallery_viewer(), 0.1)
+
     def _show_fullscreen(self, img_path, *args):
-        """Show image in full-screen overlay."""
+        """Show image in full-screen overlay (for main image)."""
         from kivy.uix.button import Button as KButton
         popup = ModalView(size_hint=(1, 1), background_color=(0, 0, 0, 0.95))
         content = BoxLayout(orientation="vertical", padding=dp(4))
@@ -3424,17 +3482,44 @@ class ReportScreen(Screen):
     def on_enter(self):
         Clock.schedule_once(lambda dt: self._load(), 0.2)
 
+    def _go_main_filtered(self, filter_text, *a):
+        app = App.get_running_app()
+        main = app.root.get_screen("main")
+        main.current_tab = "phones"
+        main._data_loaded = False
+        try:
+            main.ids.filter_field.text = filter_text
+        except Exception:
+            pass
+        app.root.transition = SlideTransition(direction="right")
+        app.root.current = "main"
+
+    def _go_main_search(self, query, *a):
+        app = App.get_running_app()
+        main = app.root.get_screen("main")
+        main.current_tab = "phones"
+        main._data_loaded = False
+        app.root.transition = SlideTransition(direction="right")
+        app.root.current = "main"
+        Clock.schedule_once(lambda dt: main.do_search(query), 0.3)
+
     def _load(self):
         app = App.get_running_app()
         g = self.ids.report_grid; g.clear_widgets()
         try: r = app.db.get_report()
-        except: g.add_widget(Label(text="Error", size_hint_y=None, height=dp(30))); return
+        except Exception: g.add_widget(Label(text="Error", size_hint_y=None, height=dp(30))); return
 
         total_phones = r.get('total_phones', 0)
         with_images = r.get('phones_with_images', 0)
         without_images = total_phones - with_images
         unique_models = r.get('unique_models', 0)
         total_spares = r.get('total_spares', 0)
+
+        # Wall count
+        try:
+            wall_count = app.db.get_wall_count()
+        except Exception:
+            wall_count = 0
 
         # Find most common model
         by_model = r.get('by_model', [])
@@ -3445,16 +3530,19 @@ class ReportScreen(Screen):
         years = []
         for p in all_phones:
             rd = p.get('release_date', '') or ''
-            # Try to extract a 4-digit year
             for part in rd.replace('-', ' ').replace('/', ' ').split():
                 if len(part) == 4 and part.isdigit():
                     years.append(int(part))
                     break
         year_range = f"{min(years)} - {max(years)}" if years else "N/A"
 
-        # Helper to create a colored stat card - vertical layout, no overlap
-        def stat_card(title, value, bg_color):
-            card = BoxLayout(orientation="vertical", size_hint_y=None, height=dp(70), padding=dp(10))
+        # Helper to create a colored stat card with optional on_tap callback
+        def stat_card(title, value, bg_color, on_tap=None):
+            if on_tap:
+                card = ClickableBox(orientation="vertical", size_hint_y=None, height=dp(70), padding=dp(10))
+                card.bind(on_release=on_tap)
+            else:
+                card = BoxLayout(orientation="vertical", size_hint_y=None, height=dp(70), padding=dp(10))
             with card.canvas.before:
                 Color(*bg_color)
                 card._bg = RoundedRectangle(pos=card.pos, size=card.size, radius=[dp(10)])
@@ -3465,61 +3553,92 @@ class ReportScreen(Screen):
             card.add_widget(desc_label)
             return card
 
+        def stat_row(cards):
+            row = BoxLayout(size_hint_y=None, height=dp(70), spacing=dp(6))
+            for c in cards:
+                row.add_widget(c)
+            return row
+
         def sec(t):
             g.add_widget(Label(text=t, font_size=sp(16), bold=True, color=(0,0.314,0.784,1),
                 size_hint_y=None, height=dp(30), text_size=(dp(300),None), halign="left"))
 
-        # Key stat cards - single column (full width each)
+        # Key stat cards - 2 per row layout
         sec("Overview")
-        g.add_widget(stat_card("Total Phones", total_phones, (0, 0.314, 0.784, 1)))
-        g.add_widget(stat_card("With Images", with_images, (0.26, 0.63, 0.28, 1)))
-        g.add_widget(stat_card("Without Images", without_images, (0.85, 0.4, 0.1, 1)))
-        g.add_widget(stat_card("Unique Models", unique_models, (0.4, 0.3, 0.6, 1)))
-        g.add_widget(stat_card("Spare Parts", total_spares, (0.2, 0.2, 0.25, 1)))
-        g.add_widget(stat_card("Year Range", year_range, (0.6, 0.2, 0.4, 1)))
-
-        # Most common model card
-        mc_card = BoxLayout(orientation="vertical", size_hint_y=None, height=dp(70), padding=dp(10))
-        with mc_card.canvas.before:
-            Color(0, 0.44, 1, 1)
-            mc_card._bg = RoundedRectangle(pos=mc_card.pos, size=mc_card.size, radius=[dp(10)])
-        mc_card.bind(pos=lambda w,v: setattr(w._bg,"pos",v), size=lambda w,v: setattr(w._bg,"size",v))
-        mc_card.add_widget(Label(text=f"{most_common[0]} ({most_common[1]})", font_size=sp(18), bold=True, color=(1,1,1,1), size_hint_y=0.6))
-        mc_card.add_widget(Label(text="Most Common Model", font_size=sp(12), color=(1,1,1,0.8), size_hint_y=0.4))
-        g.add_widget(mc_card)
+        # Row 1: Total Phones | Unique Models
+        g.add_widget(stat_row([
+            stat_card("Total Phones", total_phones, (0, 0.314, 0.784, 1),
+                on_tap=lambda *a: self._go_main_filtered('Filter: All')),
+            stat_card("Unique Models", unique_models, (0.4, 0.3, 0.6, 1),
+                on_tap=lambda *a: self._go_main_filtered('Filter: Unique Models'))
+        ]))
+        # Row 2: With Images | Without Images
+        g.add_widget(stat_row([
+            stat_card("With Images", with_images, (0.26, 0.63, 0.28, 1),
+                on_tap=lambda *a: self._go_main_filtered('Filter: With Images')),
+            stat_card("Without Images", without_images, (0.85, 0.4, 0.1, 1),
+                on_tap=lambda *a: self._go_main_filtered('Filter: Without Images'))
+        ]))
+        # Row 3: Spare Parts | Wall Items
+        g.add_widget(stat_row([
+            stat_card("Spare Parts", total_spares, (0.2, 0.2, 0.25, 1)),
+            stat_card("Wall Items", wall_count, (0.35, 0.25, 0.15, 1))
+        ]))
+        # Row 4: Year Range | Most Common Model
+        g.add_widget(stat_row([
+            stat_card("Year Range", year_range, (0.6, 0.2, 0.4, 1)),
+            stat_card("Most Common", f"{most_common[0]} ({most_common[1]})", (0, 0.44, 1, 1),
+                on_tap=lambda *a, m=most_common[0]: self._go_main_search(m))
+        ]))
 
         # Collection Value section
         total_value = 0
         priced_count = 0
+        no_price_models = []
+        no_rarity_models = []
         rarity_sum = 0
         rarity_count = 0
         for p in all_phones:
             ap = float(p.get('avg_price', 0) or 0)
             rs = float(p.get('rarity_score', 0) or 0)
             total_value += ap
-            if ap > 0: priced_count += 1
+            if ap > 0:
+                priced_count += 1
+            else:
+                pname = p.get('name', '') or 'Unknown'
+                if pname not in no_price_models:
+                    no_price_models.append(pname)
             if rs > 0:
                 rarity_sum += rs
                 rarity_count += 1
+            else:
+                pname = p.get('name', '') or 'Unknown'
+                if pname not in no_rarity_models:
+                    no_rarity_models.append(pname)
         avg_phone_price = (total_value / priced_count) if priced_count else 0
         avg_rarity = (rarity_sum / rarity_count) if rarity_count > 0 else 0
 
         sec("Collection Value")
+        # Row 5: Total Collection Value (full width)
         g.add_widget(stat_card("Total Collection Value", f"${total_value:,.0f}", (0.1, 0.5, 0.3, 1)))
-        g.add_widget(stat_card("Average Phone Price", f"${avg_phone_price:,.0f}" if avg_phone_price > 0 else "N/A", (0.2, 0.45, 0.25, 1)))
-        g.add_widget(stat_card("Average Rarity", f"{avg_rarity:.1f} - {rarity_label(avg_rarity)}" if avg_rarity > 0 else "N/A", (0.5, 0.2, 0.5, 1)))
+        g.add_widget(stat_row([
+            stat_card("Avg Phone Price", f"${avg_phone_price:,.0f}" if avg_phone_price > 0 else "N/A", (0.2, 0.45, 0.25, 1)),
+            stat_card("Avg Rarity", f"{avg_rarity:.1f} - {rarity_label(avg_rarity)}" if avg_rarity > 0 else "N/A", (0.5, 0.2, 0.5, 1))
+        ]))
 
-        # Condition breakdown with percentages
+        # Condition breakdown with percentages - clickable rows
         def condition_section(title, data, color_base):
             sec(title)
             for n, c in data:
                 pct = (c / total_phones * 100) if total_phones > 0 else 0
-                row = BoxLayout(size_hint_y=None, height=dp(28), padding=(dp(8),dp(2)), spacing=dp(4))
+                cond_name = str(n or "Unknown")
+                row = ClickableBox(size_hint_y=None, height=dp(28), padding=(dp(8),dp(2)), spacing=dp(4))
+                row.bind(on_release=partial(self._go_main_search, cond_name))
                 with row.canvas.before:
                     Color(*color_base, 0.1)
                     row._bg = RoundedRectangle(pos=row.pos, size=row.size, radius=[dp(5)])
                 row.bind(pos=lambda w,v: setattr(w._bg,"pos",v), size=lambda w,v: setattr(w._bg,"size",v))
-                row.add_widget(Label(text=str(n or "Unknown"), font_size=sp(12), color=(0.15,0.15,0.15,1),
+                row.add_widget(Label(text=cond_name, font_size=sp(12), color=(0.15,0.15,0.15,1),
                     text_size=(dp(180),None), halign="left"))
                 row.add_widget(Label(text=f"{c}", font_size=sp(12), bold=True, color=(0.1,0.1,0.18,1),
                     size_hint_x=None, width=dp(36), halign="right", text_size=(dp(36),None)))
@@ -3547,17 +3666,20 @@ class ReportScreen(Screen):
                     row.add_widget(Label(text=str(scount), font_size=sp(12), bold=True, color=(0.1,0.1,0.18,1),
                         size_hint_x=None, width=dp(50), halign="right", text_size=(dp(50),None)))
                     g.add_widget(row)
-        except:
+        except Exception:
             pass
 
+        # Top 20 Models - clickable rows
         sec("Top 20 Models")
         for n, c in r.get("by_model",[]):
-            row = BoxLayout(size_hint_y=None, height=dp(24), padding=(dp(8),dp(1)))
-            row.add_widget(Label(text=str(n), font_size=sp(12), color=(0.3,0.3,0.3,1), text_size=(dp(220),None), halign="left"))
+            model_name = str(n)
+            row = ClickableBox(size_hint_y=None, height=dp(24), padding=(dp(8),dp(1)))
+            row.bind(on_release=partial(self._go_main_search, model_name))
+            row.add_widget(Label(text=model_name, font_size=sp(12), color=(0.3,0.3,0.3,1), text_size=(dp(220),None), halign="left"))
             row.add_widget(Label(text=str(c), font_size=sp(12), bold=True, color=(0.1,0.1,0.18,1), size_hint_x=None, width=dp(50), halign="right", text_size=(dp(50),None)))
             g.add_widget(row)
 
-        # No Fully Working Phone section
+        # No Fully Working Phone section - clickable rows
         try:
             cur = app.db.conn.execute(
                 "SELECT DISTINCT TRIM(name) as n, COUNT(*) as c FROM phones "
@@ -3568,13 +3690,15 @@ class ReportScreen(Screen):
             sec("No Fully Working Phone")
             g.add_widget(stat_card("Models Without FW", len(no_fw_models), (0.85, 0.2, 0.2, 1)))
             for nm, cnt in no_fw_models:
-                row = BoxLayout(size_hint_y=None, height=dp(28), padding=(dp(8), dp(2)), spacing=dp(4))
+                nm_str = str(nm)
+                row = ClickableBox(size_hint_y=None, height=dp(28), padding=(dp(8), dp(2)), spacing=dp(4))
+                row.bind(on_release=partial(self._go_main_search, nm_str))
                 with row.canvas.before:
                     Color(1, 0.96, 0.9, 1)
                     row._bg = RoundedRectangle(pos=row.pos, size=row.size, radius=[dp(5)])
                 row.bind(pos=lambda w, v: setattr(w._bg, "pos", v),
                          size=lambda w, v: setattr(w._bg, "size", v))
-                row.add_widget(Label(text=str(nm), font_size=sp(12), color=(0.15, 0.15, 0.15, 1),
+                row.add_widget(Label(text=nm_str, font_size=sp(12), color=(0.15, 0.15, 0.15, 1),
                     text_size=(dp(200), None), halign="left"))
                 row.add_widget(Label(text=str(cnt), font_size=sp(12), bold=True,
                     color=(0.1, 0.1, 0.18, 1), size_hint_x=None, width=dp(40),
@@ -3582,6 +3706,40 @@ class ReportScreen(Screen):
                 g.add_widget(row)
         except Exception:
             pass
+
+        # Phones without pricing section
+        if no_price_models:
+            sec("Phones Without Pricing")
+            g.add_widget(stat_card("No Price Info", len(no_price_models), (0.85, 0.55, 0.1, 1)))
+            for nm in no_price_models[:30]:
+                nm_str = str(nm)
+                row = ClickableBox(size_hint_y=None, height=dp(28), padding=(dp(8), dp(2)), spacing=dp(4))
+                row.bind(on_release=partial(self._go_main_search, nm_str))
+                with row.canvas.before:
+                    Color(1, 0.96, 0.88, 1)
+                    row._bg = RoundedRectangle(pos=row.pos, size=row.size, radius=[dp(5)])
+                row.bind(pos=lambda w, v: setattr(w._bg, "pos", v),
+                         size=lambda w, v: setattr(w._bg, "size", v))
+                row.add_widget(Label(text=nm_str, font_size=sp(12), color=(0.15, 0.15, 0.15, 1),
+                    text_size=(dp(280), None), halign="left"))
+                g.add_widget(row)
+
+        # Phones without rarity section
+        if no_rarity_models:
+            sec("Phones Without Rarity")
+            g.add_widget(stat_card("No Rarity Info", len(no_rarity_models), (0.5, 0.3, 0.6, 1)))
+            for nm in no_rarity_models[:30]:
+                nm_str = str(nm)
+                row = ClickableBox(size_hint_y=None, height=dp(28), padding=(dp(8), dp(2)), spacing=dp(4))
+                row.bind(on_release=partial(self._go_main_search, nm_str))
+                with row.canvas.before:
+                    Color(0.95, 0.92, 1, 1)
+                    row._bg = RoundedRectangle(pos=row.pos, size=row.size, radius=[dp(5)])
+                row.bind(pos=lambda w, v: setattr(w._bg, "pos", v),
+                         size=lambda w, v: setattr(w._bg, "size", v))
+                row.add_widget(Label(text=nm_str, font_size=sp(12), color=(0.15, 0.15, 0.15, 1),
+                    text_size=(dp(280), None), halign="left"))
+                g.add_widget(row)
 
         g.add_widget(Widget(size_hint_y=None, height=dp(30)))
 
