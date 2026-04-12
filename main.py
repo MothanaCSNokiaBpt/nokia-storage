@@ -324,7 +324,7 @@ KV = """
 
 <SpareCard>:
     size_hint_y: None
-    height: dp(74)
+    height: dp(54)
     padding: dp(6)
     spacing: dp(8)
     orientation: 'horizontal'
@@ -335,14 +335,6 @@ KV = """
             pos: self.pos
             size: self.size
             radius: [dp(10)]
-    Image:
-        source: root.spare_image
-        nocache: True
-        size_hint: None, None
-        size: dp(56), dp(60)
-        pos_hint: {'center_y': .5}
-        allow_stretch: True
-        keep_ratio: True
     BoxLayout:
         orientation: 'vertical'
         spacing: dp(2)
@@ -1099,25 +1091,8 @@ ScreenManager:
                 height: self.minimum_height
                 padding: dp(14)
                 spacing: dp(10)
-                ClickableBox:
-                    size_hint_y: None
-                    height: dp(220)
-                    padding: dp(16)
-                    on_release: root.view_main_image()
-                    canvas.before:
-                        Color:
-                            rgba: 0.94, 0.96, 1, 1
-                        RoundedRectangle:
-                            pos: self.pos
-                            size: self.size
-                            radius: [dp(14)]
-                    Image:
-                        id: detail_img
-                        nocache: True
-                        allow_stretch: True
-                        keep_ratio: True
                 Button:
-                    text: 'Add More Images'
+                    text: 'Add Images to Gallery'
                     size_hint_y: None
                     height: dp(40)
                     font_size: sp(13)
@@ -2597,10 +2572,9 @@ class MainScreen(Screen):
                 grid.add_widget(card)
         elif self.current_tab == "spares":
             for s in items:
-                img = get_img_path_for_spare(s["id"], app.db) if s.get("has_image") else defimg
                 card = SpareCard(spare_id=s["id"], spare_name=s["name"],
                     spare_desc=s.get("description","") or "",
-                    spare_image=img or defimg)
+                    spare_image="")
                 card.bind(on_release=partial(self._open_spare, s["id"]))
                 grid.add_widget(card)
         elif self.current_tab == "wall":
@@ -3145,10 +3119,8 @@ class SpareDetailScreen(Screen):
         self.s_id = s["id"]; self.s_id_str = str(s["id"]); self.s_name = s["name"]
         d = s.get("description","") or ""; self.s_desc = "" if d=="None" else d
         self.s_phone_id = s.get("phone_id","") or ""
-        img = get_img_path_for_spare(sid, app.db)
-        Clock.schedule_once(lambda dt: self._set_img(img), 0.1)
-        Clock.schedule_once(lambda dt: self._load_linked_phones(), 0.15)
-        Clock.schedule_once(lambda dt: self._load_gallery(), 0.2)
+        Clock.schedule_once(lambda dt: self._load_linked_phones(), 0.1)
+        Clock.schedule_once(lambda dt: self._load_gallery(), 0.15)
 
     _current_img_path = ""
 
@@ -4564,6 +4536,20 @@ class NokiaStorageApp(App):
                         self.db.import_wall_from_rows(wall_rows)
                     break
         except Exception as e: print(f"Init: {e}")
+        # Load initial spare parts
+        try:
+            if self.db.get_spare_count() == 0:
+                for sp_path in [os.path.join(os.path.dirname(os.path.abspath(__file__)), "initial_spares.json"),
+                                os.path.join(get_app_path(), "initial_spares.json")]:
+                    if os.path.exists(sp_path):
+                        with open(sp_path, "r", encoding="utf-8") as f:
+                            spare_names = json.load(f)
+                        for sname in spare_names:
+                            try:
+                                self.db.add_spare_part(name=str(sname).strip(), phone_id=str(sname).strip())
+                            except: pass
+                        break
+        except Exception as e: print(f"Spare init: {e}")
 
     def show_toast(self, text):
         try:
