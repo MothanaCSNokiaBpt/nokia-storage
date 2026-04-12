@@ -391,6 +391,8 @@ ScreenManager:
     id: sm
     SplashScreen:
         name: 'splash'
+    DashboardScreen:
+        name: 'dashboard'
     MainScreen:
         name: 'main'
     PhoneDetailScreen:
@@ -433,6 +435,56 @@ ScreenManager:
             height: dp(60)
         Widget:
 
+<DashboardScreen>:
+    BoxLayout:
+        orientation: 'vertical'
+        BoxLayout:
+            size_hint_y: None
+            height: dp(52)
+            padding: dp(10), dp(6)
+            spacing: dp(6)
+            canvas.before:
+                Color:
+                    rgba: 0, 0.314, 0.784, 1
+                Rectangle:
+                    pos: self.pos
+                    size: self.size
+            Label:
+                text: 'NOKIA Storage'
+                font_size: sp(19)
+                bold: True
+                color: 1, 1, 1, 1
+                text_size: self.size
+                halign: 'left'
+                valign: 'middle'
+            Button:
+                text: 'Menu'
+                size_hint_x: None
+                width: dp(58)
+                font_size: sp(12)
+                bold: True
+                background_normal: ''
+                background_down: ''
+                background_color: 0, 0, 0, 0
+                color: 1, 1, 1, 1
+                canvas.before:
+                    Color:
+                        rgba: 0.15, 0.4, 0.85, 1
+                    RoundedRectangle:
+                        pos: self.pos
+                        size: self.size
+                        radius: [dp(14)]
+                on_press: root.show_menu()
+        ScrollView:
+            do_scroll_x: False
+            GridLayout:
+                id: dash_grid
+                cols: 1
+                spacing: dp(8)
+                padding: dp(14)
+                size_hint_y: None
+                height: self.minimum_height
+
 <MainScreen>:
     BoxLayout:
         orientation: 'vertical'
@@ -462,9 +514,17 @@ ScreenManager:
                 font_size: sp(12)
                 bold: True
                 background_normal: ''
-                background_color: 0.15, 0.4, 0.85, 1
+                background_down: ''
+                background_color: 0, 0, 0, 0
                 color: 1, 1, 1, 1
-                on_press: root.refresh_home()
+                canvas.before:
+                    Color:
+                        rgba: 0.15, 0.4, 0.85, 1
+                    RoundedRectangle:
+                        pos: self.pos
+                        size: self.size
+                        radius: [dp(14)]
+                on_press: root.go_dashboard()
             Button:
                 text: 'Gallery'
                 size_hint_x: None
@@ -472,8 +532,16 @@ ScreenManager:
                 font_size: sp(12)
                 bold: True
                 background_normal: ''
-                background_color: 0.15, 0.4, 0.85, 1
+                background_down: ''
+                background_color: 0, 0, 0, 0
                 color: 1, 1, 1, 1
+                canvas.before:
+                    Color:
+                        rgba: 0.15, 0.4, 0.85, 1
+                    RoundedRectangle:
+                        pos: self.pos
+                        size: self.size
+                        radius: [dp(14)]
                 on_press: root.open_gallery()
             Button:
                 text: 'Menu'
@@ -482,8 +550,16 @@ ScreenManager:
                 font_size: sp(12)
                 bold: True
                 background_normal: ''
-                background_color: 0.15, 0.4, 0.85, 1
+                background_down: ''
+                background_color: 0, 0, 0, 0
                 color: 1, 1, 1, 1
+                canvas.before:
+                    Color:
+                        rgba: 0.15, 0.4, 0.85, 1
+                    RoundedRectangle:
+                        pos: self.pos
+                        size: self.size
+                        radius: [dp(14)]
                 on_press: root.show_menu()
         SearchBar:
             id: search_bar
@@ -502,32 +578,34 @@ ScreenManager:
             Spinner:
                 id: sort_spinner
                 text: 'Sort: Name'
-                values: ['Sort: Name', 'Sort: ID', 'Sort: Year', 'Sort: Price']
+                values: ['Sort: Name', 'Sort: ID Asc', 'Sort: ID Desc', 'Sort: Year Asc', 'Sort: Year Desc', 'Sort: Price Asc', 'Sort: Price Desc']
                 size_hint_x: None
-                width: dp(100)
-                font_size: sp(12)
+                width: dp(110)
+                font_size: sp(11)
                 background_color: 0, 0.314, 0.784, 1
                 color: 1, 1, 1, 1
                 option_cls: 'BlueSpinnerOption'
                 on_text: root.apply_sort_filter()
             Spinner:
                 id: filter_field
-                text: 'Filter: All'
-                values: ['Filter: All', 'Filter: Name', 'Filter: Year', 'Filter: Appearance', 'Filter: Working', 'Filter: With Images', 'Filter: Without Images', 'Filter: Unique Models']
+                text: 'All'
+                values: ['All', 'Name', 'Year', 'Appearance', 'Working', 'With Images', 'Without Images', 'Unique Models']
                 size_hint_x: None
-                width: dp(120)
-                font_size: sp(12)
+                width: dp(100)
+                font_size: sp(11)
                 background_color: 0.2, 0.2, 0.25, 1
                 color: 1, 1, 1, 1
                 option_cls: 'BlueSpinnerOption'
                 on_text: root.on_filter_field_change()
-            TextInput:
-                id: filter_value
-                hint_text: 'type & Enter'
-                multiline: False
-                font_size: sp(12)
-                padding: dp(8), dp(7)
-                on_text_validate: root.apply_sort_filter()
+            Spinner:
+                id: filter_value_spinner
+                text: 'All'
+                values: ['All']
+                font_size: sp(11)
+                background_color: 0.3, 0.3, 0.35, 1
+                color: 1, 1, 1, 1
+                option_cls: 'BlueSpinnerOption'
+                on_text: root.apply_sort_filter()
         # Tabs
         BoxLayout:
             size_hint_y: None
@@ -703,122 +781,56 @@ ScreenManager:
                     background_color: 0, 0.314, 0.784, 1
                     color: 1, 1, 1, 1
                     on_press: root.add_image()
-                # Action buttons - centered row
+                # Action buttons - centered row with icons
                 AnchorLayout:
                     anchor_x: 'center'
                     size_hint_y: None
-                    height: dp(70)
+                    height: dp(54)
                     BoxLayout:
                         size_hint: None, None
-                        size: dp(390), dp(56)
+                        size: dp(310), dp(48)
                         spacing: dp(8)
                         Button:
-                            text: 'Info'
                             size_hint: None, None
-                            size: dp(56), dp(56)
-                            font_size: sp(11)
-                            bold: True
-                            background_normal: ''
-                            background_down: ''
-                            background_color: 0, 0, 0, 0
-                            color: 1, 1, 1, 1
-                            canvas.before:
-                                Color:
-                                    rgba: 0.2, 0.6, 0.3, 1
-                                RoundedRectangle:
-                                    pos: self.pos
-                                    size: self.size
-                                    radius: [100]
+                            size: dp(44), dp(44)
+                            background_normal: 'assets/icons/Info.png'
+                            background_down: 'assets/icons/Info.png'
+                            border: [0, 0, 0, 0]
                             on_press: root.show_summary()
                         Button:
-                            text: 'Web'
                             size_hint: None, None
-                            size: dp(56), dp(56)
-                            font_size: sp(11)
-                            bold: True
-                            background_normal: ''
-                            background_down: ''
-                            background_color: 0, 0, 0, 0
-                            color: 1, 1, 1, 1
-                            canvas.before:
-                                Color:
-                                    rgba: 0.45, 0.25, 0.7, 1
-                                RoundedRectangle:
-                                    pos: self.pos
-                                    size: self.size
-                                    radius: [100]
+                            size: dp(44), dp(44)
+                            background_normal: 'assets/icons/Web.png'
+                            background_down: 'assets/icons/Web.png'
+                            border: [0, 0, 0, 0]
                             on_press: root.google_search()
                         Button:
-                            text: 'eBay'
                             size_hint: None, None
-                            size: dp(56), dp(56)
-                            font_size: sp(11)
-                            bold: True
-                            background_normal: ''
-                            background_down: ''
-                            background_color: 0, 0, 0, 0
-                            color: 1, 1, 1, 1
-                            canvas.before:
-                                Color:
-                                    rgba: 0.9, 0.5, 0.1, 1
-                                RoundedRectangle:
-                                    pos: self.pos
-                                    size: self.size
-                                    radius: [100]
+                            size: dp(44), dp(44)
+                            background_normal: 'assets/icons/eBay.png'
+                            background_down: 'assets/icons/eBay.png'
+                            border: [0, 0, 0, 0]
                             on_press: root.ebay_search()
                         Button:
-                            text: 'YT'
                             size_hint: None, None
-                            size: dp(56), dp(56)
-                            font_size: sp(11)
-                            bold: True
-                            background_normal: ''
-                            background_down: ''
-                            background_color: 0, 0, 0, 0
-                            color: 1, 1, 1, 1
-                            canvas.before:
-                                Color:
-                                    rgba: 0.8, 0.1, 0.1, 1
-                                RoundedRectangle:
-                                    pos: self.pos
-                                    size: self.size
-                                    radius: [100]
+                            size: dp(44), dp(44)
+                            background_normal: 'assets/icons/Youtube.png'
+                            background_down: 'assets/icons/Youtube.png'
+                            border: [0, 0, 0, 0]
                             on_press: root.youtube_search()
                         Button:
-                            text: 'Edit'
                             size_hint: None, None
-                            size: dp(56), dp(56)
-                            font_size: sp(11)
-                            bold: True
-                            background_normal: ''
-                            background_down: ''
-                            background_color: 0, 0, 0, 0
-                            color: 1, 1, 1, 1
-                            canvas.before:
-                                Color:
-                                    rgba: 0, 0.314, 0.784, 1
-                                RoundedRectangle:
-                                    pos: self.pos
-                                    size: self.size
-                                    radius: [100]
+                            size: dp(44), dp(44)
+                            background_normal: 'assets/icons/Edit.png'
+                            background_down: 'assets/icons/Edit.png'
+                            border: [0, 0, 0, 0]
                             on_press: root.edit_phone()
                         Button:
-                            text: 'Del'
                             size_hint: None, None
-                            size: dp(56), dp(56)
-                            font_size: sp(11)
-                            bold: True
-                            background_normal: ''
-                            background_down: ''
-                            background_color: 0, 0, 0, 0
-                            color: 1, 1, 1, 1
-                            canvas.before:
-                                Color:
-                                    rgba: 0.8, 0.15, 0.15, 1
-                                RoundedRectangle:
-                                    pos: self.pos
-                                    size: self.size
-                                    radius: [100]
+                            size: dp(44), dp(44)
+                            background_normal: 'assets/icons/Delete.png'
+                            background_down: 'assets/icons/Delete.png'
+                            border: [0, 0, 0, 0]
                             on_press: root.confirm_delete()
                 # Info Card
                 BoxLayout:
@@ -853,15 +865,24 @@ ScreenManager:
                             text_size: self.size
                             halign: 'left'
                             valign: 'middle'
-                        Label:
-                            text: root.p_rarity_text
-                            font_size: sp(10)
-                            color: root.p_rarity_color
+                        BoxLayout:
                             size_hint_x: None
-                            width: dp(70)
-                            text_size: self.size
-                            halign: 'left'
-                            valign: 'middle'
+                            width: dp(100) if root.p_rarity_text else dp(0)
+                            size_hint_y: None
+                            height: dp(22) if root.p_rarity_text else dp(0)
+                            padding: dp(6), dp(2)
+                            canvas.before:
+                                Color:
+                                    rgba: root.p_rarity_color
+                                RoundedRectangle:
+                                    pos: self.pos
+                                    size: self.size
+                                    radius: [dp(11)]
+                            Label:
+                                text: root.p_rarity_text
+                                font_size: sp(10)
+                                bold: True
+                                color: 1, 1, 1, 1
                     Label:
                         text: 'ID: ' + root.p_id
                         font_size: sp(13)
@@ -1516,6 +1537,7 @@ ScreenManager:
                     height: dp(42)
                     font_size: sp(14)
                     padding: dp(10), dp(9)
+                    on_focus: if self.focus and self.text: self.select_all()
                 TextInput:
                     id: input_name
                     hint_text: 'Phone Name *'
@@ -1525,6 +1547,7 @@ ScreenManager:
                     font_size: sp(14)
                     padding: dp(10), dp(9)
                     on_text_validate: root.auto_fill_from_name()
+                    on_focus: if self.focus and self.text: self.select_all()
                 TextInput:
                     id: input_date
                     hint_text: 'Release Date'
@@ -1533,6 +1556,7 @@ ScreenManager:
                     height: dp(42)
                     font_size: sp(14)
                     padding: dp(10), dp(9)
+                    on_focus: if self.focus and self.text: self.select_all()
                 BoxLayout:
                     size_hint_y: None
                     height: dp(42)
@@ -1553,6 +1577,7 @@ ScreenManager:
                         multiline: False
                         font_size: sp(14)
                         padding: dp(10), dp(9)
+                        on_focus: if self.focus and self.text: self.select_all()
                 BoxLayout:
                     size_hint_y: None
                     height: dp(42)
@@ -1573,6 +1598,7 @@ ScreenManager:
                         multiline: False
                         font_size: sp(14)
                         padding: dp(10), dp(9)
+                        on_focus: if self.focus and self.text: self.select_all()
                 TextInput:
                     id: input_remarks
                     hint_text: 'Remarks'
@@ -1581,6 +1607,7 @@ ScreenManager:
                     height: dp(70)
                     font_size: sp(14)
                     padding: dp(10), dp(9)
+                    on_focus: if self.focus and self.text: self.select_all()
                 TextInput:
                     id: input_description
                     hint_text: 'Description'
@@ -1589,6 +1616,7 @@ ScreenManager:
                     height: dp(70)
                     font_size: sp(14)
                     padding: dp(10), dp(9)
+                    on_focus: if self.focus and self.text: self.select_all()
                 TextInput:
                     id: input_price
                     hint_text: 'Average Price (USD)'
@@ -1598,6 +1626,7 @@ ScreenManager:
                     font_size: sp(14)
                     padding: dp(10), dp(9)
                     input_filter: 'float'
+                    on_focus: if self.focus and self.text: self.select_all()
                 TextInput:
                     id: input_rarity
                     hint_text: 'Rarity Score (1-5)'
@@ -1607,6 +1636,7 @@ ScreenManager:
                     font_size: sp(14)
                     padding: dp(10), dp(9)
                     input_filter: 'float'
+                    on_focus: if self.focus and self.text: self.select_all()
                 ClickableBox:
                     size_hint_y: None
                     height: dp(46)
@@ -2034,7 +2064,154 @@ class SplashScreen(Screen):
         app = App.get_running_app()
         if app.root:
             app.root.transition = SlideTransition(direction="left")
-            app.root.current = "main"
+            app.root.current = "dashboard"
+
+
+class DashboardScreen(Screen):
+    def on_enter(self):
+        Clock.schedule_once(lambda dt: self._load_dashboard(), 0.2)
+
+    def _load_dashboard(self):
+        app = App.get_running_app()
+        if not app.db:
+            return
+        g = self.ids.dash_grid
+        g.clear_widgets()
+
+        # Gather stats
+        total_phones = 0
+        unique_models = 0
+        total_spares = 0
+        wall_count = 0
+        total_value = 0
+        try:
+            total_phones = app.db.get_phone_count()
+        except Exception:
+            pass
+        try:
+            cur = app.db.conn.execute("SELECT COUNT(DISTINCT TRIM(name)) FROM phones")
+            unique_models = cur.fetchone()[0]
+        except Exception:
+            pass
+        try:
+            cur = app.db.conn.execute("SELECT COUNT(*) FROM spare_parts")
+            total_spares = cur.fetchone()[0]
+        except Exception:
+            pass
+        try:
+            wall_count = app.db.get_wall_count()
+        except Exception:
+            pass
+        try:
+            cur = app.db.conn.execute("SELECT COALESCE(SUM(avg_price), 0) FROM phones")
+            total_value = cur.fetchone()[0] or 0
+        except Exception:
+            pass
+
+        def stat_card(title, value, bg_color):
+            card = BoxLayout(orientation="vertical", size_hint_y=None, height=dp(70), padding=dp(10))
+            with card.canvas.before:
+                Color(*bg_color)
+                card._bg = RoundedRectangle(pos=card.pos, size=card.size, radius=[dp(10)])
+            card.bind(pos=lambda w, v: setattr(w._bg, "pos", v),
+                      size=lambda w, v: setattr(w._bg, "size", v))
+            card.add_widget(Label(text=str(value), font_size=sp(24), bold=True,
+                color=(1, 1, 1, 1), size_hint_y=0.6))
+            card.add_widget(Label(text=title, font_size=sp(12),
+                color=(1, 1, 1, 0.8), size_hint_y=0.4))
+            return card
+
+        def stat_row(cards):
+            row = BoxLayout(size_hint_y=None, height=dp(70), spacing=dp(6))
+            for c in cards:
+                row.add_widget(c)
+            return row
+
+        # Section title
+        sec_lbl = Label(text="Overview", font_size=sp(16), bold=True,
+            color=(0, 0.314, 0.784, 1), size_hint_y=None, height=dp(30),
+            text_size=(dp(300), None), halign="left")
+        g.add_widget(sec_lbl)
+
+        # Stat cards in 2x2 grid
+        g.add_widget(stat_row([
+            stat_card("Total Phones", total_phones, (0, 0.314, 0.784, 1)),
+            stat_card("Unique Models", unique_models, (0.4, 0.3, 0.6, 1))
+        ]))
+        g.add_widget(stat_row([
+            stat_card("Spare Parts", total_spares, (0.26, 0.63, 0.28, 1)),
+            stat_card("Wall Items", wall_count, (0.35, 0.25, 0.15, 1))
+        ]))
+
+        # Collection value card
+        g.add_widget(stat_card("Collection Value", f"${total_value:,.0f}",
+            (0.1, 0.5, 0.3, 1)))
+
+        # Quick actions section
+        sec_lbl2 = Label(text="Quick Actions", font_size=sp(16), bold=True,
+            color=(0, 0.314, 0.784, 1), size_hint_y=None, height=dp(30),
+            text_size=(dp(300), None), halign="left")
+        g.add_widget(sec_lbl2)
+
+        from kivy.uix.button import Button as KBtn
+
+        def action_btn(text, callback, bg_color):
+            b = KBtn(text=text, size_hint_y=None, height=dp(46), font_size=sp(14),
+                background_normal='', background_color=bg_color, color=(1, 1, 1, 1), bold=True)
+            b.bind(on_press=callback)
+            return b
+
+        g.add_widget(action_btn("Browse Phones", lambda *a: self._go_tab("phones"),
+            (0, 0.314, 0.784, 1)))
+        g.add_widget(action_btn("Browse Spare Parts", lambda *a: self._go_tab("spares"),
+            (0.2, 0.2, 0.25, 1)))
+        g.add_widget(action_btn("Browse Wall Items", lambda *a: self._go_tab("wall"),
+            (0.35, 0.25, 0.15, 1)))
+
+        btn_row = BoxLayout(size_hint_y=None, height=dp(46), spacing=dp(6))
+        btn_row.add_widget(action_btn("Gallery", lambda *a: self._nav("photo_gallery"),
+            (0.8, 0.4, 0.1, 1)))
+        btn_row.add_widget(action_btn("Report", lambda *a: self._nav("report"),
+            (0.4, 0.3, 0.6, 1)))
+        g.add_widget(btn_row)
+
+        g.add_widget(Widget(size_hint_y=None, height=dp(20)))
+
+    def _go_tab(self, tab):
+        app = App.get_running_app()
+        main = app.root.get_screen("main")
+        main.current_tab = tab
+        main._data_loaded = False
+        app.root.transition = SlideTransition(direction="left")
+        app.root.current = "main"
+
+    def _nav(self, screen_name):
+        app = App.get_running_app()
+        app.root.transition = SlideTransition(direction="left")
+        app.root.current = screen_name
+
+    def show_menu(self):
+        popup = ModalView(size_hint=(0.75, None), height=dp(260))
+        c = BoxLayout(orientation="vertical", spacing=dp(1), padding=dp(12))
+        with c.canvas.before:
+            Color(1, 1, 1, 1)
+            c._bg = RoundedRectangle(pos=c.pos, size=c.size, radius=[dp(12)])
+        c.bind(pos=lambda w, v: setattr(w._bg, "pos", v),
+               size=lambda w, v: setattr(w._bg, "size", v))
+        c.add_widget(Label(text="Menu", font_size=sp(16), bold=True,
+            color=(0, 0.314, 0.784, 1), size_hint_y=None, height=dp(30)))
+        for t, n in [("Export Data", "export_data"),
+                      ("Backup & Restore", "backup"),
+                      ("Storage Report", "report"),
+                      ("Photo Gallery", "photo_gallery")]:
+            from kivy.uix.button import Button as KBtn
+            b = KBtn(text=t, size_hint_y=None, height=dp(44), font_size=sp(14),
+                background_normal='', background_color=(0, 0.314, 0.784, 1),
+                color=(1, 1, 1, 1), bold=True)
+            b.bind(on_press=lambda *a, nm=n, p=popup: (p.dismiss(), self._nav(nm)))
+            c.add_widget(b)
+        popup.add_widget(c)
+        popup.open()
 
 
 class MainScreen(Screen):
@@ -2100,40 +2277,55 @@ class MainScreen(Screen):
 
     def apply_sort_filter(self, *a):
         """Called from KV when sort/filter changes."""
-        # Toggle sort direction if same sort value selected again
-        try:
-            current_sort = self.ids.sort_spinner.text
-            if current_sort == self._last_sort_text:
-                self._sort_ascending = not self._sort_ascending
-            else:
-                self._sort_ascending = True
-                self._last_sort_text = current_sort
-        except:
-            pass
         self._current_page = 0
         self._apply_sort_filter_internal()
 
     def on_filter_field_change(self, *a):
         try:
-            field = self.ids.filter_field.text.replace('Filter: ', '')
-            if field == 'All':
-                self.ids.filter_value.text = ""
+            field = self.ids.filter_field.text
+            app = App.get_running_app()
+            spinner = self.ids.filter_value_spinner
+            if field in ('All', 'With Images', 'Without Images', 'Unique Models'):
+                spinner.values = ['All']
+                spinner.text = 'All'
                 self.apply_sort_filter()
-            elif field in ('With Images', 'Without Images', 'Unique Models'):
-                self.ids.filter_value.text = ""
-                self.apply_sort_filter()
+            elif field == 'Appearance' and app.db:
+                cur = app.db.conn.execute(
+                    "SELECT DISTINCT appearance_condition FROM phones WHERE appearance_condition IS NOT NULL AND appearance_condition != '' ORDER BY appearance_condition")
+                vals = ['All'] + [str(r[0]) for r in cur.fetchall()]
+                spinner.values = vals
+                spinner.text = 'All'
+            elif field == 'Working' and app.db:
+                cur = app.db.conn.execute(
+                    "SELECT DISTINCT working_condition FROM phones WHERE working_condition IS NOT NULL AND working_condition != '' ORDER BY working_condition")
+                vals = ['All'] + [str(r[0]) for r in cur.fetchall()]
+                spinner.values = vals
+                spinner.text = 'All'
+            elif field == 'Year' and app.db:
+                cur = app.db.conn.execute(
+                    "SELECT DISTINCT release_date FROM phones WHERE release_date IS NOT NULL AND release_date != '' ORDER BY release_date")
+                vals = ['All'] + [str(r[0]) for r in cur.fetchall()][:50]
+                spinner.values = vals
+                spinner.text = 'All'
+            elif field == 'Name' and app.db:
+                cur = app.db.conn.execute(
+                    "SELECT DISTINCT TRIM(name) FROM phones WHERE name IS NOT NULL AND name != '' ORDER BY TRIM(name) LIMIT 50")
+                vals = ['All'] + [str(r[0]) for r in cur.fetchall()]
+                spinner.values = vals
+                spinner.text = 'All'
             else:
-                hints = {'Name': 'e.g. 3310', 'Year': 'e.g. 2003', 'Appearance': 'e.g. Excellent', 'Working': 'e.g. Fully'}
-                self.ids.filter_value.hint_text = hints.get(field, 'type & Enter')
-        except: pass
+                spinner.values = ['All']
+                spinner.text = 'All'
+        except Exception:
+            pass
 
     def _apply_sort_filter_internal(self):
         items = list(self._raw_items)
 
         # Filter
         try:
-            field = self.ids.filter_field.text.replace('Filter: ', '')
-            val = self.ids.filter_value.text.strip().lower()
+            field = self.ids.filter_field.text
+            val = self.ids.filter_value_spinner.text.strip()
             if field != 'All' and self.current_tab == "phones":
                 if field == 'With Images':
                     items = [i for i in items if i.get('has_image')]
@@ -2148,28 +2340,39 @@ class MainScreen(Screen):
                         elif 'FW' in (i.get('working_condition', '') or '') and 'FW' not in (seen[n].get('working_condition', '') or ''):
                             seen[n] = i
                     items = list(seen.values())
-                elif val:
+                elif val and val != 'All':
                     key_map = {'Name': 'name', 'Year': 'release_date', 'Appearance': 'appearance_condition', 'Working': 'working_condition'}
                     key = key_map.get(field, '')
                     if key:
-                        items = [i for i in items if val in (i.get(key, '') or '').lower()]
-        except: pass
+                        items = [i for i in items if val.lower() in (i.get(key, '') or '').lower()]
+        except Exception:
+            pass
 
-        # Sort
+        # Sort - parse direction from sort text
         try:
-            sort_by = self.ids.sort_spinner.text.replace('Sort: ', '')
+            sort_text = self.ids.sort_spinner.text.replace('Sort: ', '')
+            ascending = True
+            if sort_text.endswith(' Desc'):
+                ascending = False
+                sort_by = sort_text[:-5]
+            elif sort_text.endswith(' Asc'):
+                ascending = True
+                sort_by = sort_text[:-4]
+            else:
+                sort_by = sort_text
             if self.current_tab == "phones":
                 if sort_by == 'Name':
-                    items.sort(key=lambda x: (x.get('name', '') or '').lower(), reverse=not self._sort_ascending)
+                    items.sort(key=lambda x: (x.get('name', '') or '').lower(), reverse=not ascending)
                 elif sort_by == 'ID':
-                    items.sort(key=lambda x: x.get('id', '') or '', reverse=not self._sort_ascending)
+                    items.sort(key=lambda x: x.get('id', '') or '', reverse=not ascending)
                 elif sort_by == 'Year':
-                    items.sort(key=lambda x: x.get('release_date', '') or '', reverse=not self._sort_ascending)
+                    items.sort(key=lambda x: x.get('release_date', '') or '', reverse=not ascending)
                 elif sort_by == 'Price':
-                    items.sort(key=lambda x: float(x.get('avg_price', 0) or 0), reverse=not self._sort_ascending)
+                    items.sort(key=lambda x: float(x.get('avg_price', 0) or 0), reverse=not ascending)
             else:
-                items.sort(key=lambda x: (x.get('name', '') or '').lower(), reverse=not self._sort_ascending)
-        except: pass
+                items.sort(key=lambda x: (x.get('name', '') or '').lower(), reverse=not ascending)
+        except Exception:
+            pass
 
         self._all_items = items
         self._total_items = len(items)
@@ -2193,8 +2396,7 @@ class MainScreen(Screen):
         cp = self._current_page + 1
         tab_labels = {"phones": "phones", "spares": "parts", "wall": "wall items"}
         lt = "found" if self._is_search else tab_labels.get(self.current_tab, "items")
-        sort_dir = "ASC" if self._sort_ascending else "DESC"
-        self.ids.count_label.text = f"{self._total_items} {lt} | Page {cp}/{tp} | {sort_dir}"
+        self.ids.count_label.text = f"{self._total_items} {lt} | Page {cp}/{tp}"
         defimg = get_default_image_path(get_app_path())
 
         if self.current_tab == "phones":
@@ -2301,18 +2503,24 @@ class MainScreen(Screen):
         app.root.transition = SlideTransition(direction="left")
         app.root.current = "search_all"
 
+    def go_dashboard(self):
+        """Navigate back to the dashboard."""
+        app = App.get_running_app()
+        app.root.transition = SlideTransition(direction="right")
+        app.root.current = "dashboard"
+
     def refresh_home(self):
         """Reset everything and go to main screen."""
         self._data_loaded = False
         self._current_page = 0
-        self._sort_ascending = True
-        self._last_sort_text = ""
         try:
             self.ids.search_bar.ids.search_input.text = ""
-            self.ids.filter_value.text = ""
-            self.ids.filter_field.text = "Filter: All"
+            self.ids.filter_value_spinner.text = "All"
+            self.ids.filter_value_spinner.values = ["All"]
+            self.ids.filter_field.text = "All"
             self.ids.sort_spinner.text = "Sort: Name"
-        except: pass
+        except Exception:
+            pass
         self.refresh_list()
 
     def open_gallery(self):
@@ -2330,13 +2538,14 @@ class MainScreen(Screen):
         # Title
         c.add_widget(Label(text="Menu", font_size=sp(16), bold=True, color=(0,0.314,0.784,1),
             size_hint_y=None, height=dp(30)))
-        for t, n, clr in [("Export Data","export_data",(0,0.314,0.784,1)),
-                           ("Backup & Restore","backup",(0.26,0.63,0.28,1)),
-                           ("Storage Report","report",(0.4,0.3,0.6,1)),
-                           ("Photo Gallery","photo_gallery",(0.8,0.4,0.1,1))]:
+        for t, n in [("Export Data","export_data"),
+                      ("Backup & Restore","backup"),
+                      ("Storage Report","report"),
+                      ("Photo Gallery","photo_gallery")]:
             from kivy.uix.button import Button as KBtn
             b = KBtn(text=t, size_hint_y=None, height=dp(44), font_size=sp(14),
-                background_color=clr, color=(1,1,1,1), bold=True)
+                background_normal='', background_color=(0, 0.314, 0.784, 1),
+                color=(1,1,1,1), bold=True)
             b.bind(on_press=lambda *a, nm=n, p=popup: (p.dismiss(), self._nav(nm)))
             c.add_widget(b)
         popup.add_widget(c); popup.open()
@@ -3568,16 +3777,16 @@ class ReportScreen(Screen):
         # Row 1: Total Phones | Unique Models
         g.add_widget(stat_row([
             stat_card("Total Phones", total_phones, (0, 0.314, 0.784, 1),
-                on_tap=lambda *a: self._go_main_filtered('Filter: All')),
+                on_tap=lambda *a: self._go_main_filtered('All')),
             stat_card("Unique Models", unique_models, (0.4, 0.3, 0.6, 1),
-                on_tap=lambda *a: self._go_main_filtered('Filter: Unique Models'))
+                on_tap=lambda *a: self._go_main_filtered('Unique Models'))
         ]))
         # Row 2: With Images | Without Images
         g.add_widget(stat_row([
             stat_card("With Images", with_images, (0.26, 0.63, 0.28, 1),
-                on_tap=lambda *a: self._go_main_filtered('Filter: With Images')),
+                on_tap=lambda *a: self._go_main_filtered('With Images')),
             stat_card("Without Images", without_images, (0.85, 0.4, 0.1, 1),
-                on_tap=lambda *a: self._go_main_filtered('Filter: Without Images'))
+                on_tap=lambda *a: self._go_main_filtered('Without Images'))
         ]))
         # Row 3: Spare Parts | Wall Items
         g.add_widget(stat_row([
@@ -3905,7 +4114,10 @@ class NokiaStorageApp(App):
 
     def _kb(self, win, key, *a):
         if key == 27:
-            if self.root and self.root.current not in ("main", "splash"):
+            if self.root and self.root.current == "main":
+                self.root.transition = SlideTransition(direction="right"); self.root.current = "dashboard"
+                return True
+            if self.root and self.root.current not in ("dashboard", "splash"):
                 self.root.transition = SlideTransition(direction="right"); self.root.current = "main"
                 return True
             now = time.time()
@@ -3928,11 +4140,14 @@ class NokiaStorageApp(App):
                     phone_rows = []
                     wall_rows = []
                     for i in data:
+                        desc = str(i[8]) if len(i) > 8 and i[8] else ""
+                        if desc in ("None","none"): desc = ""
                         row = {"id":str(i[0]),"name":str(i[1]),"release_date":str(i[2]),
                                "appearance_condition":str(i[3]),"working_condition":str(i[4]),
                                "remarks":str(i[5]) if i[5] else "",
                                "avg_price":float(i[6]) if len(i) > 6 else 0,
-                               "rarity_score":float(i[7]) if len(i) > 7 else 0}
+                               "rarity_score":float(i[7]) if len(i) > 7 else 0,
+                               "description": desc}
                         if str(i[0]).startswith("XXXX"):
                             wall_rows.append(row)
                         else:
