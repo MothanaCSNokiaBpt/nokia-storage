@@ -2272,7 +2272,7 @@ class MainScreen(Screen):
             except: pass
             # For simple filters (With Images, Without Images, Unique Models, All)
             # just set filter_field and apply
-            if f in ('All', 'With Images', 'Without Images', 'Unique Models'):
+            if f in ('All', 'With Images', 'Without Images', 'Unique Models', 'No FW Models'):
                 try:
                     self.ids.filter_field.text = f
                     self.ids.filter_value_spinner.values = ['All']
@@ -2356,7 +2356,7 @@ class MainScreen(Screen):
             field = self.ids.filter_field.text
             app = App.get_running_app()
             spinner = self.ids.filter_value_spinner
-            if field in ('All', 'With Images', 'Without Images', 'Unique Models'):
+            if field in ('All', 'With Images', 'Without Images', 'Unique Models', 'No FW Models'):
                 spinner.values = ['All']
                 spinner.text = 'All'
                 self.apply_sort_filter()
@@ -2411,6 +2411,17 @@ class MainScreen(Screen):
                         elif 'FW' in (i.get('working_condition', '') or '') and 'FW' not in (seen[n].get('working_condition', '') or ''):
                             seen[n] = i
                     items = list(seen.values())
+                elif field == 'No FW Models':
+                    # Find model names that have NO FW unit
+                    app = App.get_running_app()
+                    no_fw_names = set()
+                    try:
+                        cur = app.db.conn.execute(
+                            "SELECT DISTINCT TRIM(name) FROM phones GROUP BY TRIM(name) "
+                            "HAVING SUM(CASE WHEN TRIM(working_condition)='FW' THEN 1 ELSE 0 END) = 0")
+                        no_fw_names = {r[0] for r in cur.fetchall()}
+                    except: pass
+                    items = [i for i in items if (i.get('name', '') or '').strip() in no_fw_names]
                 elif val and val != 'All':
                     key_map = {'Name': 'name', 'Year': 'release_date', 'Appearance': 'appearance_condition', 'Working': 'working_condition'}
                     key = key_map.get(field, '')
@@ -4031,7 +4042,8 @@ class ReportScreen(Screen):
                 "ORDER BY n LIMIT 30")
             no_fw_models = [(row[0], row[1]) for row in cur.fetchall()]
             sec("No Fully Working Phone")
-            g.add_widget(stat_card("Models Without FW", len(no_fw_models), (0.85, 0.2, 0.2, 1)))
+            g.add_widget(stat_card("Models Without FW", len(no_fw_models), (0.85, 0.2, 0.2, 1),
+                on_tap=lambda *a: self._go_main_filtered('No FW Models')))
             for nm, cnt in no_fw_models:
                 nm_str = str(nm)
                 row = ClickableBox(size_hint_y=None, height=dp(28), padding=(dp(8), dp(2)), spacing=dp(4))
