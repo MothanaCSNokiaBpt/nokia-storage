@@ -456,24 +456,6 @@ ScreenManager:
                 text_size: self.size
                 halign: 'left'
                 valign: 'middle'
-            Button:
-                text: 'Menu'
-                size_hint_x: None
-                width: dp(58)
-                font_size: sp(12)
-                bold: True
-                background_normal: ''
-                background_down: ''
-                background_color: 0, 0, 0, 0
-                color: 1, 1, 1, 1
-                canvas.before:
-                    Color:
-                        rgba: 0.15, 0.4, 0.85, 1
-                    RoundedRectangle:
-                        pos: self.pos
-                        size: self.size
-                        radius: [dp(14)]
-                on_press: root.show_menu()
         ScrollView:
             do_scroll_x: False
             GridLayout:
@@ -560,24 +542,6 @@ ScreenManager:
                         size: self.size
                         radius: [dp(14)]
                 on_press: root.open_gallery()
-            Button:
-                text: 'Menu'
-                size_hint_x: None
-                width: dp(58)
-                font_size: sp(12)
-                bold: True
-                background_normal: ''
-                background_down: ''
-                background_color: 0, 0, 0, 0
-                color: 1, 1, 1, 1
-                canvas.before:
-                    Color:
-                        rgba: 0.15, 0.4, 0.85, 1
-                    RoundedRectangle:
-                        pos: self.pos
-                        size: self.size
-                        radius: [dp(14)]
-                on_press: root.show_menu()
         SearchBar:
             id: search_bar
         # Sort & Filter bar
@@ -1548,12 +1512,13 @@ ScreenManager:
                             bold: True
                 TextInput:
                     id: input_id
-                    hint_text: 'Phone ID *'
+                    hint_text: 'Phone ID (4 digits) *'
                     multiline: False
                     size_hint_y: None
                     height: dp(42)
                     font_size: sp(14)
                     padding: dp(10), dp(9)
+                    input_filter: 'int'
                     on_focus: if self.focus and self.text: self.select_all()
                 TextInput:
                     id: input_name
@@ -1565,15 +1530,16 @@ ScreenManager:
                     padding: dp(10), dp(9)
                     on_text_validate: root.auto_fill_from_name()
                     on_focus: if self.focus and self.text: self.select_all()
-                TextInput:
+                Spinner:
                     id: input_date
-                    hint_text: 'Release Date'
-                    multiline: False
+                    text: 'Select Year'
+                    values: []
                     size_hint_y: None
                     height: dp(42)
                     font_size: sp(14)
-                    padding: dp(10), dp(9)
-                    on_focus: if self.focus and self.text: self.select_all()
+                    background_color: 0, 0.314, 0.784, 1
+                    color: 1, 1, 1, 1
+                    option_cls: 'BlueSpinnerOption'
                 BoxLayout:
                     size_hint_y: None
                     height: dp(42)
@@ -1636,24 +1602,24 @@ ScreenManager:
                     on_focus: if self.focus and self.text: self.select_all()
                 TextInput:
                     id: input_price
-                    hint_text: 'Average Price (USD)'
+                    hint_text: 'Average Price (AED)'
                     multiline: False
                     size_hint_y: None
                     height: dp(42)
                     font_size: sp(14)
                     padding: dp(10), dp(9)
-                    input_filter: 'float'
+                    input_filter: 'int'
                     on_focus: if self.focus and self.text: self.select_all()
-                TextInput:
+                Spinner:
                     id: input_rarity
-                    hint_text: 'Rarity Score (1-5)'
-                    multiline: False
+                    text: 'Select Rarity'
+                    values: ['Select Rarity', '1', '1.5', '2', '2.5', '3', '3.5', '4', '4.5', '5']
                     size_hint_y: None
                     height: dp(42)
                     font_size: sp(14)
-                    padding: dp(10), dp(9)
-                    input_filter: 'float'
-                    on_focus: if self.focus and self.text: self.select_all()
+                    background_color: 0, 0.314, 0.784, 1
+                    color: 1, 1, 1, 1
+                    option_cls: 'BlueSpinnerOption'
                 ClickableBox:
                     size_hint_y: None
                     height: dp(46)
@@ -2160,8 +2126,9 @@ class DashboardScreen(Screen):
             stat_card("Wall Items", wall_count, (0.35, 0.25, 0.15, 1))
         ]))
 
-        # Collection value card
-        g.add_widget(stat_card("Collection Value", f"AED {total_value:,.0f}",
+        # Average value card
+        avg_value = (total_value / total_phones) if total_phones > 0 else 0
+        g.add_widget(stat_card("Avg. Phone Value", f"AED {avg_value:,.0f}",
             (0.1, 0.5, 0.3, 1)))
 
         # Quick actions section
@@ -2191,6 +2158,11 @@ class DashboardScreen(Screen):
         btn_row.add_widget(action_btn("Report", lambda *a: self._nav("report"),
             (0.4, 0.3, 0.6, 1)))
         g.add_widget(btn_row)
+
+        g.add_widget(action_btn("Backup & Restore", lambda *a: self._nav("backup"),
+            (0.26, 0.63, 0.28, 1)))
+        g.add_widget(action_btn("Export Data", lambda *a: self._nav("export_data"),
+            (0.2, 0.45, 0.25, 1)))
 
         g.add_widget(Widget(size_hint_y=None, height=dp(20)))
 
@@ -3224,10 +3196,13 @@ class AddPhoneScreen(Screen):
 
     def _clear(self, *a):
         try:
-            for fid in ["input_id","input_name","input_date","input_appear","input_working","input_remarks","input_description","input_price","input_rarity"]:
+            for fid in ["input_id","input_name","input_appear","input_working","input_remarks","input_description","input_price"]:
                 self.ids[fid].text = ""
             self.ids.input_id.readonly = False
             self.ids.input_id.background_color = (1, 1, 1, 1)
+            self.ids.input_date.values = ['Select Year'] + [str(y) for y in range(2026, 1984, -1)]
+            self.ids.input_date.text = 'Select Year'
+            self.ids.input_rarity.text = 'Select Rarity'
             self.ids.preview_img.source = get_default_image_path(get_app_path())
         except: pass
         self._populate_condition_spinners()
@@ -3244,15 +3219,16 @@ class AddPhoneScreen(Screen):
     def _fill(self, p, img_path, *a):
         try:
             self.ids.input_id.text = p["id"]; self.ids.input_name.text = p["name"]
-            self.ids.input_date.text = p.get("release_date","") or ""
+            self.ids.input_date.values = ['Select Year'] + [str(y) for y in range(2026, 1984, -1)]
+            self.ids.input_date.text = p.get("release_date","") or "Select Year"
             self.ids.input_appear.text = p.get("appearance_condition","") or ""
             self.ids.input_working.text = p.get("working_condition","") or ""
             r = p.get("remarks","") or ""; self.ids.input_remarks.text = "" if r in ("None","none") else r
             d = p.get("description","") or ""; self.ids.input_description.text = "" if d in ("None","none") else d
             avg_p = p.get("avg_price", 0) or 0
             rar = p.get("rarity_score", 0) or 0
-            self.ids.input_price.text = str(avg_p) if avg_p > 0 else ""
-            self.ids.input_rarity.text = str(rar) if rar > 0 else ""
+            self.ids.input_price.text = str(int(avg_p)) if avg_p > 0 else ""
+            self.ids.input_rarity.text = str(rar) if rar > 0 else "Select Rarity"
             self._auto_price = avg_p
             self._auto_rarity = rar
             # Make ID readonly in edit mode
@@ -3273,13 +3249,13 @@ class AddPhoneScreen(Screen):
                 (name,))
             row = cur.fetchone()
             if row:
-                if row[0] and not self.ids.input_date.text.strip():
+                if row[0] and (self.ids.input_date.text == 'Select Year' or not self.ids.input_date.text.strip()):
                     self.ids.input_date.text = str(row[0])
                 self._auto_price = float(row[1] or 0)
                 self._auto_rarity = float(row[2] or 0)
                 if self._auto_price > 0 and not self.ids.input_price.text.strip():
-                    self.ids.input_price.text = str(self._auto_price)
-                if self._auto_rarity > 0 and not self.ids.input_rarity.text.strip():
+                    self.ids.input_price.text = str(int(self._auto_price))
+                if self._auto_rarity > 0 and (self.ids.input_rarity.text == 'Select Rarity'):
                     self.ids.input_rarity.text = str(self._auto_rarity)
                 desc = str(row[3] or "")
                 if desc and desc != "None" and not self.ids.input_description.text.strip():
@@ -3322,19 +3298,28 @@ class AddPhoneScreen(Screen):
                 if cur.fetchone()[0] > 0:
                     app.show_toast("ID already exists!"); return
             except: pass
+        # Validate ID is max 4 digits
+        if len(pid) > 4:
+            app.show_toast("ID must be max 4 digits"); return
         try:
             price_text = self.ids.input_price.text.strip()
             price_val = float(price_text) if price_text else self._auto_price
         except: price_val = self._auto_price
         try:
             rarity_text = self.ids.input_rarity.text.strip()
-            rarity_val = float(rarity_text) if rarity_text else self._auto_rarity
+            if rarity_text and rarity_text != 'Select Rarity':
+                rarity_val = float(rarity_text)
+            else:
+                rarity_val = self._auto_rarity
         except: rarity_val = self._auto_rarity
         desc_text = ""
         try: desc_text = self.ids.input_description.text.strip()
         except: pass
+        date_text = self.ids.input_date.text.strip()
+        if date_text == 'Select Year':
+            date_text = ""
         app.db.add_phone(phone_id=pid, name=name,
-            release_date=self.ids.input_date.text.strip(),
+            release_date=date_text,
             appearance=self.ids.input_appear.text.strip(),
             working=self.ids.input_working.text.strip(),
             remarks=self.ids.input_remarks.text.strip(),
@@ -3715,6 +3700,8 @@ class ReportScreen(Screen):
         main._data_loaded = False
         main._current_page = 0
         main._is_search = False
+        main._raw_items = []
+        main._all_items = []
         try:
             main.ids.search_bar.ids.search_input.text = ""
             main.ids.sort_spinner.text = "Sort: Name"
@@ -3725,7 +3712,7 @@ class ReportScreen(Screen):
             pass
         app.root.transition = SlideTransition(direction="right")
         app.root.current = "main"
-        Clock.schedule_once(lambda dt: main.refresh_list(), 0.2)
+        Clock.schedule_once(lambda dt: main.refresh_list(), 0.3)
 
     def _go_main_search(self, query, *a):
         app = App.get_running_app()
@@ -3734,16 +3721,19 @@ class ReportScreen(Screen):
         main._data_loaded = False
         main._current_page = 0
         main._is_search = False
+        main._raw_items = []
+        main._all_items = []
         try:
+            main.ids.search_bar.ids.search_input.text = ""
+            main.ids.sort_spinner.text = "Sort: Name"
             main.ids.filter_field.text = "All"
             main.ids.filter_value_spinner.text = "All"
             main.ids.filter_value_spinner.values = ["All"]
-            main.ids.sort_spinner.text = "Sort: Name"
         except Exception:
             pass
         app.root.transition = SlideTransition(direction="right")
         app.root.current = "main"
-        Clock.schedule_once(lambda dt: main.do_search(query), 0.3)
+        Clock.schedule_once(lambda dt: main.do_search(query), 0.4)
 
     def _load(self):
         app = App.get_running_app()
@@ -4125,6 +4115,7 @@ class NokiaStorageApp(App):
 
     def build(self):
         Window.clearcolor = (1, 1, 1, 1)
+        Window.softinput_mode = 'below_target'
         try: self.db = NokiaDatabase(get_db_path())
         except Exception as e: print(f"DB: {e}")
         if platform == "android":
