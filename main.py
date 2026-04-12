@@ -3603,7 +3603,7 @@ class ExportScreen(Screen):
             spares = app.db.export_spare_parts()
 
             # Build XLSX data
-            phone_rows = [["ID", "Name", "Release Date", "Appearance", "Working", "Remarks", "Avg Price", "Rarity"]]
+            phone_rows = [["ID", "Name", "Release Date", "Appearance", "Working", "Remarks", "Description", "Avg Price (AED)", "Rarity"]]
             for p in phones:
                 phone_rows.append([
                     str(p["id"]), str(p["name"]),
@@ -3611,6 +3611,7 @@ class ExportScreen(Screen):
                     str(p.get("appearance_condition","") or ""),
                     str(p.get("working_condition","") or ""),
                     str(p.get("remarks","") or ""),
+                    str(p.get("description","") or ""),
                     str(p.get("avg_price","") or ""),
                     str(p.get("rarity_score","") or "")
                 ])
@@ -3623,12 +3624,27 @@ class ExportScreen(Screen):
                     str(s.get("description","") or "")
                 ])
 
-            sheets = {"Phones": phone_rows, "Spare Parts": spare_rows}
+            # Wall items sheet
+            wall_rows = [["ID", "Name", "Release Date", "Appearance", "Working", "Remarks"]]
+            try:
+                walls = app.db.get_all_wall_items()
+                for w in walls:
+                    wall_rows.append([
+                        str(w["id"]), str(w["name"]),
+                        str(w.get("release_date","") or ""),
+                        str(w.get("appearance_condition","") or ""),
+                        str(w.get("working_condition","") or ""),
+                        str(w.get("remarks","") or "")
+                    ])
+            except: pass
+
+            sheets = {"Phones": phone_rows, "Spare Parts": spare_rows, "Wall": wall_rows}
             filepath = os.path.join(od, f"nokia_export_{ts}.xlsx")
             create_xlsx(sheets, filepath)
 
             self._last_export_path = filepath
-            self.ids.export_status.text = f"Exported {len(phones)} phones, {len(spares)} spares"
+            wall_cnt = len(wall_rows) - 1
+            self.ids.export_status.text = f"Exported {len(phones)} phones, {len(spares)} spares, {wall_cnt} wall"
             self.ids.export_status.color = (0.26,0.63,0.28,1)
             app.show_toast("Export saved!")
 
@@ -4369,6 +4385,42 @@ class NokiaStorageApp(App):
                     uris.append(single)
             if not uris:
                 return
+
+            # Handle restore_backup BEFORE image processing
+            if self.pick_image_for and self.pick_image_for[0] == "restore_backup":
+                try:
+                    zip_bytes = self._read_uri_bytes(uris[0])
+                    if zip_bytes and len(zip_bytes) > 100:
+                        self.pick_image_for = None
+                        # Write to temp file and restore
+                        tmp_zip = os.path.join(get_app_path(), "_restore_tmp.zip")
+                        with open(tmp_zip, "wb") as f:
+                            f.write(zip_bytes)
+                        self.db.close()
+                        with zipfile.ZipFile(tmp_zip, "r") as zf:
+                            zf.extractall(get_app_path())
+                        try: os.remove(tmp_zip)
+                        except: pass
+                        self.db = NokiaDatabase(get_db_path())
+                        try:
+                            cd = get_cache_dir(get_app_path())
+                            if os.path.isdir(cd):
+                                shutil.rmtree(cd, ignore_errors=True)
+                        except: pass
+                        self.root.get_screen("main")._data_loaded = False
+                        cnt = self.db.get_phone_count()
+                        self.show_toast(f"Restored {cnt} phones!")
+                        try:
+                            self.root.get_screen("backup").ids.backup_status.text = f"Restored! {cnt} phones loaded."
+                            self.root.get_screen("backup").ids.backup_status.color = (0.26,0.63,0.28,1)
+                        except: pass
+                    else:
+                        self.show_toast("Cannot read backup file")
+                except Exception as e:
+                    self.db = NokiaDatabase(get_db_path())
+                    self.show_toast(f"Restore error: {str(e)[:40]}")
+                return
+
             all_bytes = []
             for uri in uris:
                 try:

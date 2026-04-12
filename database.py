@@ -541,7 +541,7 @@ class NokiaDatabase:
     def export_phones(self):
         cur = self.conn.execute(
             """SELECT id, name, release_date, appearance_condition,
-                      working_condition, remarks, image_path,
+                      working_condition, remarks, description, image_path,
                       avg_price, rarity_score
                FROM phones ORDER BY name, id"""
         )
