@@ -75,6 +75,13 @@ class NokiaDatabase:
                 created_at TEXT DEFAULT (datetime('now'))
             );
 
+            CREATE TABLE IF NOT EXISTS wall_gallery (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                wall_id TEXT NOT NULL,
+                image_data BLOB NOT NULL,
+                created_at TEXT DEFAULT (datetime('now'))
+            );
+
             CREATE TABLE IF NOT EXISTS general_gallery (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 image_data BLOB NOT NULL,
@@ -485,6 +492,28 @@ class NokiaDatabase:
             "SELECT id, image_data FROM spare_gallery WHERE spare_id = ? ORDER BY created_at",
             (spare_id,))
         return [(r[0], bytes(r[1])) for r in cur.fetchall() if r[1]]
+
+    def delete_spare_gallery_image(self, gal_id):
+        self.conn.execute("DELETE FROM spare_gallery WHERE id = ?", (gal_id,))
+        self.conn.commit()
+
+    # ── Wall Gallery ──────────────────────────────────────────
+
+    def add_wall_gallery_image(self, wall_id, image_data):
+        self.conn.execute(
+            "INSERT INTO wall_gallery (wall_id, image_data, created_at) VALUES (?, ?, ?)",
+            (wall_id, image_data, datetime.now().isoformat()))
+        self.conn.commit()
+
+    def get_wall_gallery_images(self, wall_id):
+        cur = self.conn.execute(
+            "SELECT id, image_data FROM wall_gallery WHERE wall_id = ? ORDER BY created_at",
+            (wall_id,))
+        return [(r[0], bytes(r[1])) for r in cur.fetchall() if r[1]]
+
+    def delete_wall_gallery_image(self, gal_id):
+        self.conn.execute("DELETE FROM wall_gallery WHERE id = ?", (gal_id,))
+        self.conn.commit()
 
     # ── Combined Search ─────────────────────────────────────────
 

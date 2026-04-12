@@ -1428,6 +1428,31 @@ ScreenManager:
                         height: self.texture_size[1] + dp(6)
                         text_size: self.width, None
                         halign: 'left'
+                Button:
+                    text: 'Add Images to Gallery'
+                    size_hint_y: None
+                    height: dp(40)
+                    font_size: sp(13)
+                    bold: True
+                    background_color: 0, 0.314, 0.784, 1
+                    color: 1, 1, 1, 1
+                    on_press: root.add_image()
+                # Gallery section
+                Label:
+                    text: 'Photo Gallery'
+                    font_size: sp(15)
+                    bold: True
+                    color: 0.1, 0.1, 0.18, 1
+                    size_hint_y: None
+                    height: dp(26)
+                    text_size: self.size
+                    halign: 'left'
+                GridLayout:
+                    id: wall_gallery_grid
+                    cols: 1
+                    spacing: dp(6)
+                    size_hint_y: None
+                    height: self.minimum_height
                 Widget:
                     size_hint_y: None
                     height: dp(30)
@@ -3193,7 +3218,7 @@ class SpareDetailScreen(Screen):
         popup.open()
 
     def _load_gallery(self):
-        """Load spare part gallery images."""
+        """Load spare part gallery images with delete buttons."""
         app = App.get_running_app()
         grid = self.ids.spare_gallery_grid
         grid.clear_widgets()
@@ -3202,15 +3227,48 @@ class SpareDetailScreen(Screen):
             grid.add_widget(Label(text="No gallery photos", font_size=sp(12),
                 color=(0.5,0.5,0.5,1), size_hint_y=None, height=dp(24)))
             return
+        from kivy.uix.button import Button as KBtn
         for gal_id, img_data in images:
             img_path = write_blob_to_file(img_data, f"sgal_{gal_id}", get_app_path())
             if img_path:
-                btn = ClickableBox(size_hint_y=None, height=dp(200), padding=dp(2))
+                box = BoxLayout(orientation="vertical", size_hint_y=None, height=dp(230), padding=dp(2))
+                img_btn = ClickableBox(size_hint_y=None, height=dp(200))
                 img_widget = Image(source=img_path, nocache=True,
                     allow_stretch=True, keep_ratio=True)
-                btn.add_widget(img_widget)
-                btn.bind(on_release=partial(self._show_fullscreen, img_path))
-                grid.add_widget(btn)
+                img_btn.add_widget(img_widget)
+                img_btn.bind(on_release=partial(self._show_fullscreen, img_path))
+                box.add_widget(img_btn)
+                del_btn = KBtn(text="Delete", size_hint_y=None, height=dp(26),
+                    font_size=sp(10), background_color=(0.85, 0.2, 0.2, 1), color=(1,1,1,1))
+                del_btn.bind(on_press=partial(self._confirm_gallery_delete, gal_id))
+                box.add_widget(del_btn)
+                grid.add_widget(box)
+
+    def _confirm_gallery_delete(self, gal_id, *a):
+        from kivy.uix.button import Button as KBtn
+        popup = ModalView(size_hint=(0.78, None), height=dp(130))
+        c = BoxLayout(orientation="vertical", spacing=dp(10), padding=dp(14))
+        with c.canvas.before:
+            Color(1,1,1,1); c._bg = RoundedRectangle(pos=c.pos, size=c.size, radius=[dp(10)])
+        c.bind(pos=lambda w,v: setattr(w._bg,"pos",v), size=lambda w,v: setattr(w._bg,"size",v))
+        c.add_widget(Label(text="Delete this photo?", font_size=sp(15), color=(0.1,0.1,0.18,1),
+            size_hint_y=None, height=dp(28)))
+        row = BoxLayout(spacing=dp(8), size_hint_y=None, height=dp(42))
+        cancel = KBtn(text="Cancel", font_size=sp(13), background_color=(0.7,0.7,0.7,1))
+        cancel.bind(on_press=lambda *a: popup.dismiss())
+        delete = KBtn(text="Delete", font_size=sp(13), background_color=(0.85,0.2,0.2,1), color=(1,1,1,1))
+        delete.bind(on_press=lambda *a: self._do_gallery_delete(gal_id, popup))
+        row.add_widget(cancel); row.add_widget(delete)
+        c.add_widget(row)
+        popup.add_widget(c); popup.open()
+
+    def _do_gallery_delete(self, gal_id, popup):
+        app = App.get_running_app()
+        app.db.delete_spare_gallery_image(gal_id)
+        clear_item_cache(f"sgal_{gal_id}", get_app_path())
+        popup.dismiss()
+        app.show_toast("Photo deleted")
+        self._load_gallery()
 
     def edit_spare(self):
         """Open edit screen for this spare part."""
@@ -3302,6 +3360,7 @@ class WallDetailScreen(Screen):
         self.w_remarks = "" if r in ("None", "none") else r
         img = get_img_path_for_wall(wid, app.db)
         Clock.schedule_once(lambda dt: self._set_img(img), 0.1)
+        Clock.schedule_once(lambda dt: self._load_gallery(), 0.15)
 
     def _set_img(self, path):
         try:
@@ -3362,6 +3421,66 @@ class WallDetailScreen(Screen):
         c.add_widget(row)
         popup.add_widget(c)
         popup.open()
+
+    def add_image(self):
+        app = App.get_running_app()
+        app.pick_image_for = ("wall_gallery", self.w_id)
+        app.open_file_chooser(multiple=True)
+
+    def _load_gallery(self):
+        app = App.get_running_app()
+        grid = self.ids.wall_gallery_grid
+        grid.clear_widgets()
+        try:
+            images = app.db.get_wall_gallery_images(self.w_id)
+        except:
+            images = []
+        if not images:
+            grid.add_widget(Label(text="No gallery photos", font_size=sp(12),
+                color=(0.5,0.5,0.5,1), size_hint_y=None, height=dp(24)))
+            return
+        from kivy.uix.button import Button as KBtn
+        for gal_id, img_data in images:
+            img_path = write_blob_to_file(img_data, f"wgal_{gal_id}", get_app_path())
+            if img_path:
+                box = BoxLayout(orientation="vertical", size_hint_y=None, height=dp(230), padding=dp(2))
+                img_btn = ClickableBox(size_hint_y=None, height=dp(200))
+                img_widget = Image(source=img_path, nocache=True,
+                    allow_stretch=True, keep_ratio=True)
+                img_btn.add_widget(img_widget)
+                img_btn.bind(on_release=partial(self._show_fullscreen, img_path))
+                box.add_widget(img_btn)
+                del_btn = KBtn(text="Delete", size_hint_y=None, height=dp(26),
+                    font_size=sp(10), background_color=(0.85, 0.2, 0.2, 1), color=(1,1,1,1))
+                del_btn.bind(on_press=partial(self._confirm_gal_delete, gal_id))
+                box.add_widget(del_btn)
+                grid.add_widget(box)
+
+    def _confirm_gal_delete(self, gal_id, *a):
+        from kivy.uix.button import Button as KBtn
+        popup = ModalView(size_hint=(0.78, None), height=dp(130))
+        c = BoxLayout(orientation="vertical", spacing=dp(10), padding=dp(14))
+        with c.canvas.before:
+            Color(1,1,1,1); c._bg = RoundedRectangle(pos=c.pos, size=c.size, radius=[dp(10)])
+        c.bind(pos=lambda w,v: setattr(w._bg,"pos",v), size=lambda w,v: setattr(w._bg,"size",v))
+        c.add_widget(Label(text="Delete this photo?", font_size=sp(15), color=(0.1,0.1,0.18,1),
+            size_hint_y=None, height=dp(28)))
+        row = BoxLayout(spacing=dp(8), size_hint_y=None, height=dp(42))
+        cancel = KBtn(text="Cancel", font_size=sp(13), background_color=(0.7,0.7,0.7,1))
+        cancel.bind(on_press=lambda *a: popup.dismiss())
+        delete = KBtn(text="Delete", font_size=sp(13), background_color=(0.85,0.2,0.2,1), color=(1,1,1,1))
+        delete.bind(on_press=lambda *a: self._do_gal_delete(gal_id, popup))
+        row.add_widget(cancel); row.add_widget(delete)
+        c.add_widget(row)
+        popup.add_widget(c); popup.open()
+
+    def _do_gal_delete(self, gal_id, popup):
+        app = App.get_running_app()
+        app.db.delete_wall_gallery_image(gal_id)
+        clear_item_cache(f"wgal_{gal_id}", get_app_path())
+        popup.dismiss()
+        app.show_toast("Photo deleted")
+        self._load_gallery()
 
     def go_back(self):
         app = App.get_running_app()
@@ -4828,6 +4947,17 @@ class NokiaStorageApp(App):
                 except: pass
             self.show_toast(f"Added {count} images!")
             d = self.root.get_screen("spare_detail")
+            Clock.schedule_once(lambda dt: d._load_gallery(), 0.2)
+
+        elif tt == "wall_gallery":
+            count = 0
+            for img_bytes in images_bytes_list:
+                try:
+                    self.db.add_wall_gallery_image(td, img_bytes)
+                    count += 1
+                except: pass
+            self.show_toast(f"Added {count} images!")
+            d = self.root.get_screen("wall_detail")
             Clock.schedule_once(lambda dt: d._load_gallery(), 0.2)
 
         elif tt == "general_gallery":
