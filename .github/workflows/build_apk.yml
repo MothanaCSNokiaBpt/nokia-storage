@@ -46,6 +46,26 @@ jobs:
           git config --global http.retryCount 5
           git config --global http.retryDelay 10
 
+      - name: Create consistent debug keystore
+        run: |
+          mkdir -p ~/.android
+          if [ ! -f ~/.android/debug.keystore ]; then
+            keytool -genkey -v -keystore ~/.android/debug.keystore \
+              -storepass android -alias androiddebugkey -keypass android \
+              -keyalg RSA -keysize 2048 -validity 36500 \
+              -dname "CN=Nokia Storage, OU=Debug, O=ICT18, L=Dubai, S=Dubai, C=AE"
+          fi
+
+      - name: Cache buildozer global directory
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.buildozer
+            ~/.android
+          key: buildozer-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
+          restore-keys: |
+            buildozer-${{ runner.os }}-
+
       - name: Build debug APK
         run: |
           for attempt in 1 2 3; do

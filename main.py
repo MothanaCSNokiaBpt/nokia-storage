@@ -2259,13 +2259,48 @@ class MainScreen(Screen):
         elif self._pending_filter:
             f = self._pending_filter
             self._pending_filter = ""
-            self.refresh_list()
+            # Load all data first without applying filters
+            app = App.get_running_app()
+            if app.db:
+                self._raw_items = app.db.get_all_phones() if self.current_tab == "phones" else (app.db.get_all_spare_parts() if self.current_tab == "spares" else app.db.get_all_wall_items())
+                self._data_loaded = True
+            # Now set the filter field - this triggers on_filter_field_change
+            # which populates filter_value_spinner, then we apply
             try:
-                self.ids.filter_field.text = f
+                self.ids.sort_spinner.text = "Sort: Name"
+                self.ids.search_bar.ids.search_input.text = ""
             except: pass
-            self._apply_sort_filter_internal()
+            # For simple filters (With Images, Without Images, Unique Models, All)
+            # just set filter_field and apply
+            if f in ('All', 'With Images', 'Without Images', 'Unique Models'):
+                try:
+                    self.ids.filter_field.text = f
+                    self.ids.filter_value_spinner.values = ['All']
+                    self.ids.filter_value_spinner.text = 'All'
+                except: pass
+                self._apply_sort_filter_internal()
+            else:
+                # For field-based filters like "Appearance:Excellent Condition"
+                # parse field:value
+                if ':' in f:
+                    fld, fval = f.split(':', 1)
+                    try:
+                        self.ids.filter_field.text = fld
+                    except: pass
+                    # Wait a tick for on_filter_field_change to populate values
+                    Clock.schedule_once(lambda dt, fv=fval: self._apply_pending_value(fv), 0.15)
+                else:
+                    try: self.ids.filter_field.text = f
+                    except: pass
+                    self._apply_sort_filter_internal()
         else:
             self.refresh_list()
+
+    def _apply_pending_value(self, fval):
+        try:
+            self.ids.filter_value_spinner.text = fval
+        except: pass
+        self._apply_sort_filter_internal()
 
     def switch_tab(self, tab):
         self.current_tab = tab
@@ -3863,7 +3898,7 @@ class ReportScreen(Screen):
         g.add_widget(stat_row([
             stat_card("Year Range", year_range, (0.6, 0.2, 0.4, 1)),
             stat_card("Most Common", f"{most_common[0]} ({most_common[1]})", (0, 0.44, 1, 1),
-                on_tap=lambda *a, m=most_common[0]: self._go_main_search(m))
+                on_tap=lambda *a, m=most_common[0]: self._go_main_filtered(f"Name:{m}"))
         ]))
 
         # Collection Value section
@@ -3897,14 +3932,14 @@ class ReportScreen(Screen):
         g.add_widget(stat_card("Total Collection Value", f"AED {total_value:,.0f}", (0.1, 0.5, 0.3, 1)))
         g.add_widget(stat_card("Avg Phone Price", f"AED {avg_phone_price:,.0f}" if avg_phone_price > 0 else "N/A", (0.2, 0.45, 0.25, 1)))
 
-        # Condition breakdown with percentages - clickable rows
-        def condition_section(title, data, color_base):
+        # Condition breakdown with percentages - clickable rows using filter
+        def condition_section(title, data, color_base, filter_field):
             sec(title)
             for n, c in data:
                 pct = (c / total_phones * 100) if total_phones > 0 else 0
                 cond_name = str(n or "Unknown")
                 row = ClickableBox(size_hint_y=None, height=dp(28), padding=(dp(8),dp(2)), spacing=dp(4))
-                row.bind(on_release=partial(self._go_main_search, cond_name))
+                row.bind(on_release=partial(self._go_main_filtered, f"{filter_field}:{cond_name}"))
                 with row.canvas.before:
                     Color(*color_base, 0.1)
                     row._bg = RoundedRectangle(pos=row.pos, size=row.size, radius=[dp(5)])
@@ -3917,8 +3952,8 @@ class ReportScreen(Screen):
                     size_hint_x=None, width=dp(56), halign="right", text_size=(dp(56),None)))
                 g.add_widget(row)
 
-        condition_section("By Working Condition", r.get("by_working",[]), (0, 0.314, 0.784))
-        condition_section("By Appearance", r.get("by_appearance",[]), (0.26, 0.63, 0.28))
+        condition_section("By Working Condition", r.get("by_working",[]), (0, 0.314, 0.784), "Working")
+        condition_section("By Appearance", r.get("by_appearance",[]), (0.26, 0.63, 0.28), "Appearance")
 
         # Collection Timeline - horizontal bar chart by year
         years_data = r.get("by_year", [])
@@ -3982,7 +4017,7 @@ class ReportScreen(Screen):
         for n, c in r.get("by_model",[]):
             model_name = str(n)
             row = ClickableBox(size_hint_y=None, height=dp(24), padding=(dp(8),dp(1)))
-            row.bind(on_release=partial(self._go_main_search, model_name))
+            row.bind(on_release=partial(self._go_main_filtered, f"Name:{model_name}"))
             row.add_widget(Label(text=model_name, font_size=sp(12), color=(0.3,0.3,0.3,1), text_size=(dp(220),None), halign="left"))
             row.add_widget(Label(text=str(c), font_size=sp(12), bold=True, color=(0.1,0.1,0.18,1), size_hint_x=None, width=dp(50), halign="right", text_size=(dp(50),None)))
             g.add_widget(row)
@@ -4000,7 +4035,7 @@ class ReportScreen(Screen):
             for nm, cnt in no_fw_models:
                 nm_str = str(nm)
                 row = ClickableBox(size_hint_y=None, height=dp(28), padding=(dp(8), dp(2)), spacing=dp(4))
-                row.bind(on_release=partial(self._go_main_search, nm_str))
+                row.bind(on_release=partial(self._go_main_filtered, f"Name:{nm_str}"))
                 with row.canvas.before:
                     Color(1, 0.96, 0.9, 1)
                     row._bg = RoundedRectangle(pos=row.pos, size=row.size, radius=[dp(5)])
@@ -4022,7 +4057,7 @@ class ReportScreen(Screen):
             for nm in no_price_models[:30]:
                 nm_str = str(nm)
                 row = ClickableBox(size_hint_y=None, height=dp(28), padding=(dp(8), dp(2)), spacing=dp(4))
-                row.bind(on_release=partial(self._go_main_search, nm_str))
+                row.bind(on_release=partial(self._go_main_filtered, f"Name:{nm_str}"))
                 with row.canvas.before:
                     Color(1, 0.96, 0.88, 1)
                     row._bg = RoundedRectangle(pos=row.pos, size=row.size, radius=[dp(5)])
@@ -4039,7 +4074,7 @@ class ReportScreen(Screen):
             for nm in no_rarity_models[:30]:
                 nm_str = str(nm)
                 row = ClickableBox(size_hint_y=None, height=dp(28), padding=(dp(8), dp(2)), spacing=dp(4))
-                row.bind(on_release=partial(self._go_main_search, nm_str))
+                row.bind(on_release=partial(self._go_main_filtered, f"Name:{nm_str}"))
                 with row.canvas.before:
                     Color(0.95, 0.92, 1, 1)
                     row._bg = RoundedRectangle(pos=row.pos, size=row.size, radius=[dp(5)])
