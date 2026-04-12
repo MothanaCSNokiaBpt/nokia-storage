@@ -513,7 +513,7 @@ ScreenManager:
             Spinner:
                 id: filter_field
                 text: 'Filter: All'
-                values: ['Filter: All', 'Filter: Name', 'Filter: Year', 'Filter: Appearance', 'Filter: Working']
+                values: ['Filter: All', 'Filter: Name', 'Filter: Year', 'Filter: Appearance', 'Filter: Working', 'Filter: With Images', 'Filter: Without Images', 'Filter: Unique Models']
                 size_hint_x: None
                 width: dp(120)
                 font_size: sp(12)
@@ -1533,22 +1533,46 @@ ScreenManager:
                     height: dp(42)
                     font_size: sp(14)
                     padding: dp(10), dp(9)
-                TextInput:
-                    id: input_appear
-                    hint_text: 'Appearance Condition'
-                    multiline: False
+                BoxLayout:
                     size_hint_y: None
                     height: dp(42)
-                    font_size: sp(14)
-                    padding: dp(10), dp(9)
-                TextInput:
-                    id: input_working
-                    hint_text: 'Working Condition'
-                    multiline: False
+                    spacing: dp(4)
+                    Spinner:
+                        id: appear_spinner
+                        text: 'Select...'
+                        values: []
+                        size_hint_x: 0.4
+                        font_size: sp(12)
+                        background_color: 0, 0.314, 0.784, 1
+                        color: 1, 1, 1, 1
+                        option_cls: 'BlueSpinnerOption'
+                        on_text: if self.text != 'Select...': root.ids.input_appear.text = self.text
+                    TextInput:
+                        id: input_appear
+                        hint_text: 'Appearance Condition'
+                        multiline: False
+                        font_size: sp(14)
+                        padding: dp(10), dp(9)
+                BoxLayout:
                     size_hint_y: None
                     height: dp(42)
-                    font_size: sp(14)
-                    padding: dp(10), dp(9)
+                    spacing: dp(4)
+                    Spinner:
+                        id: working_spinner
+                        text: 'Select...'
+                        values: []
+                        size_hint_x: 0.4
+                        font_size: sp(12)
+                        background_color: 0, 0.314, 0.784, 1
+                        color: 1, 1, 1, 1
+                        option_cls: 'BlueSpinnerOption'
+                        on_text: if self.text != 'Select...': root.ids.input_working.text = self.text
+                    TextInput:
+                        id: input_working
+                        hint_text: 'Working Condition'
+                        multiline: False
+                        font_size: sp(14)
+                        padding: dp(10), dp(9)
                 TextInput:
                     id: input_remarks
                     hint_text: 'Remarks'
@@ -2095,6 +2119,9 @@ class MainScreen(Screen):
             if field == 'All':
                 self.ids.filter_value.text = ""
                 self.apply_sort_filter()
+            elif field in ('With Images', 'Without Images', 'Unique Models'):
+                self.ids.filter_value.text = ""
+                self.apply_sort_filter()
             else:
                 hints = {'Name': 'e.g. 3310', 'Year': 'e.g. 2003', 'Appearance': 'e.g. Excellent', 'Working': 'e.g. Fully'}
                 self.ids.filter_value.hint_text = hints.get(field, 'type & Enter')
@@ -2107,11 +2134,25 @@ class MainScreen(Screen):
         try:
             field = self.ids.filter_field.text.replace('Filter: ', '')
             val = self.ids.filter_value.text.strip().lower()
-            if field != 'All' and val and self.current_tab == "phones":
-                key_map = {'Name': 'name', 'Year': 'release_date', 'Appearance': 'appearance_condition', 'Working': 'working_condition'}
-                key = key_map.get(field, '')
-                if key:
-                    items = [i for i in items if val in (i.get(key, '') or '').lower()]
+            if field != 'All' and self.current_tab == "phones":
+                if field == 'With Images':
+                    items = [i for i in items if i.get('has_image')]
+                elif field == 'Without Images':
+                    items = [i for i in items if not i.get('has_image')]
+                elif field == 'Unique Models':
+                    seen = {}
+                    for i in items:
+                        n = (i.get('name', '') or '').strip()
+                        if n not in seen:
+                            seen[n] = i
+                        elif 'FW' in (i.get('working_condition', '') or '') and 'FW' not in (seen[n].get('working_condition', '') or ''):
+                            seen[n] = i
+                    items = list(seen.values())
+                elif val:
+                    key_map = {'Name': 'name', 'Year': 'release_date', 'Appearance': 'appearance_condition', 'Working': 'working_condition'}
+                    key = key_map.get(field, '')
+                    if key:
+                        items = [i for i in items if val in (i.get(key, '') or '').lower()]
         except: pass
 
         # Sort
@@ -2507,75 +2548,98 @@ class PhoneDetailScreen(Screen):
     def show_summary(self):
         """Show a summary popup for all phones with the same name."""
         app = App.get_running_app()
-        # Query all phones with same name
-        same_phones = []
+
+        # Count all phones with same name using TRIM
+        total_same = 0
         try:
-            cursor = app.db.conn.cursor()
-            cursor.execute("SELECT * FROM phones WHERE name = ?", (self.p_name,))
-            cols = [desc[0] for desc in cursor.description]
-            same_phones = [dict(zip(cols, row)) for row in cursor.fetchall()]
+            cur = app.db.conn.execute(
+                "SELECT COUNT(*) FROM phones WHERE TRIM(name) = TRIM(?)", (self.p_name,))
+            total_same = cur.fetchone()[0]
         except Exception:
-            try:
-                all_phones = app.db.get_all_phones()
-                same_phones = [p for p in all_phones if (p.get('name', '') or '').lower() == self.p_name.lower()]
-            except:
-                pass
+            pass
 
-        total_same = len(same_phones)
+        # Working condition breakdown via SQL
+        working_counts = []
+        try:
+            cur = app.db.conn.execute(
+                "SELECT working_condition, COUNT(*) as cnt FROM phones WHERE TRIM(name) = TRIM(?) GROUP BY working_condition ORDER BY cnt DESC",
+                (self.p_name,))
+            working_counts = [(r[0] or "Unknown", r[1]) for r in cur.fetchall()]
+        except Exception:
+            pass
 
-        # Working condition breakdown
-        working_counts = {}
-        for p in same_phones:
-            w = p.get('working_condition', '') or 'Unknown'
-            working_counts[w] = working_counts.get(w, 0) + 1
-
-        # Appearance breakdown
-        appear_counts = {}
-        for p in same_phones:
-            a = p.get('appearance_condition', '') or 'Unknown'
-            appear_counts[a] = appear_counts.get(a, 0) + 1
+        # Appearance breakdown via SQL
+        appear_counts = []
+        try:
+            cur = app.db.conn.execute(
+                "SELECT appearance_condition, COUNT(*) as cnt FROM phones WHERE TRIM(name) = TRIM(?) GROUP BY appearance_condition ORDER BY cnt DESC",
+                (self.p_name,))
+            appear_counts = [(r[0] or "Unknown", r[1]) for r in cur.fetchall()]
+        except Exception:
+            pass
 
         # Related spare parts
         spare_names = []
         try:
             spares = app.db.get_spare_parts_for_phone(self.p_name)
             spare_names = [s.get('name', '') for s in spares if s.get('name')]
-        except:
+        except Exception:
             pass
-        spare_text = ", ".join(spare_names) if spare_names else "None"
 
-        # Build popup
-        popup = ModalView(size_hint=(0.88, None), height=dp(380))
-        c = BoxLayout(orientation="vertical", spacing=dp(6), padding=dp(14))
-        with c.canvas.before:
-            Color(1,1,1,1)
-            c._bg = RoundedRectangle(pos=c.pos, size=c.size, radius=[dp(12)])
-        c.bind(pos=lambda w,v: setattr(w._bg,"pos",v), size=lambda w,v: setattr(w._bg,"size",v))
-        c.add_widget(Label(text="Phone Summary", font_size=sp(17), bold=True, color=(0,0.314,0.784,1),
-            size_hint_y=None, height=dp(28)))
-
-        lines = [f"{total_same} phones named {self.p_name}"]
-        lines.append("")
-        lines.append("Working Condition:")
-        for wk, cnt in working_counts.items():
-            lines.append(f"  {wk}: {cnt}")
-        lines.append("")
-        lines.append("Appearance:")
-        for ap, cnt in appear_counts.items():
-            lines.append(f"  {ap}: {cnt}")
-        lines.append("")
-        lines.append(f"Spare parts: {spare_text}")
-
-        for line in lines:
-            c.add_widget(Label(text=line, font_size=sp(13), color=(0.15,0.15,0.15,1),
-                size_hint_y=None, height=dp(20), text_size=(dp(280), None), halign="left"))
-
+        # Build popup with scrollable content
         from kivy.uix.button import Button as KBtn
-        close = KBtn(text="Close", size_hint_y=None, height=dp(40), font_size=sp(14),
-            background_color=(0,0.314,0.784,1), color=(1,1,1,1))
+        popup = ModalView(size_hint=(0.9, 0.7))
+        outer = BoxLayout(orientation="vertical", spacing=dp(6), padding=dp(14))
+        with outer.canvas.before:
+            Color(1, 1, 1, 1)
+            outer._bg = RoundedRectangle(pos=outer.pos, size=outer.size, radius=[dp(12)])
+        outer.bind(pos=lambda w, v: setattr(w._bg, "pos", v),
+                   size=lambda w, v: setattr(w._bg, "size", v))
+
+        # Title
+        outer.add_widget(Label(text=self.p_name, font_size=sp(18), bold=True,
+            color=(0, 0.314, 0.784, 1), size_hint_y=None, height=dp(30)))
+
+        # Scrollable body
+        sv = ScrollView(do_scroll_x=False)
+        body = BoxLayout(orientation="vertical", spacing=dp(4), size_hint_y=None,
+                         padding=(dp(4), dp(4)))
+        body.bind(minimum_height=body.setter("height"))
+
+        def add_line(text, bold_f=False, color_c=(0.15, 0.15, 0.15, 1), fs=13):
+            lbl = Label(text=text, font_size=sp(fs), bold=bold_f, color=color_c,
+                size_hint_y=None, height=dp(22), text_size=(dp(280), None), halign="left")
+            body.add_widget(lbl)
+
+        add_line(f"{total_same} phone(s) with this name", bold_f=True, fs=14)
+        add_line("")
+
+        add_line("Working Condition:", bold_f=True, color_c=(0, 0.28, 0.7, 1))
+        for wk, cnt in working_counts:
+            add_line(f"  {wk}: {cnt}")
+
+        add_line("")
+        add_line("Appearance:", bold_f=True, color_c=(0.2, 0.5, 0.22, 1))
+        for ap, cnt in appear_counts:
+            add_line(f"  {ap}: {cnt}")
+
+        add_line("")
+        add_line("Spare Parts:", bold_f=True, color_c=(0.5, 0.2, 0.5, 1))
+        if spare_names:
+            for sn in spare_names:
+                add_line(f"  - {sn}")
+        else:
+            add_line("  None")
+
+        sv.add_widget(body)
+        outer.add_widget(sv)
+
+        # Close button
+        close = KBtn(text="Close", size_hint_y=None, height=dp(42), font_size=sp(14),
+            background_color=(0, 0.314, 0.784, 1), color=(1, 1, 1, 1))
         close.bind(on_press=lambda *a: popup.dismiss())
-        c.add_widget(close)
-        popup.add_widget(c)
+        outer.add_widget(close)
+        popup.add_widget(outer)
         popup.open()
 
     def go_back(self):
@@ -2848,6 +2912,26 @@ class AddPhoneScreen(Screen):
     def on_edit_mode(self, *a):
         self.screen_title = "Edit Phone" if self.edit_mode else "Add Phone"
 
+    def _populate_condition_spinners(self):
+        """Populate appearance and working condition spinners from DB values."""
+        app = App.get_running_app()
+        try:
+            cur = app.db.conn.execute(
+                "SELECT DISTINCT appearance_condition FROM phones WHERE appearance_condition IS NOT NULL AND appearance_condition != '' ORDER BY appearance_condition")
+            appear_vals = ['Select...'] + [str(r[0]) for r in cur.fetchall()]
+            self.ids.appear_spinner.values = appear_vals
+            self.ids.appear_spinner.text = 'Select...'
+        except Exception:
+            pass
+        try:
+            cur = app.db.conn.execute(
+                "SELECT DISTINCT working_condition FROM phones WHERE working_condition IS NOT NULL AND working_condition != '' ORDER BY working_condition")
+            working_vals = ['Select...'] + [str(r[0]) for r in cur.fetchall()]
+            self.ids.working_spinner.values = working_vals
+            self.ids.working_spinner.text = 'Select...'
+        except Exception:
+            pass
+
     def clear_form(self):
         self._image_bytes = None
         self._auto_price = 0
@@ -2862,6 +2946,7 @@ class AddPhoneScreen(Screen):
             self.ids.input_id.background_color = (1, 1, 1, 1)
             self.ids.preview_img.source = get_default_image_path(get_app_path())
         except: pass
+        self._populate_condition_spinners()
 
     def load_for_edit(self, pid):
         app = App.get_running_app()
@@ -2869,6 +2954,7 @@ class AddPhoneScreen(Screen):
         if not p: return
         self._image_bytes = app.db.get_phone_image(pid)
         img = get_img_path_for_phone(pid, app.db)
+        self._populate_condition_spinners()
         Clock.schedule_once(partial(self._fill, p, img), 0.1)
 
     def _fill(self, p, img_path, *a):
@@ -3470,6 +3556,32 @@ class ReportScreen(Screen):
             row.add_widget(Label(text=str(n), font_size=sp(12), color=(0.3,0.3,0.3,1), text_size=(dp(220),None), halign="left"))
             row.add_widget(Label(text=str(c), font_size=sp(12), bold=True, color=(0.1,0.1,0.18,1), size_hint_x=None, width=dp(50), halign="right", text_size=(dp(50),None)))
             g.add_widget(row)
+
+        # No Fully Working Phone section
+        try:
+            cur = app.db.conn.execute(
+                "SELECT DISTINCT TRIM(name) as n, COUNT(*) as c FROM phones "
+                "GROUP BY TRIM(name) "
+                "HAVING SUM(CASE WHEN TRIM(working_condition)='FW' THEN 1 ELSE 0 END) = 0 "
+                "ORDER BY n LIMIT 30")
+            no_fw_models = [(row[0], row[1]) for row in cur.fetchall()]
+            sec("No Fully Working Phone")
+            g.add_widget(stat_card("Models Without FW", len(no_fw_models), (0.85, 0.2, 0.2, 1)))
+            for nm, cnt in no_fw_models:
+                row = BoxLayout(size_hint_y=None, height=dp(28), padding=(dp(8), dp(2)), spacing=dp(4))
+                with row.canvas.before:
+                    Color(1, 0.96, 0.9, 1)
+                    row._bg = RoundedRectangle(pos=row.pos, size=row.size, radius=[dp(5)])
+                row.bind(pos=lambda w, v: setattr(w._bg, "pos", v),
+                         size=lambda w, v: setattr(w._bg, "size", v))
+                row.add_widget(Label(text=str(nm), font_size=sp(12), color=(0.15, 0.15, 0.15, 1),
+                    text_size=(dp(200), None), halign="left"))
+                row.add_widget(Label(text=str(cnt), font_size=sp(12), bold=True,
+                    color=(0.1, 0.1, 0.18, 1), size_hint_x=None, width=dp(40),
+                    halign="right", text_size=(dp(40), None)))
+                g.add_widget(row)
+        except Exception:
+            pass
 
         g.add_widget(Widget(size_hint_y=None, height=dp(30)))
 
