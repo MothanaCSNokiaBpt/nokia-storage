@@ -95,9 +95,21 @@ from imghelper import (
     smart_read, get_cache_dir
 )
 
+def _find_cached(key, app_path):
+    """Check if a cached image file already exists. Returns path or empty string."""
+    import glob as g
+    c = get_cache_dir(app_path)
+    matches = g.glob(os.path.join(c, f"{key}_*"))
+    if matches and os.path.exists(matches[0]):
+        return matches[0]
+    return ""
+
 def get_img_path_for_phone(phone_id, db):
     """Get displayable image file path for a phone."""
     app_path = get_app_path()
+    # Check cache first to avoid reading BLOB from DB
+    cached = _find_cached(f"p_{phone_id}", app_path)
+    if cached: return cached
     img_data = db.get_phone_image(phone_id)
     if img_data:
         return write_blob_to_file(img_data, f"p_{phone_id}", app_path)
@@ -106,6 +118,9 @@ def get_img_path_for_phone(phone_id, db):
 def get_img_path_for_spare(spare_id, db):
     """Get displayable image file path for a spare part."""
     app_path = get_app_path()
+    # Check cache first to avoid reading BLOB from DB
+    cached = _find_cached(f"s_{spare_id}", app_path)
+    if cached: return cached
     img_data = db.get_spare_image(spare_id)
     if img_data:
         return write_blob_to_file(img_data, f"s_{spare_id}", app_path)
@@ -114,6 +129,8 @@ def get_img_path_for_spare(spare_id, db):
 def get_img_path_for_wall(item_id, db):
     """Get displayable image file path for a wall item."""
     app_path = get_app_path()
+    cached = _find_cached(f"w_{item_id}", app_path)
+    if cached: return cached
     img_data = db.get_wall_image(item_id)
     if img_data:
         return write_blob_to_file(img_data, f"w_{item_id}", app_path)
@@ -1208,6 +1225,22 @@ ScreenManager:
                         height: self.texture_size[1] + dp(6)
                         text_size: self.width, None
                         halign: 'left'
+                # Linked Phones section
+                Label:
+                    text: 'Linked Phones'
+                    font_size: sp(15)
+                    bold: True
+                    color: 0.1, 0.1, 0.18, 1
+                    size_hint_y: None
+                    height: dp(26)
+                    text_size: self.size
+                    halign: 'left'
+                GridLayout:
+                    id: linked_phones_grid
+                    cols: 1
+                    spacing: dp(4)
+                    size_hint_y: None
+                    height: self.minimum_height
                 # Gallery section
                 Label:
                     text: 'Photo Gallery'
@@ -3114,7 +3147,8 @@ class SpareDetailScreen(Screen):
         self.s_phone_id = s.get("phone_id","") or ""
         img = get_img_path_for_spare(sid, app.db)
         Clock.schedule_once(lambda dt: self._set_img(img), 0.1)
-        Clock.schedule_once(lambda dt: self._load_gallery(), 0.15)
+        Clock.schedule_once(lambda dt: self._load_linked_phones(), 0.15)
+        Clock.schedule_once(lambda dt: self._load_gallery(), 0.2)
 
     _current_img_path = ""
 
@@ -3129,6 +3163,49 @@ class SpareDetailScreen(Screen):
     def view_main_image(self):
         if self._current_img_path:
             self._show_fullscreen(self._current_img_path)
+
+    def _load_linked_phones(self):
+        """Show phones with the same name as this spare part."""
+        app = App.get_running_app()
+        grid = self.ids.linked_phones_grid
+        grid.clear_widgets()
+        name = self.s_name.strip()
+        if not name or not app.db:
+            grid.add_widget(Label(text="No linked phones", font_size=sp(12),
+                color=(0.5,0.5,0.5,1), size_hint_y=None, height=dp(24)))
+            return
+        try:
+            cur = app.db.conn.execute(
+                "SELECT id, name, working_condition, appearance_condition FROM phones WHERE TRIM(name) LIKE ? ORDER BY id",
+                (f"%{name}%",))
+            phones = cur.fetchall()
+        except:
+            phones = []
+        if not phones:
+            grid.add_widget(Label(text="No linked phones", font_size=sp(12),
+                color=(0.5,0.5,0.5,1), size_hint_y=None, height=dp(24)))
+            return
+        for p in phones:
+            row = ClickableBox(size_hint_y=None, height=dp(30), padding=(dp(8), dp(3)), spacing=dp(4))
+            with row.canvas.before:
+                Color(0.94, 0.96, 1, 1)
+                row._bg = RoundedRectangle(pos=row.pos, size=row.size, radius=[dp(5)])
+            row.bind(pos=lambda w,v: setattr(w._bg,"pos",v), size=lambda w,v: setattr(w._bg,"size",v))
+            pid = str(p[0])
+            row.add_widget(Label(text=f"{p[1]} (ID:{pid})", font_size=sp(12), color=(0.1,0.1,0.18,1),
+                text_size=(dp(180), None), halign="left"))
+            row.add_widget(Label(text=str(p[2] or ""), font_size=sp(11), color=(0,0.28,0.7,1),
+                size_hint_x=None, width=dp(50)))
+            row.add_widget(Label(text=str(p[3] or ""), font_size=sp(10), color=(0.2,0.5,0.22,1),
+                size_hint_x=None, width=dp(80)))
+            row.bind(on_release=partial(self._open_phone, pid))
+            grid.add_widget(row)
+
+    def _open_phone(self, pid, *a):
+        app = App.get_running_app()
+        app.root.get_screen("phone_detail").load_phone(pid)
+        app.root.transition = SlideTransition(direction="left")
+        app.root.current = "phone_detail"
 
     def _show_fullscreen(self, img_path, *args):
         from kivy.uix.button import Button as KButton
