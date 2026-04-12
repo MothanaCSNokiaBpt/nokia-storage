@@ -136,8 +136,7 @@ def rarity_label(score):
 def rarity_stars(score):
     if score <= 0: return ""
     full = int(score)
-    half = score - full >= 0.5
-    return "*" * full + ("1/2" if half else "")
+    return "*" * full
 
 def rarity_color(score):
     if score <= 1: return [0.5, 0.5, 0.5, 1]
@@ -525,6 +524,24 @@ ScreenManager:
                         size: self.size
                         radius: [dp(14)]
                 on_press: root.go_dashboard()
+            Button:
+                text: 'Reset'
+                size_hint_x: None
+                width: dp(50)
+                font_size: sp(11)
+                bold: True
+                background_normal: ''
+                background_down: ''
+                background_color: 0, 0, 0, 0
+                color: 1, 1, 1, 1
+                canvas.before:
+                    Color:
+                        rgba: 0.2, 0.55, 0.2, 1
+                    RoundedRectangle:
+                        pos: self.pos
+                        size: self.size
+                        radius: [dp(14)]
+                on_press: root.refresh_home()
             Button:
                 text: 'Gallery'
                 size_hint_x: None
@@ -2144,7 +2161,7 @@ class DashboardScreen(Screen):
         ]))
 
         # Collection value card
-        g.add_widget(stat_card("Collection Value", f"${total_value:,.0f}",
+        g.add_widget(stat_card("Collection Value", f"AED {total_value:,.0f}",
             (0.1, 0.5, 0.3, 1)))
 
         # Quick actions section
@@ -2408,7 +2425,7 @@ class MainScreen(Screen):
                     phone_appear=p.get("appearance_condition","") or "",
                     phone_working=p.get("working_condition","") or "",
                     phone_image=img or defimg,
-                    phone_price=f"${price:.0f}" if price > 0 else "")
+                    phone_price=f"AED {price:.0f}" if price > 0 else "")
                 card.bind(on_release=partial(self._open_phone, p["id"]))
                 grid.add_widget(card)
         elif self.current_tab == "spares":
@@ -2576,7 +2593,7 @@ class PhoneDetailScreen(Screen):
         d = p.get("description","") or ""; self.p_description = "" if d in ("None","none") else d
         avg_p = p.get("avg_price", 0) or 0
         rscore = p.get("rarity_score", 0) or 0
-        self.p_avg_price = f"${avg_p:.0f}" if avg_p > 0 else "N/A"
+        self.p_avg_price = f"AED {avg_p:.0f}" if avg_p > 0 else "N/A"
         self.p_rarity_stars = rarity_stars(rscore)
         self.p_rarity_text = rarity_label(rscore)
         self.p_rarity_color = rarity_color(rscore) if rscore > 0 else [0.5, 0.5, 0.5, 1]
@@ -3461,7 +3478,7 @@ class ExportScreen(Screen):
                 str(p.get("release_date", "") or ""),
                 str(p.get("appearance_condition", "") or ""),
                 str(p.get("working_condition", "") or ""),
-                f"${ap:.0f}" if ap > 0 else "",
+                f"AED {ap:.0f}" if ap > 0 else "",
             ]
             for val in row_data:
                 lbl = Label(text=val, font_size=sp(10), color=(0.15, 0.15, 0.15, 1),
@@ -3650,7 +3667,7 @@ class SearchAllScreen(Screen):
                 pr = p.get("avg_price", 0) or 0
                 card = PhoneCard(phone_id=p["id"], phone_name=p["name"], phone_date=p.get("release_date","") or "",
                     phone_appear=p.get("appearance_condition","") or "", phone_working=p.get("working_condition","") or "",
-                    phone_image=img or defimg, phone_price=f"${pr:.0f}" if pr > 0 else "")
+                    phone_image=img or defimg, phone_price=f"AED {pr:.0f}" if pr > 0 else "")
                 card.bind(on_release=partial(self._op, p["id"])); grid.add_widget(card)
         if spares:
             grid.add_widget(Label(text=f"Spare Parts ({len(spares)})", font_size=sp(14), bold=True, color=(0,0.314,0.784,1), size_hint_y=None, height=dp(26), text_size=(dp(300),None), halign="left"))
@@ -3696,18 +3713,34 @@ class ReportScreen(Screen):
         main = app.root.get_screen("main")
         main.current_tab = "phones"
         main._data_loaded = False
+        main._current_page = 0
+        main._is_search = False
         try:
+            main.ids.search_bar.ids.search_input.text = ""
+            main.ids.sort_spinner.text = "Sort: Name"
             main.ids.filter_field.text = filter_text
+            main.ids.filter_value_spinner.text = "All"
+            main.ids.filter_value_spinner.values = ["All"]
         except Exception:
             pass
         app.root.transition = SlideTransition(direction="right")
         app.root.current = "main"
+        Clock.schedule_once(lambda dt: main.refresh_list(), 0.2)
 
     def _go_main_search(self, query, *a):
         app = App.get_running_app()
         main = app.root.get_screen("main")
         main.current_tab = "phones"
         main._data_loaded = False
+        main._current_page = 0
+        main._is_search = False
+        try:
+            main.ids.filter_field.text = "All"
+            main.ids.filter_value_spinner.text = "All"
+            main.ids.filter_value_spinner.values = ["All"]
+            main.ids.sort_spinner.text = "Sort: Name"
+        except Exception:
+            pass
         app.root.transition = SlideTransition(direction="right")
         app.root.current = "main"
         Clock.schedule_once(lambda dt: main.do_search(query), 0.3)
@@ -3828,12 +3861,8 @@ class ReportScreen(Screen):
         avg_rarity = (rarity_sum / rarity_count) if rarity_count > 0 else 0
 
         sec("Collection Value")
-        # Row 5: Total Collection Value (full width)
-        g.add_widget(stat_card("Total Collection Value", f"${total_value:,.0f}", (0.1, 0.5, 0.3, 1)))
-        g.add_widget(stat_row([
-            stat_card("Avg Phone Price", f"${avg_phone_price:,.0f}" if avg_phone_price > 0 else "N/A", (0.2, 0.45, 0.25, 1)),
-            stat_card("Avg Rarity", f"{avg_rarity:.1f} - {rarity_label(avg_rarity)}" if avg_rarity > 0 else "N/A", (0.5, 0.2, 0.5, 1))
-        ]))
+        g.add_widget(stat_card("Total Collection Value", f"AED {total_value:,.0f}", (0.1, 0.5, 0.3, 1)))
+        g.add_widget(stat_card("Avg Phone Price", f"AED {avg_phone_price:,.0f}" if avg_phone_price > 0 else "N/A", (0.2, 0.45, 0.25, 1)))
 
         # Condition breakdown with percentages - clickable rows
         def condition_section(title, data, color_base):
