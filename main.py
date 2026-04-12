@@ -414,6 +414,8 @@ ScreenManager:
         name: 'report'
     PhotoGalleryScreen:
         name: 'photo_gallery'
+    BulkSpareScreen:
+        name: 'bulk_spare'
 
 <SplashScreen>:
     BoxLayout:
@@ -1518,7 +1520,7 @@ ScreenManager:
                     height: dp(42)
                     font_size: sp(14)
                     padding: dp(10), dp(9)
-                    on_focus: if self.focus and self.text: self.select_all()
+
                 TextInput:
                     id: input_name
                     hint_text: 'Phone Name *'
@@ -1528,7 +1530,7 @@ ScreenManager:
                     font_size: sp(14)
                     padding: dp(10), dp(9)
                     on_text_validate: root.auto_fill_from_name()
-                    on_focus: if self.focus and self.text: self.select_all()
+
                 Spinner:
                     id: input_date
                     text: 'Select Year'
@@ -1559,7 +1561,7 @@ ScreenManager:
                         multiline: False
                         font_size: sp(14)
                         padding: dp(10), dp(9)
-                        on_focus: if self.focus and self.text: self.select_all()
+    
                 BoxLayout:
                     size_hint_y: None
                     height: dp(42)
@@ -1580,7 +1582,7 @@ ScreenManager:
                         multiline: False
                         font_size: sp(14)
                         padding: dp(10), dp(9)
-                        on_focus: if self.focus and self.text: self.select_all()
+    
                 TextInput:
                     id: input_remarks
                     hint_text: 'Remarks'
@@ -1589,7 +1591,7 @@ ScreenManager:
                     height: dp(70)
                     font_size: sp(14)
                     padding: dp(10), dp(9)
-                    on_focus: if self.focus and self.text: self.select_all()
+
                 TextInput:
                     id: input_description
                     hint_text: 'Description'
@@ -1598,7 +1600,7 @@ ScreenManager:
                     height: dp(70)
                     font_size: sp(14)
                     padding: dp(10), dp(9)
-                    on_focus: if self.focus and self.text: self.select_all()
+
                 TextInput:
                     id: input_price
                     hint_text: 'Average Price (AED)'
@@ -1608,7 +1610,7 @@ ScreenManager:
                     font_size: sp(14)
                     padding: dp(10), dp(9)
                     input_filter: 'int'
-                    on_focus: if self.focus and self.text: self.select_all()
+
                 Spinner:
                     id: input_rarity
                     text: 'Select Rarity'
@@ -2032,6 +2034,65 @@ ScreenManager:
                 padding: dp(8)
                 size_hint_y: None
                 height: self.minimum_height
+
+<BulkSpareScreen>:
+    BoxLayout:
+        orientation: 'vertical'
+        BoxLayout:
+            size_hint_y: None
+            height: dp(52)
+            padding: dp(6)
+            spacing: dp(6)
+            canvas.before:
+                Color:
+                    rgba: 0, 0.314, 0.784, 1
+                Rectangle:
+                    pos: self.pos
+                    size: self.size
+            ClickableLabel:
+                size_hint_x: None
+                width: dp(36)
+                text: '<'
+                font_size: sp(22)
+                bold: True
+                color: 1, 1, 1, 1
+                on_release: root.go_back()
+            Label:
+                text: 'Bulk Add Spare Parts'
+                font_size: sp(17)
+                bold: True
+                color: 1, 1, 1, 1
+                text_size: self.size
+                halign: 'left'
+                valign: 'middle'
+        Button:
+            text: '+ Select Images'
+            size_hint_y: None
+            height: dp(42)
+            font_size: sp(14)
+            bold: True
+            background_color: 0, 0.314, 0.784, 1
+            color: 1, 1, 1, 1
+            on_press: root.select_images()
+        ScrollView:
+            do_scroll_x: False
+            GridLayout:
+                id: bulk_grid
+                cols: 1
+                spacing: dp(8)
+                padding: dp(10)
+                size_hint_y: None
+                height: self.minimum_height
+        Button:
+            id: save_all_btn
+            text: 'Save All'
+            size_hint_y: None
+            height: dp(46)
+            font_size: sp(15)
+            bold: True
+            background_color: 0.26, 0.63, 0.28, 1
+            color: 1, 1, 1, 1
+            on_press: root.save_all()
 """
 
 
@@ -2162,6 +2223,8 @@ class DashboardScreen(Screen):
             (0.26, 0.63, 0.28, 1)))
         g.add_widget(action_btn("Export Data", lambda *a: self._nav("export_data"),
             (0.2, 0.45, 0.25, 1)))
+        g.add_widget(action_btn("Bulk Add Spare Parts",
+            lambda *a: self._nav("bulk_spare"), (0.5, 0.3, 0.2, 1)))
 
         # Recently Added section
         try:
@@ -3266,6 +3329,13 @@ class AddPhoneScreen(Screen):
 
     def on_edit_mode(self, *a):
         self.screen_title = "Edit Phone" if self.edit_mode else "Add Phone"
+        if not self.edit_mode:
+            try:
+                self.ids.input_id.readonly = False
+                self.ids.input_id.disabled = False
+                self.ids.input_id.background_color = (1, 1, 1, 1)
+            except:
+                pass
 
     def _populate_condition_spinners(self):
         """Populate appearance and working condition spinners from DB values."""
@@ -3291,6 +3361,13 @@ class AddPhoneScreen(Screen):
         self._image_bytes = None
         self._auto_price = 0
         self._auto_rarity = 0
+        # Force reset ID field immediately (don't wait for Clock)
+        try:
+            self.ids.input_id.readonly = False
+            self.ids.input_id.disabled = False
+            self.ids.input_id.background_color = (1, 1, 1, 1)
+        except:
+            pass
         Clock.schedule_once(self._clear, 0.1)
 
     def _clear(self, *a):
@@ -4248,6 +4325,96 @@ class PhotoGalleryScreen(Screen):
         App.get_running_app().root.current = "main"
 
 
+class BulkSpareScreen(Screen):
+    _items = []  # List of (image_bytes, name_input, phone_id_input) tuples
+
+    def select_images(self):
+        app = App.get_running_app()
+        app.pick_image_for = ("bulk_spare", None)
+        app.open_file_chooser(multiple=True)
+
+    def on_images_selected(self, images_bytes_list):
+        """Called with list of image byte arrays."""
+        grid = self.ids.bulk_grid
+        grid.clear_widgets()
+        self._items = []
+
+        for idx, img_bytes in enumerate(images_bytes_list):
+            row = BoxLayout(size_hint_y=None, height=dp(80), spacing=dp(6),
+                            padding=[dp(4), dp(4), dp(4), dp(4)])
+            with row.canvas.before:
+                Color(0.95, 0.96, 0.98, 1)
+                row._bg = RoundedRectangle(pos=row.pos, size=row.size,
+                                           radius=[dp(6)])
+            row.bind(
+                pos=lambda w, v: setattr(w._bg, "pos", v),
+                size=lambda w, v: setattr(w._bg, "size", v))
+
+            # Write temp image for preview
+            app_path = get_app_path()
+            ext = ".png" if img_bytes[:4] == b'\x89PNG' else ".jpg"
+            tmp = os.path.join(get_cache_dir(app_path),
+                               "_bulk_%d%s" % (idx, ext))
+            try:
+                with open(tmp, "wb") as f:
+                    f.write(img_bytes)
+            except Exception:
+                tmp = ""
+
+            img = Image(source=tmp, nocache=True, size_hint_x=None,
+                        width=dp(60), allow_stretch=True, keep_ratio=True)
+            row.add_widget(img)
+
+            fields = BoxLayout(orientation="vertical", spacing=dp(2))
+            name_inp = TextInput(
+                hint_text="Spare name #%d" % (idx + 1), multiline=False,
+                size_hint_y=None, height=dp(34), font_size=sp(12),
+                padding=[dp(6), dp(6)])
+            phone_inp = TextInput(
+                hint_text="Phone ID (optional)", multiline=False,
+                size_hint_y=None, height=dp(34), font_size=sp(12),
+                padding=[dp(6), dp(6)])
+            fields.add_widget(name_inp)
+            fields.add_widget(phone_inp)
+            row.add_widget(fields)
+
+            grid.add_widget(row)
+            self._items.append((img_bytes, name_inp, phone_inp))
+
+        if self._items:
+            grid.add_widget(Label(
+                text="%d images ready" % len(self._items),
+                font_size=sp(12), color=[0.4, 0.4, 0.4, 1],
+                size_hint_y=None, height=dp(24)))
+
+    def save_all(self):
+        app = App.get_running_app()
+        if not self._items:
+            app.show_toast("No images selected")
+            return
+        count = 0
+        for img_bytes, name_inp, phone_inp in self._items:
+            name = name_inp.text.strip()
+            if not name:
+                name = "Spare Part %d" % (count + 1)
+            phone_id = phone_inp.text.strip()
+            try:
+                app.db.add_spare_part(
+                    name=name, phone_id=phone_id, image_bytes=img_bytes)
+                count += 1
+            except Exception:
+                pass
+        app.show_toast("Saved %d spare parts!" % count)
+        app.root.get_screen("main")._data_loaded = False
+        self._items = []
+        self.ids.bulk_grid.clear_widgets()
+        self.go_back()
+
+    def go_back(self):
+        App.get_running_app().root.transition = SlideTransition(direction="right")
+        App.get_running_app().root.current = "main"
+
+
 # -- Main App ------------------------------------------------------
 
 class NokiaStorageApp(App):
@@ -4539,6 +4706,12 @@ class NokiaStorageApp(App):
             return
         tt, td = self.pick_image_for
         self.pick_image_for = None
+
+        # Bulk spare: pass raw bytes without resize
+        if tt == "bulk_spare":
+            self.root.get_screen("bulk_spare").on_images_selected(
+                images_bytes_list)
+            return
 
         # Resize all images for performance
         images_bytes_list = [self._resize_image(b) for b in images_bytes_list]
