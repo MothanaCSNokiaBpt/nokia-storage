@@ -1518,7 +1518,6 @@ ScreenManager:
                     height: dp(42)
                     font_size: sp(14)
                     padding: dp(10), dp(9)
-                    input_filter: 'int'
                     on_focus: if self.focus and self.text: self.select_all()
                 TextInput:
                     id: input_name
@@ -2164,6 +2163,34 @@ class DashboardScreen(Screen):
         g.add_widget(action_btn("Export Data", lambda *a: self._nav("export_data"),
             (0.2, 0.45, 0.25, 1)))
 
+        # Recently Added section
+        try:
+            cur = app.db.conn.execute(
+                "SELECT id, name, release_date, working_condition FROM phones ORDER BY created_at DESC LIMIT 5")
+            recent = cur.fetchall()
+            if recent:
+                sec_lbl3 = Label(text="Recently Added", font_size=sp(16), bold=True,
+                    color=(0, 0.314, 0.784, 1), size_hint_y=None, height=dp(30),
+                    text_size=(dp(300), None), halign="left")
+                g.add_widget(sec_lbl3)
+                for row in recent:
+                    r_box = BoxLayout(size_hint_y=None, height=dp(28), padding=(dp(8), dp(2)))
+                    with r_box.canvas.before:
+                        Color(0.95, 0.96, 0.98, 1)
+                        r_box._bg = RoundedRectangle(pos=r_box.pos, size=r_box.size, radius=[dp(5)])
+                    r_box.bind(pos=lambda w, v: setattr(w._bg, "pos", v),
+                               size=lambda w, v: setattr(w._bg, "size", v))
+                    r_box.add_widget(Label(
+                        text="%s (%s)" % (str(row[1] or ""), str(row[0] or "")),
+                        font_size=sp(12), color=(0.15, 0.15, 0.15, 1),
+                        text_size=(dp(200), None), halign="left"))
+                    r_box.add_widget(Label(
+                        text=str(row[3] or ""), font_size=sp(11), color=(0.4, 0.4, 0.4, 1),
+                        size_hint_x=None, width=dp(60)))
+                    g.add_widget(r_box)
+        except Exception:
+            pass
+
         g.add_widget(Widget(size_hint_y=None, height=dp(20)))
 
     def _go_tab(self, tab):
@@ -2213,12 +2240,32 @@ class MainScreen(Screen):
     _data_loaded = False
     _sort_ascending = True
     _last_sort_text = ""
+    _pending_filter = ""
+    _pending_search = ""
 
     def on_enter(self):
         if not self._data_loaded:
-            Clock.schedule_once(lambda dt: self.refresh_list(), 0.2)
+            Clock.schedule_once(lambda dt: self._do_enter(), 0.2)
         else:
             self._render_page()
+
+    def _do_enter(self):
+        if self._pending_search:
+            q = self._pending_search
+            self._pending_search = ""
+            try: self.ids.search_bar.ids.search_input.text = q
+            except: pass
+            self.do_search(q)
+        elif self._pending_filter:
+            f = self._pending_filter
+            self._pending_filter = ""
+            self.refresh_list()
+            try:
+                self.ids.filter_field.text = f
+            except: pass
+            self._apply_sort_filter_internal()
+        else:
+            self.refresh_list()
 
     def switch_tab(self, tab):
         self.current_tab = tab
@@ -2392,12 +2439,18 @@ class MainScreen(Screen):
             for p in items:
                 img = get_img_path_for_phone(p["id"], app.db) if p.get("has_image") else defimg
                 price = p.get("avg_price", 0) or 0
+                rscore = p.get("rarity_score", 0) or 0
+                price_parts = []
+                if price > 0:
+                    price_parts.append("AED %d" % int(price))
+                if rscore > 0:
+                    price_parts.append(rarity_label(rscore))
                 card = PhoneCard(phone_id=p["id"], phone_name=p["name"],
                     phone_date=p.get("release_date","") or "",
                     phone_appear=p.get("appearance_condition","") or "",
                     phone_working=p.get("working_condition","") or "",
                     phone_image=img or defimg,
-                    phone_price=f"AED {price:.0f}" if price > 0 else "")
+                    phone_price=" | ".join(price_parts) if price_parts else "")
                 card.bind(on_release=partial(self._open_phone, p["id"]))
                 grid.add_widget(card)
         elif self.current_tab == "spares":
@@ -3199,6 +3252,7 @@ class AddPhoneScreen(Screen):
             for fid in ["input_id","input_name","input_appear","input_working","input_remarks","input_description","input_price"]:
                 self.ids[fid].text = ""
             self.ids.input_id.readonly = False
+            self.ids.input_id.disabled = False
             self.ids.input_id.background_color = (1, 1, 1, 1)
             self.ids.input_date.values = ['Select Year'] + [str(y) for y in range(2026, 1984, -1)]
             self.ids.input_date.text = 'Select Year'
@@ -3291,6 +3345,10 @@ class AddPhoneScreen(Screen):
         except: return
         if not pid or not name:
             app.show_toast("ID and Name required"); return
+        if not pid.isdigit():
+            app.show_toast("ID must be numbers only"); return
+        if len(pid) > 4:
+            app.show_toast("ID must be max 4 digits"); return
         # Duplicate ID check (only when adding, not editing)
         if not self.edit_mode:
             try:
@@ -3298,9 +3356,6 @@ class AddPhoneScreen(Screen):
                 if cur.fetchone()[0] > 0:
                     app.show_toast("ID already exists!"); return
             except: pass
-        # Validate ID is max 4 digits
-        if len(pid) > 4:
-            app.show_toast("ID must be max 4 digits"); return
         try:
             price_text = self.ids.input_price.text.strip()
             price_val = float(price_text) if price_text else self._auto_price
@@ -3650,9 +3705,15 @@ class SearchAllScreen(Screen):
             for p in phones[:PAGE_SIZE]:
                 img = get_img_path_for_phone(p["id"], app.db) if p.get("has_image") else defimg
                 pr = p.get("avg_price", 0) or 0
+                rs = p.get("rarity_score", 0) or 0
+                pp = []
+                if pr > 0:
+                    pp.append("AED %d" % int(pr))
+                if rs > 0:
+                    pp.append(rarity_label(rs))
                 card = PhoneCard(phone_id=p["id"], phone_name=p["name"], phone_date=p.get("release_date","") or "",
                     phone_appear=p.get("appearance_condition","") or "", phone_working=p.get("working_condition","") or "",
-                    phone_image=img or defimg, phone_price=f"AED {pr:.0f}" if pr > 0 else "")
+                    phone_image=img or defimg, phone_price=" | ".join(pp) if pp else "")
                 card.bind(on_release=partial(self._op, p["id"])); grid.add_widget(card)
         if spares:
             grid.add_widget(Label(text=f"Spare Parts ({len(spares)})", font_size=sp(14), bold=True, color=(0,0.314,0.784,1), size_hint_y=None, height=dp(26), text_size=(dp(300),None), halign="left"))
@@ -3700,19 +3761,10 @@ class ReportScreen(Screen):
         main._data_loaded = False
         main._current_page = 0
         main._is_search = False
-        main._raw_items = []
-        main._all_items = []
-        try:
-            main.ids.search_bar.ids.search_input.text = ""
-            main.ids.sort_spinner.text = "Sort: Name"
-            main.ids.filter_field.text = filter_text
-            main.ids.filter_value_spinner.text = "All"
-            main.ids.filter_value_spinner.values = ["All"]
-        except Exception:
-            pass
+        main._pending_filter = filter_text
+        main._pending_search = ""
         app.root.transition = SlideTransition(direction="right")
         app.root.current = "main"
-        Clock.schedule_once(lambda dt: main.refresh_list(), 0.3)
 
     def _go_main_search(self, query, *a):
         app = App.get_running_app()
@@ -3721,19 +3773,10 @@ class ReportScreen(Screen):
         main._data_loaded = False
         main._current_page = 0
         main._is_search = False
-        main._raw_items = []
-        main._all_items = []
-        try:
-            main.ids.search_bar.ids.search_input.text = ""
-            main.ids.sort_spinner.text = "Sort: Name"
-            main.ids.filter_field.text = "All"
-            main.ids.filter_value_spinner.text = "All"
-            main.ids.filter_value_spinner.values = ["All"]
-        except Exception:
-            pass
+        main._pending_search = query
+        main._pending_filter = ""
         app.root.transition = SlideTransition(direction="right")
         app.root.current = "main"
-        Clock.schedule_once(lambda dt: main.do_search(query), 0.4)
 
     def _load(self):
         app = App.get_running_app()
@@ -3876,6 +3919,43 @@ class ReportScreen(Screen):
 
         condition_section("By Working Condition", r.get("by_working",[]), (0, 0.314, 0.784))
         condition_section("By Appearance", r.get("by_appearance",[]), (0.26, 0.63, 0.28))
+
+        # Collection Timeline - horizontal bar chart by year
+        years_data = r.get("by_year", [])
+        valid_years = []
+        for y_val, c_val in years_data:
+            ys = str(y_val or "")
+            # Extract 4-digit year from release_date string
+            found_year = ""
+            for part in ys.replace("-", " ").replace("/", " ").split():
+                if len(part) == 4 and part.isdigit():
+                    found_year = part
+                    break
+            if found_year:
+                valid_years.append((found_year, c_val))
+        # Aggregate by year (release_date may group differently)
+        year_counts = {}
+        for ystr, cnt in valid_years:
+            year_counts[ystr] = year_counts.get(ystr, 0) + cnt
+        sorted_years = sorted(year_counts.items(), key=lambda x: x[0])
+        if sorted_years:
+            sec("Collection Timeline")
+            max_count = max(c for _, c in sorted_years)
+            for year_str, count in sorted_years:
+                bar_pct = count / max_count if max_count > 0 else 0
+                row = BoxLayout(size_hint_y=None, height=dp(20), spacing=dp(4), padding=(dp(4), 0))
+                row.add_widget(Label(text=year_str, font_size=sp(10), color=(0.3, 0.3, 0.3, 1),
+                    size_hint_x=None, width=dp(36), halign="right", text_size=(dp(36), None)))
+                bar = BoxLayout(size_hint_x=bar_pct if bar_pct > 0.02 else 0.02)
+                with bar.canvas.before:
+                    Color(0, 0.314, 0.784, 0.8)
+                    bar._bg = Rectangle(pos=bar.pos, size=bar.size)
+                bar.bind(pos=lambda w, v: setattr(w._bg, "pos", v),
+                         size=lambda w, v: setattr(w._bg, "size", v))
+                bar.add_widget(Label(text=str(count), font_size=sp(9), color=(1, 1, 1, 1)))
+                row.add_widget(bar)
+                row.add_widget(Widget(size_hint_x=1 - bar_pct if bar_pct < 0.98 else 0.02))
+                g.add_widget(row)
 
         # Spare parts breakdown by name (top 10)
         try:
