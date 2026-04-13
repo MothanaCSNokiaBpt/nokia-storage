@@ -4701,18 +4701,25 @@ class NokiaStorageApp(App):
                 if fname in imported:
                     continue
                 base_name = os.path.splitext(fname)[0].strip()
+                # Strip _2, _3, _N suffix for multi-image support
+                # e.g. "8800_2" -> "8800", "N95_3" -> "N95"
+                lookup_name = base_name
+                import re as _re
+                m_suffix = _re.match(r'^(.+?)_\d+$', base_name)
+                if m_suffix:
+                    lookup_name = m_suffix.group(1).strip()
                 fpath = os.path.join(galleries_dir, fname)
                 # Try to match phone by name first, then by ID
                 phone_id = None
                 try:
                     cur = self.db.conn.execute(
-                        "SELECT id FROM phones WHERE TRIM(name) = TRIM(?) LIMIT 1", (base_name,))
+                        "SELECT id FROM phones WHERE TRIM(name) = TRIM(?) LIMIT 1", (lookup_name,))
                     row = cur.fetchone()
                     if row:
                         phone_id = row[0]
                     else:
                         cur = self.db.conn.execute(
-                            "SELECT id FROM phones WHERE id = ? LIMIT 1", (base_name,))
+                            "SELECT id FROM phones WHERE id = ? LIMIT 1", (lookup_name,))
                         row = cur.fetchone()
                         if row:
                             phone_id = row[0]
