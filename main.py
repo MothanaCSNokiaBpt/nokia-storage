@@ -4629,7 +4629,13 @@ class NokiaStorageApp(App):
             except: pass
 
     def _load_initial(self):
-        if not self.db or self.db.get_phone_count() > 0: return
+        if not self.db: return
+        # Always run cleanup + gallery loader (regardless of existing data)
+        # These have their own marker files to avoid re-importing
+        if self.db.get_phone_count() > 0:
+            self._cleanup_old_phone_galleries()
+            self._load_initial_galleries()
+            return
         try:
             for jp in [os.path.join(os.path.dirname(os.path.abspath(__file__)), "initial_data.json"),
                        os.path.join(get_app_path(), "initial_data.json")]:
@@ -4669,24 +4675,26 @@ class NokiaStorageApp(App):
                             except: pass
                         break
         except Exception as e: print(f"Spare init: {e}")
-        # Load initial gallery images (matches by phone name or ID via filename)
+        # Cleanup old phone galleries from previous version (if any)
+        self._cleanup_old_phone_galleries()
+        # Load initial gallery images into spare parts (matches by filename)
         self._load_initial_galleries()
 
     def _load_initial_galleries(self):
-        """Scan initial_galleries/ folder. Each filename (without extension) is matched
-        against phone names or IDs. Image is added to that phone's gallery (phone_gallery).
-        Uses a flag file to avoid re-importing the same images on every launch."""
+        """Scan initial_galleries/ folder. Each filename is added to a spare part's gallery
+        (spare_gallery table). The spare part is found or created using the filename as name.
+        Spare parts can later be linked to phones manually.
+        Uses a marker file to avoid re-importing on every launch."""
         if not self.db: return
         try:
             base = os.path.dirname(os.path.abspath(__file__))
             galleries_dir = os.path.join(base, "initial_galleries")
             if not os.path.isdir(galleries_dir):
-                # Try app storage path as well
                 galleries_dir = os.path.join(get_app_path(), "initial_galleries")
                 if not os.path.isdir(galleries_dir):
                     return
-            # Use a marker file to track which images have been imported
-            marker_path = os.path.join(get_app_path(), ".gallery_imported.json")
+            # New marker file (different from old one) so previous installs re-import correctly
+            marker_path = os.path.join(get_app_path(), ".spare_gallery_imported.json")
             imported = set()
             if os.path.exists(marker_path):
                 try:
@@ -4694,6 +4702,7 @@ class NokiaStorageApp(App):
                         imported = set(json.load(f))
                 except: pass
             count = 0
+            import re as _re
             for fname in os.listdir(galleries_dir):
                 lower = fname.lower()
                 if not lower.endswith((".jpg", ".jpeg", ".png", ".webp")):
@@ -4702,74 +4711,92 @@ class NokiaStorageApp(App):
                     continue
                 base_name = os.path.splitext(fname)[0].strip()
                 # Strip _2, _3, _N suffix for multi-image support
-                # e.g. "8800_2" -> "8800", "N95_3" -> "N95"
                 lookup_name = base_name
-                import re as _re
                 m_suffix = _re.match(r'^(.+?)_\d+$', base_name)
                 if m_suffix:
                     lookup_name = m_suffix.group(1).strip()
                 fpath = os.path.join(galleries_dir, fname)
-                # Try to match phone by name first, then by ID
-                phone_id = None
-                try:
-                    # Case-insensitive name match first
-                    cur = self.db.conn.execute(
-                        "SELECT id FROM phones WHERE LOWER(TRIM(name)) = LOWER(TRIM(?)) LIMIT 1", (lookup_name,))
-                    row = cur.fetchone()
-                    if row:
-                        phone_id = row[0]
-                    else:
-                        # Try ID match
-                        cur = self.db.conn.execute(
-                            "SELECT id FROM phones WHERE id = ? LIMIT 1", (lookup_name,))
-                        row = cur.fetchone()
-                        if row:
-                            phone_id = row[0]
-                except: pass
                 try:
                     with open(fpath, "rb") as f:
                         img_bytes = f.read()
                     if not (img_bytes and len(img_bytes) > 100):
                         continue
-                    if phone_id:
-                        # Add to phone gallery
-                        self.db.add_gallery_image(phone_id, img_bytes)
-                        imported.add(fname)
-                        count += 1
-                    else:
-                        # No phone match - add to spare parts (unlinked)
-                        # First check if a spare part with this name exists
-                        spare_id = None
-                        try:
+                    # Find or create spare part with this name
+                    spare_id = None
+                    try:
+                        cur = self.db.conn.execute(
+                            "SELECT id FROM spare_parts WHERE LOWER(TRIM(name)) = LOWER(TRIM(?)) LIMIT 1",
+                            (lookup_name,))
+                        row = cur.fetchone()
+                        if row:
+                            spare_id = row[0]
+                        else:
+                            # Create new spare part with name from filename, no phone link
+                            self.db.add_spare_part(name=lookup_name, phone_id="")
                             cur = self.db.conn.execute(
-                                "SELECT id FROM spare_parts WHERE LOWER(TRIM(name)) = LOWER(TRIM(?)) LIMIT 1",
+                                "SELECT id FROM spare_parts WHERE LOWER(TRIM(name)) = LOWER(TRIM(?)) ORDER BY id DESC LIMIT 1",
                                 (lookup_name,))
                             row = cur.fetchone()
                             if row:
                                 spare_id = row[0]
-                            else:
-                                # Create new spare part with name from filename, no phone link
-                                self.db.add_spare_part(name=lookup_name, phone_id="")
-                                cur = self.db.conn.execute(
-                                    "SELECT id FROM spare_parts WHERE LOWER(TRIM(name)) = LOWER(TRIM(?)) ORDER BY id DESC LIMIT 1",
-                                    (lookup_name,))
-                                row = cur.fetchone()
-                                if row:
-                                    spare_id = row[0]
-                        except: pass
-                        if spare_id:
-                            self.db.add_spare_gallery_image(spare_id, img_bytes)
-                            imported.add(fname)
-                            count += 1
+                    except: pass
+                    if spare_id:
+                        self.db.add_spare_gallery_image(spare_id, img_bytes)
+                        imported.add(fname)
+                        count += 1
                 except: pass
             if count > 0:
                 try:
                     with open(marker_path, "w") as f:
                         json.dump(list(imported), f)
-                    print(f"Imported {count} gallery images")
+                    print(f"Imported {count} spare gallery images")
                 except: pass
         except Exception as e:
             print(f"Gallery init: {e}")
+
+    def _cleanup_old_phone_galleries(self):
+        """Remove phone gallery images that were previously imported by initial_galleries
+        (in case user upgraded from previous version that put them on phones)."""
+        if not self.db: return
+        try:
+            old_marker = os.path.join(get_app_path(), ".gallery_imported.json")
+            if not os.path.exists(old_marker):
+                return
+            try:
+                with open(old_marker, "r") as f:
+                    old_imported = set(json.load(f))
+            except: return
+            if not old_imported: return
+            # Get the set of base names (without extension, without _N suffix)
+            import re as _re
+            names_to_clean = set()
+            for fname in old_imported:
+                base = os.path.splitext(fname)[0].strip()
+                m = _re.match(r'^(.+?)_\d+$', base)
+                if m:
+                    base = m.group(1).strip()
+                names_to_clean.add(base.lower())
+            # Delete phone gallery images for matching phones
+            removed = 0
+            for nm in names_to_clean:
+                try:
+                    cur = self.db.conn.execute(
+                        "SELECT id FROM phones WHERE LOWER(TRIM(name)) = ? LIMIT 1", (nm,))
+                    row = cur.fetchone()
+                    if row:
+                        pid = row[0]
+                        cur = self.db.conn.execute(
+                            "DELETE FROM phone_gallery WHERE phone_id = ?", (pid,))
+                        removed += cur.rowcount
+                except: pass
+            self.db.conn.commit()
+            # Remove old marker so this only runs once
+            try: os.remove(old_marker)
+            except: pass
+            if removed > 0:
+                print(f"Cleaned {removed} old phone gallery images")
+        except Exception as e:
+            print(f"Cleanup err: {e}")
 
     def show_toast(self, text):
         try:

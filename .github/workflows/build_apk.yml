@@ -50,24 +50,34 @@ jobs:
         id: keystore-cache
         uses: actions/cache@v4
         with:
-          path: ~/.android
-          key: nokia-debug-keystore-v1
+          path: |
+            ~/.android
+            ~/.keystore-backup
+          key: nokia-debug-keystore-v2
           restore-keys: |
-            nokia-debug-keystore
+            nokia-debug-keystore-v2
+            nokia-debug-keystore-v1
 
-      - name: Create debug keystore if missing
+      - name: Create or restore debug keystore
         run: |
-          mkdir -p ~/.android
+          mkdir -p ~/.android ~/.keystore-backup
+          # Restore from backup if it exists but ~/.android doesn't have it
+          if [ -f ~/.keystore-backup/debug.keystore ] && [ ! -f ~/.android/debug.keystore ]; then
+            cp ~/.keystore-backup/debug.keystore ~/.android/debug.keystore
+            echo "Restored keystore from backup"
+          fi
+          # Create if still missing (first run only)
           if [ ! -f ~/.android/debug.keystore ]; then
             echo "Creating new debug keystore..."
             keytool -genkey -v -keystore ~/.android/debug.keystore \
               -storepass android -alias androiddebugkey -keypass android \
               -keyalg RSA -keysize 2048 -validity 36500 \
               -dname "CN=Nokia Storage, OU=Debug, O=ICT18, L=Dubai, S=Dubai, C=AE"
-          else
-            echo "Using cached debug keystore"
-            keytool -list -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey
           fi
+          # Always copy to backup so it survives in cache
+          cp ~/.android/debug.keystore ~/.keystore-backup/debug.keystore
+          echo "Keystore SHA1:"
+          keytool -list -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey | grep SHA1 || true
 
       - name: Cache buildozer build directory
         uses: actions/cache@v4
