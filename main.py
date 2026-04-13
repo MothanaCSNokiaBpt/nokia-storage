@@ -3173,8 +3173,8 @@ class SpareDetailScreen(Screen):
             return
         try:
             cur = app.db.conn.execute(
-                "SELECT id, name, working_condition, appearance_condition FROM phones WHERE TRIM(name) LIKE ? ORDER BY id",
-                (f"%{name}%",))
+                "SELECT id, name, working_condition, appearance_condition FROM phones WHERE TRIM(name) = TRIM(?) ORDER BY id",
+                (name,))
             phones = cur.fetchall()
         except:
             phones = []
