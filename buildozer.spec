@@ -4,7 +4,7 @@ package.name = nokiastorage
 package.domain = com.ict18.nokia
 source.dir = .
 source.include_exts = py,kv,json,png,jpg,jpeg,atlas,xml,gif
-source.include_patterns = assets/*
+source.include_patterns = assets/*,initial_galleries/*
 version = 1.1.0
 
 requirements = python3,kivy==2.3.0,plyer,pyjnius,android,androidstorage4kivy

@@ -4669,6 +4669,72 @@ class NokiaStorageApp(App):
                             except: pass
                         break
         except Exception as e: print(f"Spare init: {e}")
+        # Load initial gallery images (matches by phone name or ID via filename)
+        self._load_initial_galleries()
+
+    def _load_initial_galleries(self):
+        """Scan initial_galleries/ folder. Each filename (without extension) is matched
+        against phone names or IDs. Image is added to that phone's gallery (phone_gallery).
+        Uses a flag file to avoid re-importing the same images on every launch."""
+        if not self.db: return
+        try:
+            base = os.path.dirname(os.path.abspath(__file__))
+            galleries_dir = os.path.join(base, "initial_galleries")
+            if not os.path.isdir(galleries_dir):
+                # Try app storage path as well
+                galleries_dir = os.path.join(get_app_path(), "initial_galleries")
+                if not os.path.isdir(galleries_dir):
+                    return
+            # Use a marker file to track which images have been imported
+            marker_path = os.path.join(get_app_path(), ".gallery_imported.json")
+            imported = set()
+            if os.path.exists(marker_path):
+                try:
+                    with open(marker_path, "r") as f:
+                        imported = set(json.load(f))
+                except: pass
+            count = 0
+            for fname in os.listdir(galleries_dir):
+                lower = fname.lower()
+                if not lower.endswith((".jpg", ".jpeg", ".png", ".webp")):
+                    continue
+                if fname in imported:
+                    continue
+                base_name = os.path.splitext(fname)[0].strip()
+                fpath = os.path.join(galleries_dir, fname)
+                # Try to match phone by name first, then by ID
+                phone_id = None
+                try:
+                    cur = self.db.conn.execute(
+                        "SELECT id FROM phones WHERE TRIM(name) = TRIM(?) LIMIT 1", (base_name,))
+                    row = cur.fetchone()
+                    if row:
+                        phone_id = row[0]
+                    else:
+                        cur = self.db.conn.execute(
+                            "SELECT id FROM phones WHERE id = ? LIMIT 1", (base_name,))
+                        row = cur.fetchone()
+                        if row:
+                            phone_id = row[0]
+                except: pass
+                if not phone_id:
+                    continue
+                try:
+                    with open(fpath, "rb") as f:
+                        img_bytes = f.read()
+                    if img_bytes and len(img_bytes) > 100:
+                        self.db.add_gallery_image(phone_id, img_bytes)
+                        imported.add(fname)
+                        count += 1
+                except: pass
+            if count > 0:
+                try:
+                    with open(marker_path, "w") as f:
+                        json.dump(list(imported), f)
+                    print(f"Imported {count} gallery images")
+                except: pass
+        except Exception as e:
+            print(f"Gallery init: {e}")
 
     def show_toast(self, text):
         try:
