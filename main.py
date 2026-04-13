@@ -32,6 +32,7 @@ from kivy.uix.screenmanager import ScreenManager, Screen, SlideTransition
 from kivy.uix.spinner import Spinner, SpinnerOption
 from kivy.uix.textinput import TextInput
 from kivy.uix.widget import Widget
+from kivy.uix.scatter import Scatter
 from kivy.utils import platform
 
 from database import NokiaDatabase
@@ -161,6 +162,63 @@ def rarity_color(score):
     elif score <= 3: return [0.8, 0.6, 0.1, 1]
     elif score <= 4: return [0.8, 0.2, 0.2, 1]
     else: return [0.6, 0.1, 0.6, 1]
+
+
+# -- Zoomable Image Widget ----------------------------------------
+class ZoomableImage(Scatter):
+    """Image wrapper that supports pinch-zoom and pan.
+    Double-tap to reset to initial position/scale."""
+    def __init__(self, source, **kwargs):
+        super().__init__(do_rotation=False, do_scale=True, do_translation=True,
+                         scale_min=0.5, scale_max=8.0, **kwargs)
+        self._img = Image(source=source, nocache=True,
+                          allow_stretch=True, keep_ratio=True)
+        self.add_widget(self._img)
+        self._initial_pos = None
+        self._initial_scale = 1.0
+
+    def on_size(self, *args):
+        # Keep the image filling the scatter bounds
+        try: self._img.size = self.size
+        except Exception: pass
+
+    def on_touch_down(self, touch):
+        # Double-tap to reset zoom
+        if self.collide_point(*touch.pos) and touch.is_double_tap:
+            self.scale = 1.0
+            if self._initial_pos:
+                self.pos = self._initial_pos
+            return True
+        return super().on_touch_down(touch)
+
+
+def _show_zoomable_image(img_path, on_close=None):
+    """Show an image in full-screen with pinch-zoom and pan support.
+    Double-tap to reset zoom. Tap Close button to dismiss."""
+    from kivy.uix.button import Button as KBtn
+    popup = ModalView(size_hint=(1, 1), background_color=(0, 0, 0, 0.97))
+    root = BoxLayout(orientation="vertical", padding=dp(4))
+    # Container that hosts the zoomable scatter
+    holder = BoxLayout()
+    zoom = ZoomableImage(source=img_path, size_hint=(None, None))
+    def _fit(*a):
+        zoom.size = holder.size
+        zoom.center = holder.center
+        zoom._initial_pos = tuple(zoom.pos)
+    holder.bind(size=_fit, pos=_fit)
+    holder.add_widget(zoom)
+    root.add_widget(holder)
+    # Close button
+    close_btn = KBtn(text="Close (double-tap image to reset zoom)",
+        size_hint_y=None, height=dp(44), font_size=sp(13),
+        background_color=(0.3, 0.3, 0.3, 1))
+    close_btn.bind(on_press=lambda *a: popup.dismiss())
+    if on_close:
+        popup.bind(on_dismiss=lambda *a: on_close())
+    root.add_widget(close_btn)
+    popup.add_widget(root)
+    popup.open()
+    return popup
 
 
 # -- XLSX Creator (pure Python, no openpyxl) -----------------------
@@ -2880,15 +2938,24 @@ class PhoneDetailScreen(Screen):
         img_path = self._gallery_paths[idx]
         total = len(self._gallery_paths)
 
-        self._viewer_popup = ModalView(size_hint=(1, 1), background_color=(0, 0, 0, 0.95))
+        self._viewer_popup = ModalView(size_hint=(1, 1), background_color=(0, 0, 0, 0.97))
         c = BoxLayout(orientation="vertical", padding=dp(4), spacing=dp(4))
 
         # Counter
-        c.add_widget(Label(text=f"{idx+1} / {total}", font_size=sp(14), color=(1,1,1,1),
-            size_hint_y=None, height=dp(28)))
+        c.add_widget(Label(text=f"{idx+1} / {total}  (pinch-zoom, double-tap to reset)",
+            font_size=sp(13), color=(1,1,1,1),
+            size_hint_y=None, height=dp(26)))
 
-        # Image
-        c.add_widget(Image(source=img_path, nocache=True, allow_stretch=True, keep_ratio=True))
+        # Zoomable image in a holder for proper sizing
+        holder = BoxLayout()
+        zoom = ZoomableImage(source=img_path, size_hint=(None, None))
+        def _fit(*a):
+            zoom.size = holder.size
+            zoom.center = holder.center
+            zoom._initial_pos = tuple(zoom.pos)
+        holder.bind(size=_fit, pos=_fit)
+        holder.add_widget(zoom)
+        c.add_widget(holder)
 
         # Navigation buttons
         nav = BoxLayout(size_hint_y=None, height=dp(46), spacing=dp(6))
@@ -2913,18 +2980,8 @@ class PhoneDetailScreen(Screen):
         Clock.schedule_once(lambda dt: self._show_gallery_viewer(), 0.1)
 
     def _show_fullscreen(self, img_path, *args):
-        """Show image in full-screen overlay (for main image)."""
-        from kivy.uix.button import Button as KButton
-        popup = ModalView(size_hint=(1, 1), background_color=(0, 0, 0, 0.95))
-        content = BoxLayout(orientation="vertical", padding=dp(4))
-        img = Image(source=img_path, nocache=True, allow_stretch=True, keep_ratio=True)
-        content.add_widget(img)
-        close_btn = KButton(text="Close", size_hint_y=None, height=dp(44),
-            font_size=sp(14), background_color=(0.3, 0.3, 0.3, 1))
-        close_btn.bind(on_press=lambda *a: popup.dismiss())
-        content.add_widget(close_btn)
-        popup.add_widget(content)
-        popup.open()
+        """Show image in full-screen with pinch-zoom and pan."""
+        _show_zoomable_image(img_path)
 
     def _load_spares(self):
         app = App.get_running_app()
@@ -3205,17 +3262,7 @@ class SpareDetailScreen(Screen):
         app.root.current = "phone_detail"
 
     def _show_fullscreen(self, img_path, *args):
-        from kivy.uix.button import Button as KButton
-        popup = ModalView(size_hint=(1, 1), background_color=(0, 0, 0, 0.95))
-        content = BoxLayout(orientation="vertical", padding=dp(4))
-        img = Image(source=img_path, nocache=True, allow_stretch=True, keep_ratio=True)
-        content.add_widget(img)
-        close_btn = KButton(text="Close", size_hint_y=None, height=dp(44),
-            font_size=sp(14), background_color=(0.3, 0.3, 0.3, 1))
-        close_btn.bind(on_press=lambda *a: popup.dismiss())
-        content.add_widget(close_btn)
-        popup.add_widget(content)
-        popup.open()
+        _show_zoomable_image(img_path)
 
     def _load_gallery(self):
         """Load spare part gallery images with delete buttons."""
@@ -3376,17 +3423,7 @@ class WallDetailScreen(Screen):
             self._show_fullscreen(self._current_img_path)
 
     def _show_fullscreen(self, img_path, *args):
-        from kivy.uix.button import Button as KButton
-        popup = ModalView(size_hint=(1, 1), background_color=(0, 0, 0, 0.95))
-        content = BoxLayout(orientation="vertical", padding=dp(4))
-        img = Image(source=img_path, nocache=True, allow_stretch=True, keep_ratio=True)
-        content.add_widget(img)
-        close_btn = KButton(text="Close", size_hint_y=None, height=dp(44),
-            font_size=sp(14), background_color=(0.3, 0.3, 0.3, 1))
-        close_btn.bind(on_press=lambda *a: popup.dismiss())
-        content.add_widget(close_btn)
-        popup.add_widget(content)
-        popup.open()
+        _show_zoomable_image(img_path)
 
     def edit_wall_item(self):
         App.get_running_app().show_toast("Wall item editing not yet implemented")
@@ -4451,15 +4488,24 @@ class PhotoGalleryScreen(Screen):
         gal_id, img_path = self._image_paths[idx]
         total = len(self._image_paths)
 
-        self._viewer_popup = ModalView(size_hint=(1, 1), background_color=(0, 0, 0, 0.95))
+        self._viewer_popup = ModalView(size_hint=(1, 1), background_color=(0, 0, 0, 0.97))
         c = BoxLayout(orientation="vertical", padding=dp(4), spacing=dp(4))
 
         # Counter
-        c.add_widget(Label(text=f"{idx+1} / {total}", font_size=sp(14), color=(1,1,1,1),
-            size_hint_y=None, height=dp(28)))
+        c.add_widget(Label(text=f"{idx+1} / {total}  (pinch-zoom, double-tap to reset)",
+            font_size=sp(13), color=(1,1,1,1),
+            size_hint_y=None, height=dp(26)))
 
-        # Image
-        c.add_widget(Image(source=img_path, nocache=True, allow_stretch=True, keep_ratio=True))
+        # Zoomable image
+        holder = BoxLayout()
+        zoom = ZoomableImage(source=img_path, size_hint=(None, None))
+        def _fit(*a):
+            zoom.size = holder.size
+            zoom.center = holder.center
+            zoom._initial_pos = tuple(zoom.pos)
+        holder.bind(size=_fit, pos=_fit)
+        holder.add_widget(zoom)
+        c.add_widget(holder)
 
         # Navigation buttons
         nav = BoxLayout(size_hint_y=None, height=dp(46), spacing=dp(6))
