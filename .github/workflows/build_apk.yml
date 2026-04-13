@@ -46,22 +46,35 @@ jobs:
           git config --global http.retryCount 5
           git config --global http.retryDelay 10
 
-      - name: Create consistent debug keystore
+      - name: Cache debug keystore (FIXED KEY for consistent signing)
+        id: keystore-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.android
+          key: nokia-debug-keystore-v1
+          restore-keys: |
+            nokia-debug-keystore
+
+      - name: Create debug keystore if missing
         run: |
           mkdir -p ~/.android
           if [ ! -f ~/.android/debug.keystore ]; then
+            echo "Creating new debug keystore..."
             keytool -genkey -v -keystore ~/.android/debug.keystore \
               -storepass android -alias androiddebugkey -keypass android \
               -keyalg RSA -keysize 2048 -validity 36500 \
               -dname "CN=Nokia Storage, OU=Debug, O=ICT18, L=Dubai, S=Dubai, C=AE"
+          else
+            echo "Using cached debug keystore"
+            keytool -list -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey
           fi
 
-      - name: Cache buildozer global directory
+      - name: Cache buildozer build directory
         uses: actions/cache@v4
         with:
           path: |
             ~/.buildozer
-            ~/.android
+            .buildozer
           key: buildozer-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
           restore-keys: |
             buildozer-${{ runner.os }}-
@@ -81,6 +94,13 @@ jobs:
           echo "All 3 attempts failed"
           exit 1
         shell: bash
+
+      - name: Verify APK signature
+        if: success()
+        run: |
+          APK=$(ls bin/*.apk | head -1)
+          echo "APK: $APK"
+          keytool -printcert -jarfile "$APK" | head -20 || true
 
       - name: Upload build log
         if: always()
