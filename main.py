@@ -4712,12 +4712,14 @@ class NokiaStorageApp(App):
                 # Try to match phone by name first, then by ID
                 phone_id = None
                 try:
+                    # Case-insensitive name match first
                     cur = self.db.conn.execute(
-                        "SELECT id FROM phones WHERE TRIM(name) = TRIM(?) LIMIT 1", (lookup_name,))
+                        "SELECT id FROM phones WHERE LOWER(TRIM(name)) = LOWER(TRIM(?)) LIMIT 1", (lookup_name,))
                     row = cur.fetchone()
                     if row:
                         phone_id = row[0]
                     else:
+                        # Try ID match
                         cur = self.db.conn.execute(
                             "SELECT id FROM phones WHERE id = ? LIMIT 1", (lookup_name,))
                         row = cur.fetchone()
