@@ -4726,15 +4726,41 @@ class NokiaStorageApp(App):
                         if row:
                             phone_id = row[0]
                 except: pass
-                if not phone_id:
-                    continue
                 try:
                     with open(fpath, "rb") as f:
                         img_bytes = f.read()
-                    if img_bytes and len(img_bytes) > 100:
+                    if not (img_bytes and len(img_bytes) > 100):
+                        continue
+                    if phone_id:
+                        # Add to phone gallery
                         self.db.add_gallery_image(phone_id, img_bytes)
                         imported.add(fname)
                         count += 1
+                    else:
+                        # No phone match - add to spare parts (unlinked)
+                        # First check if a spare part with this name exists
+                        spare_id = None
+                        try:
+                            cur = self.db.conn.execute(
+                                "SELECT id FROM spare_parts WHERE LOWER(TRIM(name)) = LOWER(TRIM(?)) LIMIT 1",
+                                (lookup_name,))
+                            row = cur.fetchone()
+                            if row:
+                                spare_id = row[0]
+                            else:
+                                # Create new spare part with name from filename, no phone link
+                                self.db.add_spare_part(name=lookup_name, phone_id="")
+                                cur = self.db.conn.execute(
+                                    "SELECT id FROM spare_parts WHERE LOWER(TRIM(name)) = LOWER(TRIM(?)) ORDER BY id DESC LIMIT 1",
+                                    (lookup_name,))
+                                row = cur.fetchone()
+                                if row:
+                                    spare_id = row[0]
+                        except: pass
+                        if spare_id:
+                            self.db.add_spare_gallery_image(spare_id, img_bytes)
+                            imported.add(fname)
+                            count += 1
                 except: pass
             if count > 0:
                 try:

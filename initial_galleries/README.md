@@ -27,6 +27,12 @@ The `_N` suffix is stripped before matching, so all variations link to the same 
 - Re-importing the same filename is skipped (safe to re-run)
 - Adding new files later → next app launch will import only the new ones
 
+## Fallback to spare parts
+If a filename does NOT match any phone name/ID, it is added as a spare part:
+- A new spare part is created with the filename as its name (no phone link)
+- The image is added to that spare part's gallery
+- You can later edit the spare part to link it to a phone
+
 ## Size
 - Recommend keeping images under 1MB each to keep APK size reasonable
 - 70 images x 500KB = 35MB added to APK
