@@ -987,6 +987,26 @@ ScreenManager:
                             text_size: self.size
                             halign: 'left'
                             valign: 'middle'
+                    ClickableBox:
+                        size_hint_y: None
+                        height: dp(28)
+                        padding: dp(8), dp(4)
+                        on_release: root.open_spare_parts()
+                        canvas.before:
+                            Color:
+                                rgba: root.spare_avail_bg
+                            RoundedRectangle:
+                                pos: self.pos
+                                size: self.size
+                                radius: [dp(5)]
+                        Label:
+                            text: root.spare_avail_text
+                            font_size: sp(12)
+                            color: root.spare_avail_color
+                            bold: True
+                            text_size: self.size
+                            halign: 'left'
+                            valign: 'middle'
                     Label:
                         text: root.dup_count_text
                         font_size: sp(12)
@@ -1074,22 +1094,7 @@ ScreenManager:
                     spacing: dp(6)
                     size_hint_y: None
                     height: self.minimum_height
-                # Spare Parts
-                Label:
-                    text: 'Related Spare Parts'
-                    font_size: sp(15)
-                    bold: True
-                    color: 0.1, 0.1, 0.18, 1
-                    size_hint_y: None
-                    height: dp(26)
-                    text_size: self.size
-                    halign: 'left'
-                GridLayout:
-                    id: spare_parts_grid
-                    cols: 1
-                    spacing: dp(6)
-                    size_hint_y: None
-                    height: self.minimum_height
+                # Add Spare Part button (spare availability shown inline above)
                 ClickableBox:
                     size_hint_y: None
                     height: dp(36)
@@ -2804,6 +2809,11 @@ class PhoneDetailScreen(Screen):
     p_avg_price = StringProperty(""); p_rarity_color = ListProperty([0.5, 0.5, 0.5, 1])
     no_fw_text = StringProperty("")
     dup_count_text = StringProperty("")
+    spare_avail_text = StringProperty("")
+    spare_avail_color = ListProperty([0.2, 0.6, 0.2, 1])
+    spare_avail_bg = ListProperty([0.2, 0.6, 0.2, 0.12])
+    _spare_count = 0
+    _spare_id = None
 
     def load_phone(self, pid):
         app = App.get_running_app()
@@ -2984,19 +2994,62 @@ class PhoneDetailScreen(Screen):
         _show_zoomable_image(img_path)
 
     def _load_spares(self):
+        """Count spare parts matching this phone name, set availability label.
+        Uses exact name match (not LIKE) to avoid e.g. '100' matching '1100'."""
         app = App.get_running_app()
-        grid = self.ids.spare_parts_grid; grid.clear_widgets()
-        spares = app.db.get_spare_parts_for_phone(self.p_name)
-        defimg = get_default_image_path(get_app_path())
-        if not spares:
-            grid.add_widget(Label(text="No spare parts", font_size=sp(12), color=(0.5,0.5,0.5,1), size_hint_y=None, height=dp(24)))
+        name = (self.p_name or "").strip()
+        spares = []
+        if name and app.db:
+            try:
+                cur = app.db.conn.execute(
+                    "SELECT id, name FROM spare_parts WHERE LOWER(TRIM(name)) = LOWER(TRIM(?)) ORDER BY id",
+                    (name,))
+                spares = [dict(id=r[0], name=r[1]) for r in cur.fetchall()]
+            except Exception:
+                spares = []
+        self._spare_count = len(spares)
+        self._spare_id = spares[0]["id"] if spares else None
+        if spares:
+            self.spare_avail_text = "Spare Parts available"
+            self.spare_avail_color = [0.15, 0.55, 0.2, 1]
+            self.spare_avail_bg = [0.2, 0.6, 0.2, 0.15]
+        else:
+            self.spare_avail_text = "No spare parts available"
+            self.spare_avail_color = [0.85, 0.15, 0.15, 1]
+            self.spare_avail_bg = [0.85, 0.15, 0.15, 0.12]
+
+    def open_spare_parts(self):
+        """Navigate to spare parts based on count:
+        - 0: do nothing (label just shows unavailability)
+        - 1: open that spare part's detail page directly
+        - >1: go to browse screen (spares tab) with search set to phone name."""
+        app = App.get_running_app()
+        if self._spare_count == 0:
             return
-        for s in spares:
-            img = get_img_path_for_spare(s["id"], app.db) if s.get("has_image") else defimg
-            card = SpareCard(spare_id=s["id"], spare_name=s["name"],
-                spare_desc=s.get("description","") or "", spare_image=img or defimg)
-            card.bind(on_release=partial(self._open_spare, s["id"]))
-            grid.add_widget(card)
+        if self._spare_count == 1 and self._spare_id is not None:
+            app.root.get_screen("spare_detail").load_spare(self._spare_id)
+            app.root.transition = SlideTransition(direction="left")
+            app.root.current = "spare_detail"
+            return
+        # Multiple: go to browse screen, spares tab, search for phone name
+        main = app.root.get_screen("main")
+        main.current_tab = "spares"
+        main._data_loaded = False
+        main._current_page = 0
+        main._is_search = False
+        main._raw_items = []
+        main._all_items = []
+        main._pending_filter = ""
+        main._pending_search = (self.p_name or "").strip()
+        try:
+            main.ids.sort_spinner.text = "Sort: Name"
+            main.ids.filter_field.text = "All"
+            main.ids.filter_value_spinner.text = "All"
+            main.ids.filter_value_spinner.values = ["All"]
+        except Exception:
+            pass
+        app.root.transition = SlideTransition(direction="left")
+        app.root.current = "main"
 
     def _open_spare(self, sid, *a):
         app = App.get_running_app()
