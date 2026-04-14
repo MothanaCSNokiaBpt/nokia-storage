@@ -2302,25 +2302,25 @@ class DashboardScreen(Screen):
             return b
 
         g.add_widget(action_btn("Browse Phones", lambda *a: self._go_tab("phones"),
-            (0, 0.314, 0.784, 1)))
+            (0.18, 0.38, 0.68, 1)))
         g.add_widget(action_btn("Browse Spare Parts", lambda *a: self._go_tab("spares"),
-            (0.2, 0.2, 0.25, 1)))
+            (0.14, 0.33, 0.62, 1)))
         g.add_widget(action_btn("Browse Wall Items", lambda *a: self._go_tab("wall"),
-            (0.35, 0.25, 0.15, 1)))
+            (0.10, 0.27, 0.54, 1)))
 
         btn_row = BoxLayout(size_hint_y=None, height=dp(46), spacing=dp(6))
         btn_row.add_widget(action_btn("Gallery", lambda *a: self._nav("photo_gallery"),
-            (0.8, 0.4, 0.1, 1)))
+            (0.08, 0.23, 0.48, 1)))
         btn_row.add_widget(action_btn("Report", lambda *a: self._nav("report"),
-            (0.4, 0.3, 0.6, 1)))
+            (0.08, 0.23, 0.48, 1)))
         g.add_widget(btn_row)
 
         g.add_widget(action_btn("Backup & Restore", lambda *a: self._nav("backup"),
-            (0.26, 0.63, 0.28, 1)))
+            (0.06, 0.20, 0.44, 1)))
         g.add_widget(action_btn("Export Data", lambda *a: self._nav("export_data"),
-            (0.2, 0.45, 0.25, 1)))
+            (0.05, 0.17, 0.40, 1)))
         g.add_widget(action_btn("Bulk Add Spare Parts",
-            lambda *a: self._nav("bulk_spare"), (0.5, 0.3, 0.2, 1)))
+            lambda *a: self._nav("bulk_spare"), (0.04, 0.14, 0.36, 1)))
 
         # Recently Added section
         try:
