@@ -2272,20 +2272,20 @@ class DashboardScreen(Screen):
             text_size=(dp(300), None), halign="left")
         g.add_widget(sec_lbl)
 
-        # Stat cards in 2x2 grid
+        # Stat cards in 2x2 grid - blue gradient matching dashboard theme
         g.add_widget(stat_row([
-            stat_card("Total Phones", total_phones, (0, 0.314, 0.784, 1)),
-            stat_card("Unique Models", unique_models, (0.4, 0.3, 0.6, 1))
+            stat_card("Total Phones", total_phones, (0.14, 0.30, 0.56, 1)),
+            stat_card("Unique Models", unique_models, (0.14, 0.30, 0.56, 1))
         ]))
         g.add_widget(stat_row([
-            stat_card("Spare Parts", total_spares, (0.26, 0.63, 0.28, 1)),
-            stat_card("Wall Items", wall_count, (0.35, 0.25, 0.15, 1))
+            stat_card("Spare Parts", total_spares, (0.10, 0.24, 0.48, 1)),
+            stat_card("Wall Items", wall_count, (0.10, 0.24, 0.48, 1))
         ]))
 
-        # Average value card
+        # Average value card - darkest
         avg_value = (total_value / total_phones) if total_phones > 0 else 0
         g.add_widget(stat_card("Avg. Phone Value", f"AED {avg_value:,.0f}",
-            (0.1, 0.5, 0.3, 1)))
+            (0.06, 0.18, 0.40, 1)))
 
         # Quick actions section
         sec_lbl2 = Label(text="Quick Actions", font_size=sp(16), bold=True,
