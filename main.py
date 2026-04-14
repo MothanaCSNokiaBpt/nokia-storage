@@ -483,6 +483,8 @@ ScreenManager:
         name: 'photo_gallery'
     BulkSpareScreen:
         name: 'bulk_spare'
+    BulkPhoneScreen:
+        name: 'bulk_phone'
 
 <SplashScreen>:
     BoxLayout:
@@ -2189,6 +2191,64 @@ ScreenManager:
             background_color: 0.26, 0.63, 0.28, 1
             color: 1, 1, 1, 1
             on_press: root.save_all()
+
+<BulkPhoneScreen>:
+    BoxLayout:
+        orientation: 'vertical'
+        BoxLayout:
+            size_hint_y: None
+            height: dp(52)
+            padding: dp(6)
+            spacing: dp(6)
+            canvas.before:
+                Color:
+                    rgba: 0, 0.314, 0.784, 1
+                Rectangle:
+                    pos: self.pos
+                    size: self.size
+            ClickableLabel:
+                size_hint_x: None
+                width: dp(36)
+                text: '<'
+                font_size: sp(22)
+                bold: True
+                color: 1, 1, 1, 1
+                on_release: root.go_back()
+            Label:
+                text: 'Bulk Add Phones'
+                font_size: sp(17)
+                bold: True
+                color: 1, 1, 1, 1
+                text_size: self.size
+                halign: 'left'
+                valign: 'middle'
+        Button:
+            text: '+ Select Images'
+            size_hint_y: None
+            height: dp(42)
+            font_size: sp(14)
+            bold: True
+            background_color: 0, 0.314, 0.784, 1
+            color: 1, 1, 1, 1
+            on_press: root.select_images()
+        ScrollView:
+            do_scroll_x: False
+            GridLayout:
+                id: bulk_phone_grid
+                cols: 1
+                spacing: dp(8)
+                padding: dp(10)
+                size_hint_y: None
+                height: self.minimum_height
+        Button:
+            text: 'Save All Phones'
+            size_hint_y: None
+            height: dp(46)
+            font_size: sp(15)
+            bold: True
+            background_color: 0.26, 0.63, 0.28, 1
+            color: 1, 1, 1, 1
+            on_press: root.save_all()
 """
 
 
@@ -2319,8 +2379,12 @@ class DashboardScreen(Screen):
             (0.06, 0.20, 0.44, 1)))
         g.add_widget(action_btn("Export Data", lambda *a: self._nav("export_data"),
             (0.05, 0.17, 0.40, 1)))
-        g.add_widget(action_btn("Bulk Add Spare Parts",
+        btn_row2 = BoxLayout(size_hint_y=None, height=dp(46), spacing=dp(6))
+        btn_row2.add_widget(action_btn("Bulk Add Phones",
+            lambda *a: self._nav("bulk_phone"), (0.04, 0.14, 0.36, 1)))
+        btn_row2.add_widget(action_btn("Bulk Add Spares",
             lambda *a: self._nav("bulk_spare"), (0.04, 0.14, 0.36, 1)))
+        g.add_widget(btn_row2)
 
         # Recently Added section
         try:
@@ -4682,6 +4746,114 @@ class BulkSpareScreen(Screen):
         App.get_running_app().root.current = "main"
 
 
+class BulkPhoneScreen(Screen):
+    _items = []  # List of (image_bytes, id_inp, name_inp, date_inp, appear_inp, working_inp) tuples
+
+    def select_images(self):
+        app = App.get_running_app()
+        app.pick_image_for = ("bulk_phone", None)
+        app.open_file_chooser(multiple=True)
+
+    def on_images_selected(self, images_bytes_list):
+        """Called with list of image byte arrays."""
+        grid = self.ids.bulk_phone_grid
+        grid.clear_widgets()
+        self._items = []
+
+        for idx, img_bytes in enumerate(images_bytes_list):
+            row = BoxLayout(size_hint_y=None, height=dp(140), spacing=dp(6),
+                            padding=[dp(4), dp(4), dp(4), dp(4)])
+            with row.canvas.before:
+                Color(0.95, 0.96, 0.98, 1)
+                row._bg = RoundedRectangle(pos=row.pos, size=row.size, radius=[dp(6)])
+            row.bind(pos=lambda w, v: setattr(w._bg, "pos", v),
+                     size=lambda w, v: setattr(w._bg, "size", v))
+
+            # Write temp image for preview
+            app_path = get_app_path()
+            ext = ".png" if img_bytes[:4] == b'\x89PNG' else ".jpg"
+            tmp = os.path.join(get_cache_dir(app_path), "_bulkp_%d%s" % (idx, ext))
+            try:
+                with open(tmp, "wb") as f:
+                    f.write(img_bytes)
+            except Exception:
+                tmp = ""
+
+            img = Image(source=tmp, nocache=True, size_hint_x=None,
+                        width=dp(70), allow_stretch=True, keep_ratio=True)
+            row.add_widget(img)
+
+            fields = BoxLayout(orientation="vertical", spacing=dp(2))
+            id_inp = TextInput(hint_text="Phone ID *", multiline=False,
+                size_hint_y=None, height=dp(30), font_size=sp(11), padding=[dp(6), dp(4)])
+            name_inp = TextInput(hint_text="Phone Name *", multiline=False,
+                size_hint_y=None, height=dp(30), font_size=sp(11), padding=[dp(6), dp(4)])
+            date_inp = TextInput(hint_text="Year", multiline=False,
+                size_hint_y=None, height=dp(30), font_size=sp(11), padding=[dp(6), dp(4)])
+            appear_inp = TextInput(hint_text="Appearance", multiline=False,
+                size_hint_y=None, height=dp(30), font_size=sp(11), padding=[dp(6), dp(4)])
+            working_inp = TextInput(hint_text="Working Cond.", multiline=False,
+                size_hint_y=None, height=dp(30), font_size=sp(11), padding=[dp(6), dp(4)])
+            fields.add_widget(id_inp)
+            fields.add_widget(name_inp)
+            fields.add_widget(date_inp)
+            fields.add_widget(appear_inp)
+            fields.add_widget(working_inp)
+            row.add_widget(fields)
+
+            grid.add_widget(row)
+            self._items.append((img_bytes, id_inp, name_inp, date_inp, appear_inp, working_inp))
+
+        if self._items:
+            grid.add_widget(Label(text="%d phones ready" % len(self._items),
+                font_size=sp(12), color=[0.4, 0.4, 0.4, 1],
+                size_hint_y=None, height=dp(24)))
+
+    def save_all(self):
+        app = App.get_running_app()
+        if not self._items:
+            app.show_toast("No images selected")
+            return
+        count = 0
+        skipped = 0
+        for img_bytes, id_inp, name_inp, date_inp, appear_inp, working_inp in self._items:
+            pid = id_inp.text.strip()
+            name = name_inp.text.strip()
+            if not pid or not name:
+                skipped += 1
+                continue
+            # Check duplicate ID
+            try:
+                cur = app.db.conn.execute("SELECT COUNT(*) FROM phones WHERE id = ?", (pid,))
+                if cur.fetchone()[0] > 0:
+                    skipped += 1
+                    continue
+            except:
+                pass
+            try:
+                app.db.add_phone(
+                    phone_id=pid, name=name,
+                    release_date=date_inp.text.strip(),
+                    appearance=appear_inp.text.strip(),
+                    working=working_inp.text.strip(),
+                    image_bytes=img_bytes)
+                count += 1
+            except Exception:
+                skipped += 1
+        msg = "Saved %d phones!" % count
+        if skipped > 0:
+            msg += " (%d skipped)" % skipped
+        app.show_toast(msg)
+        app.root.get_screen("main")._data_loaded = False
+        self._items = []
+        self.ids.bulk_phone_grid.clear_widgets()
+        self.go_back()
+
+    def go_back(self):
+        App.get_running_app().root.transition = SlideTransition(direction="right")
+        App.get_running_app().root.current = "dashboard"
+
+
 # -- Main App ------------------------------------------------------
 
 class NokiaStorageApp(App):
@@ -5116,9 +5288,13 @@ class NokiaStorageApp(App):
         tt, td = self.pick_image_for
         self.pick_image_for = None
 
-        # Bulk spare: pass raw bytes without resize
+        # Bulk: pass raw bytes without resize
         if tt == "bulk_spare":
             self.root.get_screen("bulk_spare").on_images_selected(
+                images_bytes_list)
+            return
+        if tt == "bulk_phone":
+            self.root.get_screen("bulk_phone").on_images_selected(
                 images_bytes_list)
             return
 
